@@ -1,0 +1,749 @@
+result oid
+echodata -n x0
+query id HD 142
+echodata -n x1
+query id HD 1237
+echodata -n x2
+query id WASP-26
+echodata -n x3
+query id HD 1461
+echodata -n x4
+query id WASP-1
+echodata -n x5
+query id HD 2039
+echodata -n x6
+query id HIP 2247
+echodata -n x7
+query id HD 2638
+echodata -n x8
+query id HAT-P-16
+echodata -n x9
+query id HD 3651
+echodata -n x10
+query id HD 4113
+echodata -n x11
+query id HD 4208
+echodata -n x12
+query id HD 4308
+echodata -n x13
+query id HD 4203
+echodata -n x14
+query id HD 4313
+echodata -n x15
+query id HD 5319
+echodata -n x16
+query id HD 5388
+echodata -n x17
+query id HD 6434
+echodata -n x18
+query id HIP 5158
+echodata -n x19
+query id HD 7924
+echodata -n x20
+query id HD 8574
+echodata -n x21
+query id HD 9446
+echodata -n x22
+query id HD 9446
+echodata -n x23
+query id upsilon And
+echodata -n x24
+query id upsilon And
+echodata -n x25
+query id upsilon And
+echodata -n x26
+query id WASP-18
+echodata -n x27
+query id HD 10647
+echodata -n x28
+query id HD 10697
+echodata -n x29
+query id HD 11506
+echodata -n x30
+query id HD 11977
+echodata -n x31
+query id HD 11964
+echodata -n x32
+query id HD 11964
+echodata -n x33
+query id HD 12661
+echodata -n x34
+query id HD 12661
+echodata -n x35
+query id GJ 86
+echodata -n x36
+query id HD 13931
+echodata -n x37
+query id HD 16141
+echodata -n x38
+query id HIP 12184
+echodata -n x39
+query id HD 16417
+echodata -n x40
+query id HD 16175
+echodata -n x41
+query id 81 Cet
+echodata -n x42
+query id HD 16760
+echodata -n x43
+query id iota Hor
+echodata -n x44
+query id HD 17092
+echodata -n x45
+query id HD 17156
+echodata -n x46
+query id WASP-11
+echodata -n x47
+query id HIP 14810
+echodata -n x48
+query id HIP 14810
+echodata -n x49
+query id HIP 14810
+echodata -n x50
+query id HD 19994
+echodata -n x51
+query id HD 20782
+echodata -n x52
+query id HD 20868
+echodata -n x53
+query id WASP-22
+echodata -n x54
+query id epsilon Eri
+echodata -n x55
+query id HD 23127
+echodata -n x56
+query id HD 23079
+echodata -n x57
+query id HD 23596
+echodata -n x58
+query id epsilon Ret
+echodata -n x59
+query id HD 27894
+echodata -n x60
+query id XO-3
+echodata -n x61
+query id HAT-P-15
+echodata -n x62
+query id HD 28185
+echodata -n x63
+query id epsilon Tau
+echodata -n x64
+query id HD 30177
+echodata -n x65
+query id GJ 176
+echodata -n x66
+query id HD 30562
+echodata -n x67
+query id GJ 179
+echodata -n x68
+query id HD 33283
+echodata -n x69
+query id HD 32518
+echodata -n x70
+query id HD 33636
+echodata -n x71
+query id HD 34445
+echodata -n x72
+query id HD 33564
+echodata -n x73
+query id HD 37124
+echodata -n x74
+query id HD 37124
+echodata -n x75
+query id HD 37124
+echodata -n x76
+query id HD 39091
+echodata -n x77
+query id HD 37605
+echodata -n x78
+query id HD 38529
+echodata -n x79
+query id HD 38529
+echodata -n x80
+query id HD 38801
+echodata -n x81
+query id HD 40307
+echodata -n x82
+query id HD 40307
+echodata -n x83
+query id HD 40307
+echodata -n x84
+query id HD 41004 A
+echodata -n x85
+query id HD 41004 B
+echodata -n x86
+query id HD 40979
+echodata -n x87
+query id HD 43848
+echodata -n x88
+query id HD 43691
+echodata -n x89
+query id HD 45364
+echodata -n x90
+query id HD 45364
+echodata -n x91
+query id HD 45350
+echodata -n x92
+query id HD 45652
+echodata -n x93
+query id WASP-12
+echodata -n x94
+query id 6 Lyn
+echodata -n x95
+query id HD 46375
+echodata -n x96
+query id HD 47186
+echodata -n x97
+query id HD 47186
+echodata -n x98
+query id HD 48265
+echodata -n x99
+query id CoRoT-Exo-7
+echodata -n x100
+query id CoRoT-Exo-7
+echodata -n x101
+query id CoRoT-Exo-5
+echodata -n x102
+query id CoRoT-Exo-1
+echodata -n x103
+query id CoRoT-Exo-4
+echodata -n x104
+query id HD 49674
+echodata -n x105
+query id HD 50499
+echodata -n x106
+query id HD 50554
+echodata -n x107
+query id HD 52265
+echodata -n x108
+query id HAT-P-9
+echodata -n x109
+query id HD 60532
+echodata -n x110
+query id HD 60532
+echodata -n x111
+query id HD 63454
+echodata -n x112
+query id HD 62509
+echodata -n x113
+query id XO-5
+echodata -n x114
+query id XO-2
+echodata -n x115
+query id HD 65216
+echodata -n x116
+query id HD 66428
+echodata -n x117
+query id HD 68988
+echodata -n x118
+query id HD 69830
+echodata -n x119
+query id HD 69830
+echodata -n x120
+query id HD 69830
+echodata -n x121
+query id HD 70642
+echodata -n x122
+query id HD 72659
+echodata -n x123
+query id HD 73267
+echodata -n x124
+query id HD 73256
+echodata -n x125
+query id HD 73526
+echodata -n x126
+query id HD 73526
+echodata -n x127
+query id HD 73534
+echodata -n x128
+query id HAT-P-13
+echodata -n x129
+query id HAT-P-13
+echodata -n x130
+query id 4 UMa
+echodata -n x131
+query id GJ 317
+echodata -n x132
+query id HD 74156
+echodata -n x133
+query id HD 74156
+echodata -n x134
+query id HD 75289
+echodata -n x135
+query id 55 Cnc
+echodata -n x136
+query id 55 Cnc
+echodata -n x137
+query id 55 Cnc
+echodata -n x138
+query id 55 Cnc
+echodata -n x139
+query id 55 Cnc
+echodata -n x140
+query id HD 75898
+echodata -n x141
+query id HD 76700
+echodata -n x142
+query id WASP-13
+echodata -n x143
+query id HD 80606
+echodata -n x144
+query id HD 81040
+echodata -n x145
+query id HD 81688
+echodata -n x146
+query id HD 82943
+echodata -n x147
+query id HD 82943
+echodata -n x148
+query id HD 83443
+echodata -n x149
+query id HD 86081
+echodata -n x150
+query id HD 86264
+echodata -n x151
+query id WASP-19
+echodata -n x152
+query id G 162-12
+echodata -n x153
+query id G 162-12
+echodata -n x154
+query id HD 87883
+echodata -n x155
+query id HD 88133
+echodata -n x156
+query id BD +20 2457
+echodata -n x157
+query id BD +20 2457
+echodata -n x158
+query id HD 89307
+echodata -n x159
+query id NSV 4823
+echodata -n x160
+query id HD 89744
+echodata -n x161
+query id OGLE-TR-211
+echodata -n x162
+query id HD 92788
+echodata -n x163
+query id HD 93083
+echodata -n x164
+query id OGLE-TR-132
+echodata -n x165
+query id OGLE-TR-113
+echodata -n x166
+query id OGLE-TR-111
+echodata -n x167
+query id BD -10 3166
+echodata -n x168
+query id HD 95089
+echodata -n x169
+query id 47 UMa
+echodata -n x170
+query id 47 UMa
+echodata -n x171
+query id HD 96167
+echodata -n x172
+query id OGLE2-TR-L9
+echodata -n x173
+query id OGLE-TR-182
+echodata -n x174
+query id HD 99109
+echodata -n x175
+query id HD 99492
+echodata -n x176
+query id HD 100777
+echodata -n x177
+query id HIP 57050
+echodata -n x178
+query id GJ 436
+echodata -n x179
+query id HD 101930
+echodata -n x180
+query id HD 102117
+echodata -n x181
+query id HD 102195
+echodata -n x182
+query id HD 102272
+echodata -n x183
+query id HD 104985
+echodata -n x184
+query id HD 106252
+echodata -n x185
+query id HD 107148
+echodata -n x186
+query id HD 108147
+echodata -n x187
+query id HD 108874
+echodata -n x188
+query id HD 108874
+echodata -n x189
+query id HD 109749
+echodata -n x190
+query id HD 111232
+echodata -n x191
+query id HD 114386
+echodata -n x192
+query id HD 114762
+echodata -n x193
+query id HD 114783
+echodata -n x194
+query id HD 114729
+echodata -n x195
+query id 61 Vir
+echodata -n x196
+query id 61 Vir
+echodata -n x197
+query id 61 Vir
+echodata -n x198
+query id 70 Vir
+echodata -n x199
+query id HD 117207
+echodata -n x200
+query id HD 117618
+echodata -n x201
+query id HD 118203
+echodata -n x202
+query id HAT-P-3
+echodata -n x203
+query id tau Boo
+echodata -n x204
+query id WASP-15
+echodata -n x205
+query id HD 121504
+echodata -n x206
+query id HAT-P-12
+echodata -n x207
+query id WASP-16
+echodata -n x208
+query id HD 125612
+echodata -n x209
+query id HD 126614 A
+echodata -n x210
+query id WASP-14
+echodata -n x211
+query id HD 128311
+echodata -n x212
+query id HD 128311
+echodata -n x213
+query id HD 130322
+echodata -n x214
+query id HD 132406
+echodata -n x215
+query id HD 131664
+echodata -n x216
+query id HD 134987
+echodata -n x217
+query id HD 134987
+echodata -n x218
+query id 11 UMi
+echodata -n x219
+query id HD 136118
+echodata -n x220
+query id HD 136418
+echodata -n x221
+query id GJ 581
+echodata -n x222
+query id GJ 581
+echodata -n x223
+query id GJ 581
+echodata -n x224
+query id GJ 581
+echodata -n x225
+query id HAT-P-4
+echodata -n x226
+query id iota Dra
+echodata -n x227
+query id HD 137510
+echodata -n x228
+query id HD 139357
+echodata -n x229
+query id HD 330075
+echodata -n x230
+query id kappa CrB
+echodata -n x231
+query id HD 141937
+echodata -n x232
+query id HD 142415
+echodata -n x233
+query id WASP-17
+echodata -n x234
+query id rho CrB
+echodata -n x235
+query id HD 143361
+echodata -n x236
+query id XO-1
+echodata -n x237
+query id HD 142022
+echodata -n x238
+query id 14 Her
+echodata -n x239
+query id HD 145377
+echodata -n x240
+query id HIP 79431
+echodata -n x241
+query id HD 147018
+echodata -n x242
+query id HD 147018
+echodata -n x243
+query id HAT-P-2
+echodata -n x244
+query id HD 147513
+echodata -n x245
+query id HD 148427
+echodata -n x246
+query id HD 149026
+echodata -n x247
+query id HD 149143
+echodata -n x248
+query id GJ 649
+echodata -n x249
+query id HD 154345
+echodata -n x250
+query id HD 153950
+echodata -n x251
+query id HD 155358
+echodata -n x252
+query id HD 155358
+echodata -n x253
+query id HD 154672
+echodata -n x254
+query id HD 154857
+echodata -n x255
+query id GJ 1214
+echodata -n x256
+query id HD 156668
+echodata -n x257
+query id HAT-P-14
+echodata -n x258
+query id HD 156846
+echodata -n x259
+query id GJ 674
+echodata -n x260
+query id HD 159868
+echodata -n x261
+query id mu Ara
+echodata -n x262
+query id mu Ara
+echodata -n x263
+query id mu Ara
+echodata -n x264
+query id mu Ara
+echodata -n x265
+query id HD 162020
+echodata -n x266
+query id OGLE-TR-10
+echodata -n x267
+query id TrES-3
+echodata -n x268
+query id OGLE-TR-56
+echodata -n x269
+query id TrES-4
+echodata -n x270
+query id HD 164922
+echodata -n x271
+query id HD 164604
+echodata -n x272
+query id HD 167042
+echodata -n x273
+query id HAT-P-5
+echodata -n x274
+query id HD 168443
+echodata -n x275
+query id HD 168443
+echodata -n x276
+query id HD 168746
+echodata -n x277
+query id 42 Dra
+echodata -n x278
+query id HD 169830
+echodata -n x279
+query id HD 169830
+echodata -n x280
+query id HD 170469
+echodata -n x281
+query id HD 171028
+echodata -n x282
+query id WASP-3
+echodata -n x283
+query id HD 171238
+echodata -n x284
+query id CoRoT-Exo-9b
+echodata -n x285
+query id HD 173416
+echodata -n x286
+query id CoRoT-Exo-6
+echodata -n x287
+query id Kepler-8
+echodata -n x288
+query id HD 175541
+echodata -n x289
+query id HD 164604
+echodata -n x290
+query id Kepler-4
+echodata -n x291
+query id TrES-1
+echodata -n x292
+query id HD 177830
+echodata -n x293
+query id TrES-2
+echodata -n x294
+query id HD 178911 B
+echodata -n x295
+query id HD 179079
+echodata -n x296
+query id Kepler-7
+echodata -n x297
+query id HD 179949
+echodata -n x298
+query id HD 180902
+echodata -n x299
+query id HD 181342
+echodata -n x300
+query id HD 181720
+echodata -n x301
+query id HD 181433
+echodata -n x302
+query id HD 181433
+echodata -n x303
+query id HD 181433
+echodata -n x304
+query id CoRoT-Exo-2
+echodata -n x305
+query id CoRoT-Exo-3
+echodata -n x306
+query id HD 183263
+echodata -n x307
+query id HD 183263
+echodata -n x308
+query id HAT-P-7
+echodata -n x309
+query id HD 231701
+echodata -n x310
+query id HD 185269
+echodata -n x311
+query id 16 Cyg B
+echodata -n x312
+query id HD 187123
+echodata -n x313
+query id HD 187123
+echodata -n x314
+query id Kepler-6
+echodata -n x315
+query id HD 187085
+echodata -n x316
+query id HAT-P-11
+echodata -n x317
+query id HD 188015
+echodata -n x318
+query id xi Aql
+echodata -n x319
+query id Kepler-5
+echodata -n x320
+query id HD 189733
+echodata -n x321
+query id HD 190228
+echodata -n x322
+query id HD 190360
+echodata -n x323
+query id HD 190360
+echodata -n x324
+query id HD 190647
+echodata -n x325
+query id HD 190984
+echodata -n x326
+query id HD 192263
+echodata -n x327
+query id HD 192699
+echodata -n x328
+query id HD 195019
+echodata -n x329
+query id WASP-2
+echodata -n x330
+query id HD 196050
+echodata -n x331
+query id HD 196885
+echodata -n x332
+query id WASP-7
+echodata -n x333
+query id 18 Del
+echodata -n x334
+query id BD +14 4559
+echodata -n x335
+query id HD 202206
+echodata -n x336
+query id HD 202206
+echodata -n x337
+query id HD 204313
+echodata -n x338
+query id GJ 832
+echodata -n x339
+query id HD 205739
+echodata -n x340
+query id HD 206610
+echodata -n x341
+query id HD 208487
+echodata -n x342
+query id HD 209458
+echodata -n x343
+query id HD 210277
+echodata -n x344
+query id GJ 849
+echodata -n x345
+query id HD 210702
+echodata -n x346
+query id HD 212771
+echodata -n x347
+query id HD 212301
+echodata -n x348
+query id HD 213240
+echodata -n x349
+query id HD 215497
+echodata -n x350
+query id HD 215497
+echodata -n x351
+query id HAT-P-8
+echodata -n x352
+query id GJ 876
+echodata -n x353
+query id GJ 876
+echodata -n x354
+query id GJ 876
+echodata -n x355
+query id HD 216435
+echodata -n x356
+query id HD 216437
+echodata -n x357
+query id HD 216770
+echodata -n x358
+query id 51 Peg
+echodata -n x359
+query id HAT-P-1
+echodata -n x360
+query id HD 217107
+echodata -n x361
+query id HD 217107
+echodata -n x362
+query id HD 240210
+echodata -n x363
+query id WASP-6
+echodata -n x364
+query id WASP-10
+echodata -n x365
+query id HD 219828
+echodata -n x366
+query id 14 And
+echodata -n x367
+query id HD 221287
+echodata -n x368
+query id WASP-4
+echodata -n x369
+query id HAT-P-6
+echodata -n x370
+query id gamma Cep
+echodata -n x371
+query id HD 222582
+echodata -n x372
+query id WASP-5
+echodata -n x373
+query id HD 224693

@@ -1,0 +1,2143 @@
+result oid
+echodata -n x0
+query id HD 4915
+echodata -n x1
+query id HD 5133
+echodata -n x2
+query id HD 32923
+echodata -n x3
+query id HD 51419
+echodata -n x4
+query id HD 69830
+echodata -n x5
+query id HD 87883
+echodata -n x6
+query id HD 104304
+echodata -n x7
+query id HD 127334
+echodata -n x8
+query id HD 135599
+echodata -n x9
+query id HD 142267
+echodata -n x10
+query id HD 143761
+echodata -n x11
+query id HD 149806
+echodata -n x12
+query id HD 161797
+echodata -n x13
+query id HD 168009
+echodata -n x14
+query id HD 182488
+echodata -n x15
+query id HD 186408
+echodata -n x16
+query id HD 186427
+echodata -n x17
+query id HD 188512
+echodata -n x18
+query id HD 208313
+echodata -n x19
+query id HD 218868
+echodata -n x20
+query id HD 225118
+echodata -n x21
+query id HD 225261
+echodata -n x22
+query id HD 105
+echodata -n x23
+query id HD 283
+echodata -n x24
+query id HD 377
+echodata -n x25
+query id HD 457
+echodata -n x26
+query id HD 691
+echodata -n x27
+query id HD 804
+echodata -n x28
+query id HD 1205
+echodata -n x29
+query id HD 1388
+echodata -n x30
+query id HD 1461
+echodata -n x31
+query id HD 1497
+echodata -n x32
+query id HD 1605
+echodata -n x33
+query id HD 1832
+echodata -n x34
+query id HD 2025
+echodata -n x35
+query id HD 2589
+echodata -n x36
+query id HD 3545
+echodata -n x37
+query id HD 3592
+echodata -n x38
+query id HD 3578
+echodata -n x39
+query id HD 3651
+echodata -n x40
+query id HD 3684
+echodata -n x41
+query id HD 3795
+echodata -n x42
+query id HD 3765
+echodata -n x43
+query id HD 4113
+echodata -n x44
+query id HD 4208
+echodata -n x45
+query id HD 4203
+echodata -n x46
+query id HD 4307
+echodata -n x47
+query id HD 4747
+echodata -n x48
+query id HD 232301
+echodata -n x49
+query id HD 5319
+echodata -n x50
+query id HD 5372
+echodata -n x51
+query id HD 5470
+echodata -n x52
+query id HD 6512
+echodata -n x53
+query id HD 6558
+echodata -n x54
+query id HD 6697
+echodata -n x55
+query id HD 6734
+echodata -n x56
+query id HD 6963
+echodata -n x57
+query id HD 8038
+echodata -n x58
+query id HD 7924
+echodata -n x59
+query id HD 8446
+echodata -n x60
+query id HD 8328
+echodata -n x61
+query id HD 8574
+echodata -n x62
+query id HD 8648
+echodata -n x63
+query id HD 8765
+echodata -n x64
+query id HD 8859
+echodata -n x65
+query id HD 8828
+echodata -n x66
+query id HD 8912
+echodata -n x67
+query id HD 8907
+echodata -n x68
+query id HD 8939
+echodata -n x69
+query id HD 9113
+echodata -n x70
+query id HD 9081
+echodata -n x71
+query id HD 9070
+echodata -n x72
+query id HD 9331
+echodata -n x73
+query id HD 9472
+echodata -n x74
+query id HD 9562
+echodata -n x75
+query id HD 9407
+echodata -n x76
+query id HD 10002
+echodata -n x77
+query id HD 9986
+echodata -n x78
+query id HD 10353
+echodata -n x79
+query id HD 10145
+echodata -n x80
+query id HD 10442
+echodata -n x81
+query id HD 10476
+echodata -n x82
+query id HD 10700
+echodata -n x83
+query id HD 10697
+echodata -n x84
+query id HD 11020
+echodata -n x85
+query id HD 10780
+echodata -n x86
+query id HD 11271
+echodata -n x87
+query id HD 11506
+echodata -n x88
+query id HD 11731
+echodata -n x89
+query id HD 11850
+echodata -n x90
+query id HD 12051
+echodata -n x91
+query id HD 12661
+echodata -n x92
+query id HD 12846
+echodata -n x93
+query id HD 13043
+echodata -n x94
+query id HD 13361
+echodata -n x95
+query id HD 13345
+echodata -n x96
+query id HD 13357
+echodata -n x97
+query id HD 13773
+echodata -n x98
+query id HD 13579
+echodata -n x99
+query id HD 13931
+echodata -n x100
+query id HD 14223
+echodata -n x101
+query id HD 14412
+echodata -n x102
+query id HD 14374
+echodata -n x103
+query id HD 14655
+echodata -n x104
+query id HD 15337
+echodata -n x105
+query id HD 15335
+echodata -n x106
+query id HD 16141
+echodata -n x107
+query id HD 16249
+echodata -n x108
+query id HD 16297
+echodata -n x109
+query id HD 16287
+echodata -n x110
+query id HD 16275
+echodata -n x111
+query id HD 16397
+echodata -n x112
+query id HD 16623
+echodata -n x113
+query id HD 16760
+echodata -n x114
+query id HD 17190
+echodata -n x115
+query id HD 17075
+echodata -n x116
+query id HD 17156
+echodata -n x117
+query id HD 18143
+echodata -n x118
+query id HD 18445
+echodata -n x119
+query id HD 18632
+echodata -n x120
+query id HD 18702
+echodata -n x121
+query id HD 18747
+echodata -n x122
+query id HD 18803
+echodata -n x123
+query id HD 18975
+echodata -n x124
+query id HD 19034
+echodata -n x125
+query id HD 18993
+echodata -n x126
+query id HD 19056
+echodata -n x127
+query id HD 19467
+echodata -n x128
+query id HD 19308
+echodata -n x129
+query id HD 19373
+echodata -n x130
+query id HD 19502
+echodata -n x131
+query id HD 19773
+echodata -n x132
+query id HD 20155
+echodata -n x133
+query id HD 20165
+echodata -n x134
+query id HD 20439
+echodata -n x135
+query id HD 20619
+echodata -n x136
+query id HD 20781
+echodata -n x137
+query id HD 20678
+echodata -n x138
+query id HD 20675
+echodata -n x139
+query id HD 20670
+echodata -n x140
+query id HD 21316
+echodata -n x141
+query id HD 21313
+echodata -n x142
+query id HD 21774
+echodata -n x143
+query id HD 21847
+echodata -n x144
+query id HD 22072
+echodata -n x145
+query id HD 22282
+echodata -n x146
+query id HD 22670
+echodata -n x147
+query id HD 22879
+echodata -n x148
+query id HD 23249
+echodata -n x149
+query id HD 23221
+echodata -n x150
+query id HD 23356
+echodata -n x151
+query id HD 23439
+echodata -n x152
+query id HD 24040
+echodata -n x153
+query id HD 24213
+echodata -n x154
+query id HD 281309
+echodata -n x155
+query id HD 24365
+echodata -n x156
+query id HD 24496
+echodata -n x157
+query id HD 24341
+echodata -n x158
+query id HD 24505
+echodata -n x159
+query id HD 24238
+echodata -n x160
+query id HD 24727
+echodata -n x161
+query id HD 24892
+echodata -n x162
+query id HD 25311
+echodata -n x163
+query id HD 25565
+echodata -n x164
+query id HD 25445
+echodata -n x165
+query id HD 25682
+echodata -n x166
+query id HD 25825
+echodata -n x167
+query id HD 26151
+echodata -n x168
+query id HD 26257
+echodata -n x169
+query id HD 25665
+echodata -n x170
+query id HD 26794
+echodata -n x171
+query id HD 26965
+echodata -n x172
+query id HD 26990
+echodata -n x173
+query id HD 27063
+echodata -n x174
+query id HD 27282
+echodata -n x175
+query id HD 27530
+echodata -n x176
+query id HD 27496
+echodata -n x177
+query id HD 28187
+echodata -n x178
+query id HD 27748
+echodata -n x179
+query id HD 28005
+echodata -n x180
+query id HD 28097
+echodata -n x181
+query id HD 28946
+echodata -n x182
+query id HD 29461
+echodata -n x183
+query id HD 29528
+echodata -n x184
+query id HD 29980
+echodata -n x185
+query id HD 29883
+echodata -n x186
+query id HD 29818
+echodata -n x187
+query id HD 30339
+echodata -n x188
+query id HD 30663
+echodata -n x189
+query id HD 30708
+echodata -n x190
+query id HD 30649
+echodata -n x191
+query id HD 31018
+echodata -n x192
+query id HD 31253
+echodata -n x193
+query id HD 31412
+echodata -n x194
+query id HD 31452
+echodata -n x195
+query id HD 31966
+echodata -n x196
+query id HD 31864
+echodata -n x197
+query id HD 32673
+echodata -n x198
+query id HD 33021
+echodata -n x199
+query id HD 32963
+echodata -n x200
+query id HD 33283
+echodata -n x201
+query id HD 33108
+echodata -n x202
+query id HD 33334
+echodata -n x203
+query id HD 33822
+echodata -n x204
+query id HD 33636
+echodata -n x205
+query id HD 34445
+echodata -n x206
+query id HD 34721
+echodata -n x207
+query id HD 34411
+echodata -n x208
+query id HD 34745
+echodata -n x209
+query id HD 34575
+echodata -n x210
+query id HD 34887
+echodata -n x211
+query id HD 35627
+echodata -n x212
+query id HD 35974
+echodata -n x213
+query id HD 36308
+echodata -n x214
+query id HD 244992
+echodata -n x215
+query id HD 37213
+echodata -n x216
+query id HD 37124
+echodata -n x217
+query id HD 36130
+echodata -n x218
+query id HD 37008
+echodata -n x219
+query id HD 37216
+echodata -n x220
+query id HD 37962
+echodata -n x221
+query id HD 38467
+echodata -n x222
+query id HD 38230
+echodata -n x223
+query id HD 37006
+echodata -n x224
+query id HD 38529
+echodata -n x225
+query id HD 38400
+echodata -n x226
+query id HD 38949
+echodata -n x227
+query id HD 38858
+echodata -n x228
+query id HD 37879
+echodata -n x229
+query id HD 39352
+echodata -n x230
+query id HD 39796
+echodata -n x231
+query id HD 39480
+echodata -n x232
+query id HD 39997
+echodata -n x233
+query id HD 39715
+echodata -n x234
+query id HD 39833
+echodata -n x235
+query id HD 40126
+echodata -n x236
+query id HD 39881
+echodata -n x237
+query id HD 40397
+echodata -n x238
+query id HD 40979
+echodata -n x239
+query id HD 41484
+echodata -n x240
+query id HD 42182
+echodata -n x241
+query id HD 42618
+echodata -n x242
+query id HD 42250
+echodata -n x243
+query id HD 43745
+echodata -n x244
+query id HD 43691
+echodata -n x245
+query id HD 43947
+echodata -n x246
+query id HD 44420
+echodata -n x247
+query id HD 44663
+echodata -n x248
+query id HD 44614
+echodata -n x249
+query id HD 45184
+echodata -n x250
+query id HD 45067
+echodata -n x251
+query id HD 44985
+echodata -n x252
+query id HD 45588
+echodata -n x253
+query id HD 45350
+echodata -n x254
+query id HD 46375
+echodata -n x255
+query id HD 47157
+echodata -n x256
+query id HD 48938
+echodata -n x257
+query id HD 49674
+echodata -n x258
+query id HD 50499
+echodata -n x259
+query id HD 50806
+echodata -n x260
+query id HD 50639
+echodata -n x261
+query id HD 50554
+echodata -n x262
+query id HD 50692
+echodata -n x263
+query id HD 51219
+echodata -n x264
+query id HD 51046
+echodata -n x265
+query id HD 52265
+echodata -n x266
+query id HD 52456
+echodata -n x267
+query id HD 52711
+echodata -n x268
+query id HD 53665
+echodata -n x269
+query id HD 55696
+echodata -n x270
+query id HD 56274
+echodata -n x271
+query id HD 55647
+echodata -n x272
+query id HD 56303
+echodata -n x273
+query id HD 56957
+echodata -n x274
+query id HD 58781
+echodata -n x275
+query id HD 59062
+echodata -n x276
+query id HD 60491
+echodata -n x277
+query id HD 60041
+echodata -n x278
+query id HD 61447
+echodata -n x279
+query id HD 61364
+echodata -n x280
+query id HD 61606
+echodata -n x281
+query id HD 62128
+echodata -n x282
+query id HD 63754
+echodata -n x283
+query id HD 64502
+echodata -n x284
+query id HD 64942
+echodata -n x285
+query id HD 65080
+echodata -n x286
+query id HD 65430
+echodata -n x287
+query id HD 65583
+echodata -n x288
+query id HD 66221
+echodata -n x289
+query id HD 66428
+echodata -n x290
+query id HD 66485
+echodata -n x291
+query id HD 67458
+echodata -n x292
+query id HD 67346
+echodata -n x293
+query id HD 66171
+echodata -n x294
+query id HD 67767
+echodata -n x295
+query id HD 68017
+echodata -n x296
+query id HD 68168
+echodata -n x297
+query id HD 68978
+echodata -n x298
+query id HD 69056
+echodata -n x299
+query id HD 68988
+echodata -n x300
+query id HD 69809
+echodata -n x301
+query id HD 69960
+echodata -n x302
+query id HD 71334
+echodata -n x303
+query id HD 71479
+echodata -n x304
+query id HD 71835
+echodata -n x305
+query id HD 71881
+echodata -n x306
+query id HD 72673
+echodata -n x307
+query id HD 72659
+echodata -n x308
+query id HD 72616
+echodata -n x309
+query id HD 73256
+echodata -n x310
+query id HD 73226
+echodata -n x311
+query id HD 73534
+echodata -n x312
+query id HD 73667
+echodata -n x313
+query id HD 73940
+echodata -n x314
+query id HD 74156
+echodata -n x315
+query id HD 75784
+echodata -n x316
+query id HD 75732
+echodata -n x317
+query id HD 75898
+echodata -n x318
+query id HD 75576
+echodata -n x319
+query id HD 76218
+echodata -n x320
+query id HD 76780
+echodata -n x321
+query id HD 76617
+echodata -n x322
+query id HD 76909
+echodata -n x323
+query id HD 77519
+echodata -n x324
+query id HD 77803
+echodata -n x325
+query id HD 78277
+echodata -n x326
+query id HD 78752
+echodata -n x327
+query id HD 79498
+echodata -n x328
+query id HD 80367
+echodata -n x329
+query id HD 80606
+echodata -n x330
+query id HD 81505
+echodata -n x331
+query id HD 233641
+echodata -n x332
+query id HD 82943
+echodata -n x333
+query id HD 83443
+echodata -n x334
+query id HD 84117
+echodata -n x335
+query id HD 84501
+echodata -n x336
+query id HD 84703
+echodata -n x337
+query id HD 85301
+echodata -n x338
+query id HD 86081
+echodata -n x339
+query id HD 87359
+echodata -n x340
+query id HD 87424
+echodata -n x341
+query id HD 87836
+echodata -n x342
+query id HD 88072
+echodata -n x343
+query id HD 88218
+echodata -n x344
+query id HD 88133
+echodata -n x345
+query id HD 88371
+echodata -n x346
+query id HD 88656
+echodata -n x347
+query id HD 88725
+echodata -n x348
+query id HD 88986
+echodata -n x349
+query id HD 89391
+echodata -n x350
+query id HD 89269
+echodata -n x351
+query id HD 89454
+echodata -n x352
+query id HD 90054
+echodata -n x353
+query id HD 90156
+echodata -n x354
+query id HD 90125
+echodata -n x355
+query id HD 90211
+echodata -n x356
+query id HD 90323
+echodata -n x357
+query id HD 90711
+echodata -n x358
+query id HD 90722
+echodata -n x359
+query id HD 90905
+echodata -n x360
+query id HD 91204
+echodata -n x361
+query id HD 91876
+echodata -n x362
+query id HD 92788
+echodata -n x363
+query id HD 92855
+echodata -n x364
+query id HD 93745
+echodata -n x365
+query id HD 93664
+echodata -n x366
+query id HD 93849
+echodata -n x367
+query id HD 93932
+echodata -n x368
+query id HD 94151
+echodata -n x369
+query id HD 94375
+echodata -n x370
+query id HD 95188
+echodata -n x371
+query id HD 96108
+echodata -n x372
+query id HD 96167
+echodata -n x373
+query id HD 96700
+echodata -n x374
+query id HD 96937
+echodata -n x375
+query id HD 97038
+echodata -n x376
+query id HD 97343
+echodata -n x377
+query id HD 97658
+echodata -n x378
+query id HD 98281
+echodata -n x379
+query id HD 98553
+echodata -n x380
+query id HD 98630
+echodata -n x381
+query id HD 98618
+echodata -n x382
+query id HD 98736
+echodata -n x383
+query id HD 98744
+echodata -n x384
+query id HD 99109
+echodata -n x385
+query id HD 99491
+echodata -n x386
+query id HD 99492
+echodata -n x387
+query id HD 100180
+echodata -n x388
+query id HD 100623
+echodata -n x389
+query id HD 101259
+echodata -n x390
+query id HD 101348
+echodata -n x391
+query id HD 101472
+echodata -n x392
+query id HD 101847
+echodata -n x393
+query id HD 101959
+echodata -n x394
+query id HD 102071
+echodata -n x395
+query id HD 102158
+echodata -n x396
+query id HD 102361
+echodata -n x397
+query id HD 103432
+echodata -n x398
+query id HD 103459
+echodata -n x399
+query id HD 103829
+echodata -n x400
+query id HD 103890
+echodata -n x401
+query id HD 104067
+echodata -n x402
+query id HD 104556
+echodata -n x403
+query id HD 104800
+echodata -n x404
+query id HD 105113
+echodata -n x405
+query id HD 105279
+echodata -n x406
+query id HD 105304
+echodata -n x407
+query id HD 105631
+echodata -n x408
+query id HD 106116
+echodata -n x409
+query id HD 106156
+echodata -n x410
+query id HD 106949
+echodata -n x411
+query id HD 107087
+echodata -n x412
+query id HD 107146
+echodata -n x413
+query id HD 107148
+echodata -n x414
+query id HD 108351
+echodata -n x415
+query id HD 108874
+echodata -n x416
+query id HD 109358
+echodata -n x417
+query id HD 109331
+echodata -n x418
+query id HD 109749
+echodata -n x419
+query id HD 109929
+echodata -n x420
+query id HD 110537
+echodata -n x421
+query id HD 111031
+echodata -n x422
+query id HD 111395
+echodata -n x423
+query id HD 111515
+echodata -n x424
+query id HD 111814
+echodata -n x425
+query id HD 112019
+echodata -n x426
+query id HD 112337
+echodata -n x427
+query id HD 112257
+echodata -n x428
+query id HD 114174
+echodata -n x429
+query id HD 114783
+echodata -n x430
+query id HD 114729
+echodata -n x431
+query id HD 114946
+echodata -n x432
+query id HD 115589
+echodata -n x433
+query id HD 116442
+echodata -n x434
+query id HD 116443
+echodata -n x435
+query id HD 117207
+echodata -n x436
+query id HD 117497
+echodata -n x437
+query id HD 118914
+echodata -n x438
+query id HD 120066
+echodata -n x439
+query id HD 121320
+echodata -n x440
+query id HD 121550
+echodata -n x441
+query id HD 122652
+echodata -n x442
+query id HD 123265
+echodata -n x443
+query id HD 123812
+echodata -n x444
+query id HD 124106
+echodata -n x445
+query id HD 124292
+echodata -n x446
+query id HD 125184
+echodata -n x447
+query id HD 125455
+echodata -n x448
+query id HD 125612
+echodata -n x449
+query id HD 126053
+echodata -n x450
+query id HD 126203
+echodata -n x451
+query id HD 126614
+echodata -n x452
+query id HD 129333
+echodata -n x453
+query id HD 129010
+echodata -n x454
+query id HD 129191
+echodata -n x455
+query id HD 129471
+echodata -n x456
+query id HD 129814
+echodata -n x457
+query id HD 130087
+echodata -n x458
+query id HD 130307
+echodata -n x459
+query id HD 130322
+echodata -n x460
+query id HD 130666
+echodata -n x461
+query id HD 130672
+echodata -n x462
+query id HD 130871
+echodata -n x463
+query id HD 131117
+echodata -n x464
+query id HD 131183
+echodata -n x465
+query id HD 131509
+echodata -n x466
+query id HD 132142
+echodata -n x467
+query id HD 132173
+echodata -n x468
+query id HD 133295
+echodata -n x469
+query id HD 134319
+echodata -n x470
+query id HD 134987
+echodata -n x471
+query id HD 136442
+echodata -n x472
+query id HD 136713
+echodata -n x473
+query id HD 136834
+echodata -n x474
+query id HD 136925
+echodata -n x475
+query id HD 138004
+echodata -n x476
+query id HD 137778
+echodata -n x477
+query id HD 137985
+echodata -n x478
+query id HD 139813
+echodata -n x479
+query id HD 138278
+echodata -n x480
+query id HD 138549
+echodata -n x481
+query id HD 138776
+echodata -n x482
+query id HD 139323
+echodata -n x483
+query id HD 139457
+echodata -n x484
+query id HD 139907
+echodata -n x485
+query id HD 139879
+echodata -n x486
+query id HD 140913
+echodata -n x487
+query id HD 141186
+echodata -n x488
+query id HD 141085
+echodata -n x489
+query id HD 141937
+echodata -n x490
+query id HD 142229
+echodata -n x491
+query id HD 143174
+echodata -n x492
+query id HD 143291
+echodata -n x493
+query id HD 143006
+echodata -n x494
+query id HD 144579
+echodata -n x495
+query id HD 144585
+echodata -n x496
+query id HD 144988
+echodata -n x497
+query id HD 145675
+echodata -n x498
+query id HD 145331
+echodata -n x499
+query id HD 145934
+echodata -n x500
+query id HD 145809
+echodata -n x501
+query id HD 146050
+echodata -n x502
+query id HD 147231
+echodata -n x503
+query id HD 146233
+echodata -n x504
+query id HD 146775
+echodata -n x505
+query id HD 147062
+echodata -n x506
+query id HD 147719
+echodata -n x507
+query id HD 147887
+echodata -n x508
+query id HD 147776
+echodata -n x509
+query id HD 148164
+echodata -n x510
+query id HD 148284
+echodata -n x511
+query id HD 148428
+echodata -n x512
+query id HD 149026
+echodata -n x513
+query id HD 234314
+echodata -n x514
+query id HD 149143
+echodata -n x515
+query id HD 149750
+echodata -n x516
+query id HD 149661
+echodata -n x517
+query id HD 149724
+echodata -n x518
+query id HD 149760
+echodata -n x519
+query id HD 150237
+echodata -n x520
+query id HD 150554
+echodata -n x521
+query id HD 150433
+echodata -n x522
+query id HD 150437
+echodata -n x523
+query id HD 151541
+echodata -n x524
+query id HD 150698
+echodata -n x525
+query id HD 150936
+echodata -n x526
+query id HD 151504
+echodata -n x527
+query id HD 151877
+echodata -n x528
+query id HD 152125
+echodata -n x529
+query id HD 151995
+echodata -n x530
+query id HD 152792
+echodata -n x531
+query id HD 152555
+echodata -n x532
+query id HD 153378
+echodata -n x533
+query id HD 153458
+echodata -n x534
+query id HD 154345
+echodata -n x535
+query id HD 154325
+echodata -n x536
+query id HD 154144
+echodata -n x537
+query id HD 154088
+echodata -n x538
+query id HD 154656
+echodata -n x539
+query id HD 154697
+echodata -n x540
+query id HD 154994
+echodata -n x541
+query id HD 155415
+echodata -n x542
+query id HD 155817
+echodata -n x543
+query id HD 155968
+echodata -n x544
+query id HD 156079
+echodata -n x545
+query id HD 156342
+echodata -n x546
+query id HD 156365
+echodata -n x547
+query id HD 156826
+echodata -n x548
+query id HD 157214
+echodata -n x549
+query id HD 157172
+echodata -n x550
+query id HD 157299
+echodata -n x551
+query id HD 157347
+echodata -n x552
+query id HD 157338
+echodata -n x553
+query id HD 158633
+echodata -n x554
+query id HD 158210
+echodata -n x555
+query id HD 158173
+echodata -n x556
+query id HD 159063
+echodata -n x557
+query id HD 159222
+echodata -n x558
+query id HD 160693
+echodata -n x559
+query id HD 161897
+echodata -n x560
+query id HD 161424
+echodata -n x561
+query id HD 161479
+echodata -n x562
+query id HD 161848
+echodata -n x563
+query id HD 162232
+echodata -n x564
+query id HD 162808
+echodata -n x565
+query id HD 163607
+echodata -n x566
+query id HD 163153
+echodata -n x567
+query id HD 163489
+echodata -n x568
+query id HD 164330
+echodata -n x569
+query id HD 164595
+echodata -n x570
+query id HD 164507
+echodata -n x571
+query id HD 164509
+echodata -n x572
+query id HD 164922
+echodata -n x573
+query id HD 165269
+echodata -n x574
+query id HD 165672
+echodata -n x575
+query id HD 166435
+echodata -n x576
+query id HD 167215
+echodata -n x577
+query id HD 167389
+echodata -n x578
+query id HD 167665
+echodata -n x579
+query id HD 168443
+echodata -n x580
+query id HD 168746
+echodata -n x581
+query id HD 169830
+echodata -n x582
+query id HD 170174
+echodata -n x583
+query id HD 170469
+echodata -n x584
+query id HD 170512
+echodata -n x585
+query id HD 170657
+echodata -n x586
+query id HD 171067
+echodata -n x587
+query id HD 171238
+echodata -n x588
+query id HD 171665
+echodata -n x589
+query id HD 171918
+echodata -n x590
+query id HD 172310
+echodata -n x591
+query id HD 172051
+echodata -n x592
+query id HD 172513
+echodata -n x593
+query id HD 173701
+echodata -n x594
+query id HD 174622
+echodata -n x595
+query id HD 175441
+echodata -n x596
+query id HD 174719
+echodata -n x597
+query id HD 175425
+echodata -n x598
+query id HD 175541
+echodata -n x599
+query id HD 176377
+echodata -n x600
+query id HD 177274
+echodata -n x601
+query id HD 230409
+echodata -n x602
+query id HD 176982
+echodata -n x603
+query id HD 177033
+echodata -n x604
+query id HD 177830
+echodata -n x605
+query id HD 179079
+echodata -n x606
+query id HD 179957
+echodata -n x607
+query id HD 179958
+echodata -n x608
+query id HD 230999
+echodata -n x609
+query id HD 179949
+echodata -n x610
+query id HD 180684
+echodata -n x611
+query id HD 181253
+echodata -n x612
+query id HD 231157
+echodata -n x613
+query id HD 181234
+echodata -n x614
+query id HD 182407
+echodata -n x615
+query id HD 182572
+echodata -n x616
+query id HD 183263
+echodata -n x617
+query id HD 183650
+echodata -n x618
+query id HD 183658
+echodata -n x619
+query id HD 231701
+echodata -n x620
+query id HD 183870
+echodata -n x621
+query id HD 185144
+echodata -n x622
+query id HD 185295
+echodata -n x623
+query id HD 186104
+echodata -n x624
+query id HD 186932
+echodata -n x625
+query id HD 187123
+echodata -n x626
+query id HD 187237
+echodata -n x627
+query id HD 187923
+echodata -n x628
+query id HD 188015
+echodata -n x629
+query id HD 187897
+echodata -n x630
+query id HD 188345
+echodata -n x631
+query id HD 188268
+echodata -n x632
+query id HD 188311
+echodata -n x633
+query id HD 188510
+echodata -n x634
+query id HD 188298
+echodata -n x635
+query id HD 189625
+echodata -n x636
+query id HD 189627
+echodata -n x637
+query id HD 190067
+echodata -n x638
+query id HD 190228
+echodata -n x639
+query id HD 190360
+echodata -n x640
+query id HD 190404
+echodata -n x641
+query id HD 190406
+echodata -n x642
+query id HD 190594
+echodata -n x643
+query id HD 190821
+echodata -n x644
+query id HD 190931
+echodata -n x645
+query id HD 191785
+echodata -n x646
+query id HD 191408
+echodata -n x647
+query id HD 192020
+echodata -n x648
+query id HD 192148
+echodata -n x649
+query id HD 355183
+echodata -n x650
+query id HD 192263
+echodata -n x651
+query id HD 192343
+echodata -n x652
+query id HD 192344
+echodata -n x653
+query id HD 192310
+echodata -n x654
+query id HD 193795
+echodata -n x655
+query id HD 193690
+echodata -n x656
+query id HD 193901
+echodata -n x657
+query id HD 194080
+echodata -n x658
+query id HD 194913
+echodata -n x659
+query id HD 195019
+echodata -n x660
+query id HD 195564
+echodata -n x661
+query id HD 196124
+echodata -n x662
+query id HD 196201
+echodata -n x663
+query id HD 196850
+echodata -n x664
+query id HD 196761
+echodata -n x665
+query id HD 197076
+echodata -n x666
+query id HD 197623
+echodata -n x667
+query id HD 335129
+echodata -n x668
+query id HD 198387
+echodata -n x669
+query id HD 199019
+echodata -n x670
+query id HD 198683
+echodata -n x671
+query id HD 199476
+echodata -n x672
+query id HD 198802
+echodata -n x673
+query id HD 199683
+echodata -n x674
+query id HD 199960
+echodata -n x675
+query id HD 200078
+echodata -n x676
+query id HD 200565
+echodata -n x677
+query id HD 200538
+echodata -n x678
+query id HD 200968
+echodata -n x679
+query id HD 201219
+echodata -n x680
+query id HD 201203
+echodata -n x681
+query id HD 201989
+echodata -n x682
+query id HD 202751
+echodata -n x683
+query id HD 203473
+echodata -n x684
+query id HD 204277
+echodata -n x685
+query id HD 205351
+echodata -n x686
+query id HD 205353
+echodata -n x687
+query id HD 205356
+echodata -n x688
+query id HD 205855
+echodata -n x689
+query id HD 206116
+echodata -n x690
+query id HD 206374
+echodata -n x691
+query id HD 206387
+echodata -n x692
+query id HD 206658
+echodata -n x693
+query id HD 207583
+echodata -n x694
+query id HD 207874
+echodata -n x695
+query id HD 207832
+echodata -n x696
+query id HD 208801
+echodata -n x697
+query id HD 209203
+echodata -n x698
+query id HD 209340
+echodata -n x699
+query id HD 209393
+echodata -n x700
+query id HD 209253
+echodata -n x701
+query id HD 209458
+echodata -n x702
+query id HD 209706
+echodata -n x703
+query id HD 209875
+echodata -n x704
+query id HD 211681
+echodata -n x705
+query id HD 210323
+echodata -n x706
+query id HD 210312
+echodata -n x707
+query id HD 210277
+echodata -n x708
+query id HD 210320
+echodata -n x709
+query id HD 210302
+echodata -n x710
+query id HD 210460
+echodata -n x711
+query id HD 211038
+echodata -n x712
+query id HD 211080
+echodata -n x713
+query id HD 211810
+echodata -n x714
+query id HD 211567
+echodata -n x715
+query id HD 212291
+echodata -n x716
+query id HD 212585
+echodata -n x717
+query id HD 212735
+echodata -n x718
+query id HD 212801
+echodata -n x719
+query id HD 213066
+echodata -n x720
+query id HD 213472
+echodata -n x721
+query id HD 213519
+echodata -n x722
+query id HD 213329
+echodata -n x723
+query id HD 213628
+echodata -n x724
+query id HD 214823
+echodata -n x725
+query id HD 215032
+echodata -n x726
+query id HD 215578
+echodata -n x727
+query id HD 215625
+echodata -n x728
+query id HD 216083
+echodata -n x729
+query id HD 216175
+echodata -n x730
+query id HD 216275
+echodata -n x731
+query id HD 216259
+echodata -n x732
+query id HD 217004
+echodata -n x733
+query id HD 217107
+echodata -n x734
+query id HD 217165
+echodata -n x735
+query id HD 217523
+echodata -n x736
+query id HD 217850
+echodata -n x737
+query id HD 217877
+echodata -n x738
+query id HD 218168
+echodata -n x739
+query id HD 218209
+echodata -n x740
+query id HD 218133
+echodata -n x741
+query id HD 218445
+echodata -n x742
+query id HD 218566
+echodata -n x743
+query id HD 219396
+echodata -n x744
+query id HD 219428
+echodata -n x745
+query id HD 219538
+echodata -n x746
+query id HD 219542
+echodata -n x747
+query id HD 219770
+echodata -n x748
+query id HD 219781
+echodata -n x749
+query id HD 219828
+echodata -n x750
+query id HD 220339
+echodata -n x751
+query id HD 220908
+echodata -n x752
+query id HD 221149
+echodata -n x753
+query id HD 221354
+echodata -n x754
+query id HD 221356
+echodata -n x755
+query id HD 221561
+echodata -n x756
+query id HD 221974
+echodata -n x757
+query id HD 222035
+echodata -n x758
+query id HD 222038
+echodata -n x759
+query id HD 222391
+echodata -n x760
+query id HD 222582
+echodata -n x761
+query id HD 222697
+echodata -n x762
+query id HD 222986
+echodata -n x763
+query id HD 223205
+echodata -n x764
+query id HD 223238
+echodata -n x765
+query id HD 223315
+echodata -n x766
+query id HD 223498
+echodata -n x767
+query id HD 223691
+echodata -n x768
+query id HD 224040
+echodata -n x769
+query id HD 224449
+echodata -n x770
+query id HD 224601
+echodata -n x771
+query id HD 224693
+echodata -n x772
+query id HD 73933
+echodata -n x773
+query id HD 85689
+echodata -n x774
+query id HD 92320
+echodata -n x775
+query id HD 95088
+echodata -n x776
+query id HD 95622
+echodata -n x777
+query id HD 97854
+echodata -n x778
+query id HD 101904
+echodata -n x779
+query id HD 104389
+echodata -n x780
+query id HD 121579
+echodata -n x781
+query id HD 106088
+echodata -n x782
+query id HD 112415
+echodata -n x783
+query id HD 10013
+echodata -n x784
+query id HD 7510
+echodata -n x785
+query id HD 5946
+echodata -n x786
+query id HD 10015
+echodata -n x787
+query id HD 19617
+echodata -n x788
+query id HD 19618
+echodata -n x789
+query id HD 37605
+echodata -n x790
+query id HD 38801
+echodata -n x791
+query id HD 39094
+echodata -n x792
+query id HD 53532
+echodata -n x793
+query id HD 57204
+echodata -n x794
+query id HD 57813
+echodata -n x795
+query id HD 58727
+echodata -n x796
+query id HD 96361
+echodata -n x797
+query id HD 96529
+echodata -n x798
+query id HIP54498
+echodata -n x799
+query id HD 101675
+echodata -n x800
+query id HD 103417
+echodata -n x801
+query id HD 103828
+echodata -n x802
+query id HD 104437
+echodata -n x803
+query id HD 104588
+echodata -n x804
+query id HD 238069
+echodata -n x805
+query id HD 107211
+echodata -n x806
+query id HD 108942
+echodata -n x807
+query id HD 109718
+echodata -n x808
+query id HD 110044
+echodata -n x809
+query id HD 114375
+echodata -n x810
+query id HD 117122
+echodata -n x811
+query id HD 120528
+echodata -n x812
+query id HIP92922
+echodata -n x813
+query id HIP113207
+echodata -n x814
+query id HD 102365
+echodata -n x815
+query id HD 114613
+echodata -n x816
+query id HD 136352
+echodata -n x817
+query id HD 159868
+echodata -n x818
+query id HD 223171
+echodata -n x819
+query id VESTA
+echodata -n x820
+query id HD 531B
+echodata -n x821
+query id HD 3861
+echodata -n x822
+query id HD 6872B
+echodata -n x823
+query id HIP5938
+echodata -n x824
+query id HIP6276
+echodata -n x825
+query id HD 9540
+echodata -n x826
+query id HD 13612B
+echodata -n x827
+query id HIP10449
+echodata -n x828
+query id HD 16417
+echodata -n x829
+query id HIP15904
+echodata -n x830
+query id HD 92222B
+echodata -n x831
+query id HD 92222A
+echodata -n x832
+query id HD 92945
+echodata -n x833
+query id BD-103166
+echodata -n x834
+query id HD 95128
+echodata -n x835
+query id HIP57450
+echodata -n x836
+query id HD 104576
+echodata -n x837
+query id HD 111484B
+echodata -n x838
+query id HD 140538A
+echodata -n x839
+query id HD 145229
+echodata -n x840
+query id HD 145958B
+echodata -n x841
+query id HIP80295
+echodata -n x842
+query id HIP87062
+echodata -n x843
+query id HIP89215
+echodata -n x844
+query id HD 178911B
+echodata -n x845
+query id HIP103269
+echodata -n x846
+query id HIP106924
+echodata -n x847
+query id HD 206332
+echodata -n x848
+query id HD 214759
+echodata -n x849
+query id HIP114914
+echodata -n x850
+query id HD 219834B
+echodata -n x851
+query id HD 222335
+echodata -n x852
+query id HD 449
+echodata -n x853
+query id HIP1780
+echodata -n x854
+query id HD 2085
+echodata -n x855
+query id HD 3404
+echodata -n x856
+query id HIP6778
+echodata -n x857
+query id HIP7728
+echodata -n x858
+query id HIP7924
+echodata -n x859
+query id HD 10195
+echodata -n x860
+query id HD 11791
+echodata -n x861
+query id HD 11997
+echodata -n x862
+query id HD 12165
+echodata -n x863
+query id HD 12484
+echodata -n x864
+query id HD 13584
+echodata -n x865
+query id HD 13999
+echodata -n x866
+query id HD 17354
+echodata -n x867
+query id HD 17449
+echodata -n x868
+query id HIP13447
+echodata -n x869
+query id HIP14113
+echodata -n x870
+query id HD 19638
+echodata -n x871
+query id HIP14809
+echodata -n x872
+query id HIP14810
+echodata -n x873
+query id HD 19961
+echodata -n x874
+query id HD 21494
+echodata -n x875
+query id HD 23416
+echodata -n x876
+query id HD 25894
+echodata -n x877
+query id HD 26756
+echodata -n x878
+query id HD 26736
+echodata -n x879
+query id HIP19946
+echodata -n x880
+query id HD 27149
+echodata -n x881
+query id HD 27250
+echodata -n x882
+query id HD 27732
+echodata -n x883
+query id HIP20705
+echodata -n x884
+query id HD 28099
+echodata -n x885
+query id HD 28192
+echodata -n x886
+query id HD 28137
+echodata -n x887
+query id HD 28291
+echodata -n x888
+query id HD 283704
+echodata -n x889
+query id HD 28462
+echodata -n x890
+query id HIP21091
+echodata -n x891
+query id HD 28593
+echodata -n x892
+query id HD 28992
+echodata -n x893
+query id HD 29621
+echodata -n x894
+query id HD 30286
+echodata -n x895
+query id HD 30246
+echodata -n x896
+query id HD 30572
+echodata -n x897
+query id HD 30712
+echodata -n x898
+query id HD 32259
+echodata -n x899
+query id HIP24141
+echodata -n x900
+query id HD 34957
+echodata -n x901
+query id HD 278253
+echodata -n x902
+query id HD 36387
+echodata -n x903
+query id HIP26080
+echodata -n x904
+query id HD 37977
+echodata -n x905
+query id HD 233165
+echodata -n x906
+query id HIP27793
+echodata -n x907
+query id HD 40330
+echodata -n x908
+query id HD 43296
+echodata -n x909
+query id HD 256714
+echodata -n x910
+query id HD 45652
+echodata -n x911
+query id HD 46013
+echodata -n x912
+query id HD 45161
+echodata -n x913
+query id HIP31546
+echodata -n x914
+query id HD 47309
+echodata -n x915
+query id HIP32132
+echodata -n x916
+query id HIP32892
+echodata -n x917
+query id HD 51813
+echodata -n x918
+query id HD 51067A
+echodata -n x919
+query id HD 51067B
+echodata -n x920
+query id HIP35093
+echodata -n x921
+query id HD 60521
+echodata -n x922
+query id HD 62857
+echodata -n x923
+query id HD 62694
+echodata -n x924
+query id HD 56322
+echodata -n x925
+query id HD 65368
+echodata -n x926
+query id HIP39939
+echodata -n x927
+query id HD 69027
+echodata -n x928
+query id HD 71067
+echodata -n x929
+query id HIP42731
+echodata -n x930
+query id HIP43151
+echodata -n x931
+query id HD 76539
+echodata -n x932
+query id HD 76974
+echodata -n x933
+query id HD 78538
+echodata -n x934
+query id HD 78536
+echodata -n x935
+query id HD 79282
+echodata -n x936
+query id HD 80846
+echodata -n x937
+query id HD 81324
+echodata -n x938
+query id HD 82460
+echodata -n x939
+query id HD 83004
+echodata -n x940
+query id HD 82905
+echodata -n x941
+query id HIP47455
+echodata -n x942
+query id HD 83983
+echodata -n x943
+query id HD 87001
+echodata -n x944
+query id HD 88402
+echodata -n x945
+query id HD 88638
+echodata -n x946
+query id HD 88775
+echodata -n x947
+query id HD 89022
+echodata -n x948
+query id HD 89793
+echodata -n x949
+query id HD 90383
+echodata -n x950
+query id HD 90681
+echodata -n x951
+query id HD 91148
+echodata -n x952
+query id HD 91332
+echodata -n x953
+query id HD 91348
+echodata -n x954
+query id HD 91331
+echodata -n x955
+query id HD 91275
+echodata -n x956
+query id HD 91702
+echodata -n x957
+query id HD 91856
+echodata -n x958
+query id HD 91909
+echodata -n x959
+query id HD 92194
+echodata -n x960
+query id HD 92885
+echodata -n x961
+query id HD 93215
+echodata -n x962
+query id HD 93811
+echodata -n x963
+query id HD 94292
+echodata -n x964
+query id HD 94383
+echodata -n x965
+query id HD 94587
+echodata -n x966
+query id HD 95022
+echodata -n x967
+query id HD 97089
+echodata -n x968
+query id HD 97645
+echodata -n x969
+query id HIP55368
+echodata -n x970
+query id HD 100069
+echodata -n x971
+query id HD 238008
+echodata -n x972
+query id HD 101165
+echodata -n x973
+query id HD 101444
+echodata -n x974
+query id HD 102283
+echodata -n x975
+query id HD 103847
+echodata -n x976
+query id HD 105844
+echodata -n x977
+query id HIP59431
+echodata -n x978
+query id HD 105963
+echodata -n x979
+query id HD 107181
+echodata -n x980
+query id HD 108300
+echodata -n x981
+query id HD 108916
+echodata -n x982
+query id HD 109202
+echodata -n x983
+query id HD 109286
+echodata -n x984
+query id HD 110745
+echodata -n x985
+query id HD 111153
+echodata -n x986
+query id HD 111528
+echodata -n x987
+query id HD 111606
+echodata -n x988
+query id HD 113039
+echodata -n x989
+query id HD 113938
+echodata -n x990
+query id HD 114506
+echodata -n x991
+query id HD 114826
+echodata -n x992
+query id HD 116321
+echodata -n x993
+query id HD 117378
+echodata -n x994
+query id HD 117576
+echodata -n x995
+query id HD 118034
+echodata -n x996
+query id HD 118006
+echodata -n x997
+query id HD 117987
+echodata -n x998
+query id HD 119824
+echodata -n x999
+query id HD 120666
+echodata -n x1000
+query id HD 121151
+echodata -n x1001
+query id HD 122255
+echodata -n x1002
+query id HIP68461
+echodata -n x1003
+query id HD 126831
+echodata -n x1004
+query id HD 131580
+echodata -n x1005
+query id HD 132130
+echodata -n x1006
+query id HD 132133
+echodata -n x1007
+query id HIP73302
+echodata -n x1008
+query id HD 135143
+echodata -n x1009
+query id HD 135724
+echodata -n x1010
+query id HD 136618
+echodata -n x1011
+query id HD 137631
+echodata -n x1012
+query id HD 138600
+echodata -n x1013
+query id HD 140296
+echodata -n x1014
+query id HD 142943
+echodata -n x1015
+query id HD 143332
+echodata -n x1016
+query id HD 145224
+echodata -n x1017
+query id HD 146434
+echodata -n x1018
+query id HD 148238
+echodata -n x1019
+query id HD 150122
+echodata -n x1020
+query id HD 151329
+echodata -n x1021
+query id HD 156549
+echodata -n x1022
+query id HIP90075
+echodata -n x1023
+query id HD 171999
+echodata -n x1024
+query id HD 176414
+echodata -n x1025
+query id HD 179596
+echodata -n x1026
+query id HD 183162
+echodata -n x1027
+query id HD 187944
+echodata -n x1028
+query id HIP100040
+echodata -n x1029
+query id HD 198483
+echodata -n x1030
+query id HD 199100
+echodata -n x1031
+query id HD 200156
+echodata -n x1032
+query id HD 201378
+echodata -n x1033
+query id HIP105904
+echodata -n x1034
+query id HD 207994
+echodata -n x1035
+query id HIP108056
+echodata -n x1036
+query id HIP108388
+echodata -n x1037
+query id HD 212315
+echodata -n x1038
+query id HD 216772
+echodata -n x1039
+query id HD 216783
+echodata -n x1040
+query id HIP115525
+echodata -n x1041
+query id HIP117386
+echodata -n x1042
+query id HD 166
+echodata -n x1043
+query id HD 4256
+echodata -n x1044
+query id HD 4628
+echodata -n x1045
+query id HD 4614
+echodata -n x1046
+query id HD 9826
+echodata -n x1047
+query id HD 16160
+echodata -n x1048
+query id HD 31560
+echodata -n x1049
+query id HD 32147
+echodata -n x1050
+query id HD 37394
+echodata -n x1051
+query id HD 47752
+echodata -n x1052
+query id HD 48682
+echodata -n x1053
+query id HD 50281
+echodata -n x1054
+query id HD 65277
+echodata -n x1055
+query id HD 84737
+echodata -n x1056
+query id HD 86728
+echodata -n x1057
+query id HD 101501
+echodata -n x1058
+query id HD 103095
+echodata -n x1059
+query id HD 115617
+echodata -n x1060
+query id HD 117176
+echodata -n x1061
+query id HD 131156
+echodata -n x1062
+query id HD 130992
+echodata -n x1063
+query id HD 131977
+echodata -n x1064
+query id HD 141004
+echodata -n x1065
+query id HD 166620
+echodata -n x1066
+query id HD 168723
+echodata -n x1067
+query id HD 202917
+echodata -n x1068
+query id HD 217014
+echodata -n x1069
+query id HD 222368
+echodata -n x1070
+query id GANYMEDE

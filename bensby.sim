@@ -1,0 +1,147 @@
+result oid
+echodata -n x0
+query id HIP      0
+echodata -n x1
+query id HIP   3142
+echodata -n x2
+query id HIP   3170
+echodata -n x3
+query id HIP   5862
+echodata -n x4
+query id HIP   7276
+echodata -n x5
+query id HIP   9085
+echodata -n x6
+query id HIP  10798
+echodata -n x7
+query id HIP  12186
+echodata -n x8
+query id HIP  12611
+echodata -n x9
+query id HIP  12653
+echodata -n x10
+query id HIP  14954
+echodata -n x11
+query id HIP  15131
+echodata -n x12
+query id HIP  17378
+echodata -n x13
+query id HIP  22263
+echodata -n x14
+query id HIP  22325
+echodata -n x15
+query id HIP  23555
+echodata -n x16
+query id HIP  23941
+echodata -n x17
+query id HIP  24829
+echodata -n x18
+query id HIP  29271
+echodata -n x19
+query id HIP  30480
+echodata -n x20
+query id HIP  30503
+echodata -n x21
+query id HIP  72673
+echodata -n x22
+query id HIP  78955
+echodata -n x23
+query id HIP  80337
+echodata -n x24
+query id HIP  80686
+echodata -n x25
+query id HIP  81520
+echodata -n x26
+query id HIP  83601
+echodata -n x27
+query id HIP  84551
+echodata -n x28
+query id HIP  84636
+echodata -n x29
+query id HIP  85007
+echodata -n x30
+query id HIP  85042
+echodata -n x31
+query id HIP  86731
+echodata -n x32
+query id HIP  86796
+echodata -n x33
+query id HIP  87523
+echodata -n x34
+query id HIP  90485
+echodata -n x35
+query id HIP  91438
+echodata -n x36
+query id HIP  94645
+echodata -n x37
+query id HIP  95447
+echodata -n x38
+query id HIP  96536
+echodata -n x39
+query id HIP  98785
+echodata -n x40
+query id HIP  99240
+echodata -n x41
+query id HIP 100412
+echodata -n x42
+query id HIP 102264
+echodata -n x43
+query id HIP 103682
+echodata -n x44
+query id HIP 105858
+echodata -n x45
+query id HIP 109378
+echodata -n x46
+query id HIP 110341
+echodata -n x47
+query id HIP 113137
+echodata -n x48
+query id HIP 113357
+echodata -n x49
+query id HIP 113421
+echodata -n x50
+query id HIP 117880
+echodata -n x51
+query id HIP   3086
+echodata -n x52
+query id HIP   3185
+echodata -n x53
+query id HIP   3497
+echodata -n x54
+query id HIP   3704
+echodata -n x55
+query id HIP   5315
+echodata -n x56
+query id HIP  14086
+echodata -n x57
+query id HIP  15510
+echodata -n x58
+query id HIP  17147
+echodata -n x59
+query id HIP  75181
+echodata -n x60
+query id HIP  79137
+echodata -n x61
+query id HIP  82588
+echodata -n x62
+query id HIP  83229
+echodata -n x63
+query id HIP  84905
+echodata -n x64
+query id HIP  88622
+echodata -n x65
+query id HIP  96124
+echodata -n x66
+query id HIP  98767
+echodata -n x67
+query id HIP 103458
+echodata -n x68
+query id HIP 108736
+echodata -n x69
+query id HIP 109450
+echodata -n x70
+query id HIP 109821
+echodata -n x71
+query id HIP 110512
+echodata -n x72
+query id HIP 118115
