@@ -202,8 +202,6 @@ def comp(save=False):
         symerr = (yerr[:,0]+yerr[:,1])/2.
 
         ax[i].plot(line,line)
-        linfit = np.polyfit(xtot,ytot,1)
-        ax[i].plot(line,np.polyval(linfit,line))
         ax[i].set_xlim((-0.6,+0.6))
         ax[i].set_ylim((-0.6,+0.6))
 
