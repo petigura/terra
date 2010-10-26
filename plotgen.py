@@ -165,10 +165,13 @@ def comp(save=False):
 
             #FROM WHERE
             cmd = cmd + \
-                ' FROM mystars,'+table+\
+                ' FROM mystars,'+table
+            cmd = cmd + \
                 ' WHERE mystars.oid = '+table+'.oid AND '+\
                 table+'.'+elstr+'_abund IS NOT NULL AND '+\
                 globcut(elstr)+' AND '+uplimcut(elstr)
+            if table is 'luckstars':
+                cmd = cmd+' AND '+table+'.c_staterr < 0.3'
 
             cur.execute(cmd)
             arr = np.array(cur.fetchall())
@@ -187,21 +190,24 @@ def comp(save=False):
             print str(len(x)) + 'comparisons'
             
             ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),color=color[j],
-                           marker='o',ls='None')
-            xtot.append(x.tolist())
-            ytot.append(y.tolist())            
+                           marker='o',ls='None',capsize=0,markersize=5)
+            xtot.append((x.tolist())[0])
+            ytot.append((y.tolist())[0])            
 
-        xlim = ax[i].get_xlim()
-        line = np.linspace(xlim[0],xlim[1],10)
-        ax[i].plot(line,line)
+        line = np.linspace(-3,3,10)
 
+        
         ytot=np.array(ytot)
         xtot=np.array(xtot)
         symerr = (yerr[:,0]+yerr[:,1])/2.
 
-        print np.std(ytot - xtot)
-        print xtot,ytot
-        print np.sqrt((((ytot-xtot)/symerr)**2).sum()/len(xtot[0]-1))
+        ax[i].plot(line,line)
+        linfit = np.polyfit(xtot,ytot,1)
+        ax[i].plot(line,np.polyval(linfit,line))
+        ax[i].set_xlim((-0.6,+0.6))
+        ax[i].set_ylim((-0.6,+0.6))
+
+        print np.sqrt((((ytot-xtot)/symerr)**2).sum()/len(xtot-1))
 
     plt.draw()
 
@@ -242,11 +248,8 @@ def cofe(save=False):
 
 def compmany(elstr='o'):
     if elstr == 'o':
-#        tables = ['ben04','luckstars','mystars','ramstars','red03','red06']
         tables = ['mystars','luckstars','ramstars']
-#        tables = ['mystars','ben04','red03','red06']
     if elstr =='c':
-#        tables = ['mystars','ben06','red03','red06']
         tables = ['mystars','luckstars','red06']
 
     conn = sqlite3.connect('stars.sqlite')
