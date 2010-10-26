@@ -8,6 +8,25 @@ from scipy.optimize import leastsq
 import starsdb
 import sqlite3
 
+
+def globcut(elstr):
+    if elstr == 'o':
+        vsinicut = '8'
+    if elstr == 'c':
+        vsinicut = '15'
+
+    cut = ' mystars.vsini < '+vsinicut+\
+        ' AND mystars.'+elstr+'_abund > 0  '
+    return cut
+
+def uplimcut(elstr):
+    cut = ' mystars.'+elstr+'_staterrlo > -0.3 AND ' +\
+    ' mystars.'+elstr+'_staterrhi < 0.3'
+    return cut
+
+
+
+
 def tfit(stars,save=False):
 
     """
@@ -98,20 +117,24 @@ def abundhist(stars,save=False):
 
 
 def comp(save=False):
-    files = ['smefiles/myresults.sim','smefiles/luckresults.sim']
-    lines = [6300,6587]
-    stars = readstars.ReadStars('keck-fit-lite.sav')
-    mynames = stars.name
-    lucknames,luckc,lucko = starsdb.readluck('smefiles/Luck06py.txt')
+###
+###  Bensby corrects his 6300 abundances for a non-LTE effect which shifts the
+###  correlation away from mine by about 0.1 dex
+###
 
-    f = plt.figure( figsize=(6,8) )
+    tables = [['ben05'],['luckstars']]
+    offset = [[0],[8.5]]
+    literr = [[0.06],[0.1]]
+
+    lines = [6300,6587]
+    color = ['blue','red','green']
+    
+    conn = sqlite3.connect('stars.sqlite')
+    cur = conn.cursor()    
 
     ax1 = plt.subplot(211)
-
-
-
     ax2 = plt.subplot(212)
-    ax1.set_xlabel('[O/H], Luck 2006')
+    ax1.set_xlabel('[O/H], Bensby 2005')
     ax2.set_xlabel('[C/H], Luck 2006')
 
     ax1.set_ylabel('[O/H], This Work')
@@ -119,66 +142,68 @@ def comp(save=False):
     ax = [ax1,ax2]
 
 
+    for i in [0,1]:        
+        xtot =[] #total array of comparison studies
+        ytot =[] #total array of comparison studies
 
-    for j in range(len(lines)):
-        fitpass = postfit.fitbool(stars,lines[j])
-        vpass = postfit.vbool(stars,lines[j])
-        ul = postfit.ulbool(stars,lines[j])
-        passidx = (np.where(~ul &fitpass & vpass))[0]
-        myidx,mycomnames,luckidx,luckcomnames = matchstars.matchstars(files[0],mynames,files[1],lucknames)
+        p = getelnum.Getelnum(lines[i])
+        elstr = p.elstr.lower()
+        abnd_sol = p.abnd_sol
 
-        passcomidx = np.array(list(set(passidx) & set(myidx))) 
-        idxidx = [] #indecies of which indecies are common to both
-        for i in range(len(passcomidx)):
-            idxidx.append( (np.where(mycomnames == mynames[passcomidx[i]]))[0][0])
+        print abnd_sol
+        for j in range(len(tables[i])):
+            table = tables[i][j]            
+
+            #SELECT
+            cmd = 'SELECT DISTINCT '+\
+                ' mystars.'+elstr+'_abund,'+\
+                ' mystars.'+elstr+'_staterrlo,'+\
+                ' mystars.'+elstr+'_staterrhi,'+\
+                table+'.'+elstr+'_abund'
+            if table is 'luckstars':
+                cmd = cmd + ','+table+'.c_staterr '
+
+            #FROM WHERE
+            cmd = cmd + \
+                ' FROM mystars,'+table+\
+                ' WHERE mystars.oid = '+table+'.oid AND '+\
+                table+'.'+elstr+'_abund IS NOT NULL AND '+\
+                globcut(elstr)+' AND '+uplimcut(elstr)
+
+            cur.execute(cmd)
+            arr = np.array(cur.fetchall())
+            x = arr[:,3] - offset[i][j]
+            y = arr[:,0] -abnd_sol
+
+            ###pull literature errors###
+            if table is 'ben05':
+                xerr = np.zeros( (2,len(x)) ) + 0.06
+            if table is 'luckstars':
+                xerr = arr[:,4].tolist()
+                xerr = np.array([xerr,xerr])            
+
+            yerr = np.abs(arr[:,1:3])
+            print cmd
+            print str(len(x)) + 'comparisons'
             
-        print mynames[myidx[idxidx]], lucknames[luckidx[idxidx]] 
-        g = getelnum.Getelnum(lines[j])
-        ncomp = len(idxidx)
-        print str(ncomp)+' comparision stars '+str(lines[j])
+            ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),color=color[j],
+                           marker='o',ls='None')
+            xtot.append(x.tolist())
+            ytot.append(y.tolist())            
 
-        deg=3
-        if j==0:
-            a,fitpar,a,a = postfit.tfit(stars,lines[j])
-            fitpar[deg] = fitpar[deg] - np.polyval(fitpar,g.teff_sol)
+        xlim = ax[i].get_xlim()
+        line = np.linspace(xlim[0],xlim[1],10)
+        ax[i].plot(line,line)
 
-            y = stars.o_abund[myidx[idxidx]] - g.abnd_sol \
-                - np.polyval(fitpar,stars.teff[myidx[idxidx]])
-            x = lucko[luckidx[idxidx]] - g.abnd_sol_luck
-            xerr = np.zeros(ncomp)+g.err_luck
-            yerr = (stars.o_staterr[[myidx[idxidx]],1]).flatten()
+        ytot=np.array(ytot)
+        xtot=np.array(xtot)
+        symerr = (yerr[:,0]+yerr[:,1])/2.
 
-            
+        print np.std(ytot - xtot)
+        print xtot,ytot
+        print np.sqrt((((ytot-xtot)/symerr)**2).sum()/len(xtot[0]-1))
 
-        if j==1:
-            a,fitpar,a,a = postfit.tfit(stars,lines[j])
-            fitpar[deg] = fitpar[deg] - np.polyval(fitpar,g.teff_sol)
-
-            y = stars.c_abund[myidx[idxidx]] - g.abnd_sol \
-                - np.polyval(fitpar,stars.teff[myidx[idxidx]])
-
-
-            x = luckc[luckidx[idxidx]] - g.abnd_sol_luck
-            xerr = np.zeros(ncomp)+g.err_luck
-            yerr = (stars.c_staterr[[myidx[idxidx]],1]).flatten()
-
-        ax[j].errorbar(x,y,xerr=xerr,yerr=yerr,marker='o',ls='None',ms=4)
-        
-        fitrng = [-0.8,0.8]
-        xfit = np.linspace(-2,2,100)
-        yfit = np.polyval(np.polyfit(x,y,1),xfit)
-        ax[j].plot(xfit,xfit)
-        ax[j].set_ylim(fitrng[0],fitrng[1])
-        ax[j].set_xlim(fitrng[0],fitrng[1])
-
-#        ax[j].plot(xfit,yfit)
-
-
-        print str(np.std(x-y)) + ' is stdev of differnce'
-        
-        if save:
-            plt.savefig('Thesis/pyplots/comp.ps')
-
+    plt.draw()
 
 
 def co(save=False):
@@ -218,10 +243,11 @@ def cofe(save=False):
 def compmany(elstr='o'):
     if elstr == 'o':
 #        tables = ['ben04','luckstars','mystars','ramstars','red03','red06']
-#        tables = ['ben04','luckstars','mystars','ramstars','red03','red06']
-        tables = ['mystars','ben04','red03','red06']
+        tables = ['mystars','luckstars','ramstars']
+#        tables = ['mystars','ben04','red03','red06']
     if elstr =='c':
-        tables = ['mystars','ben04','red03','red06']
+#        tables = ['mystars','ben06','red03','red06']
+        tables = ['mystars','luckstars','red06']
 
     conn = sqlite3.connect('stars.sqlite')
     cur = conn.cursor()
@@ -237,8 +263,7 @@ def compmany(elstr='o'):
                 cut  = ' WHERE '+tabx+'.oid = '+taby+'.oid '+'AND '+\
                     colx+' IS NOT NULL AND '+coly+' IS NOT NULL '
                 if tabx == 'mystars' or taby == 'mystars':
-                    cut = cut+' AND mystars.vsini < 8 AND mystars.'+elstr+ \
-                        '_staterrlo > -0.3 AND mystars.'+elstr+'_abund > 0'
+                    cut = cut+' AND '+uplimcut(elstr) + ' AND '+globcut(elstr) 
             
                 ax = plt.subplot(ncomp,ncomp,i*ncomp+j+1)
                 cmd = 'SELECT DISTINCT '+colx+','+coly+' FROM '+tabx+','+taby+cut

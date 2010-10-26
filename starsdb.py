@@ -4,6 +4,7 @@ import re
 from elixir import *
 import matplotlib
 import fxwid
+import pdb
 
 def res2id(file):
     """
@@ -24,24 +25,19 @@ def res2id(file):
     oidarr = np.array(oidarr)
     return idxarr,oidarr
 
-def readluck(file):
-    """
-    Reads in file from Luck06
-    """
-    f = open(file,'r')
-    txt = f.readlines()
-    txt = txt[31:] #data starts at line 32
-    nstars = len(txt)
-    star = np.zeros(nstars,dtype='|S10')
-    luckc = np.zeros(nstars,dtype=np.float)
-    lucko = np.zeros(nstars,dtype=np.float)
+def readluck05(file):
+    names,el,abund,err = \
+        fxwid.rdfixwid(file,[[0,6],[37,42],[43,48],[49,53]],
+                       ['|S10','|S10',np.float,np.float])
+    idx = (np.where(el == 'C I  '))[0]
 
-    for i in np.arange(nstars):
-        line = txt[i]
-        star[i],luckc[i],lucko[i] = line[0:11],line[55:60],line[85:89]
+    stop
+    c_abund = abund[idx]
+    c_staterr = err[idx]
+    names = names[idx]
 
+    return names,c_abund,c_staterr
 
-    return star,luckc,lucko
 
 def readramirez(file):
     """
@@ -63,27 +59,6 @@ def readramirez(file):
 
     return star,teff,o,o_err
 
-
-def readbensby(file):
-    """
-    Reads in file from bensby04.dat
-    """
-    f = open(file,'r')
-    txt = f.readlines()
-    nstars = len(txt)
-
-    star = np.zeros(nstars,dtype='|S10') #hiparcos name 
-    o_abund = np.zeros(nstars,dtype=np.float) #oxygen abudnance n-LTE corrected
-
-    for i in np.arange(nstars):
-        line = txt[i]        
-        o = line[8:13]
-        if o.strip() is '':
-            o = None
-
-        star[i],o_abund[i]= line[0:6],o
-
-    return star,o_abund
 
 def readbensby06(file):
     """
@@ -136,7 +111,7 @@ class Luckstars(Entity):
 
     o_abund = Field(Float(precision=5))
     c_abund = Field(Float(precision=5))
-
+    c_staterr = Field(Float(precision=5))
 
 class Ramstars(Entity):    
     using_table_options(useexisting=True)
@@ -198,6 +173,16 @@ class Red06(Entity):
     o_abund = Field(Float(precision=5))
 
 
+class Ben05(Entity):    
+    using_table_options(useexisting=True)
+    using_options(allowcoloverride=True,tablename='ben05')
+
+    name = Field(Text)
+    oid  = Field(Text)
+    c_abund = Field(Float(precision=5))
+    o_abund = Field(Float(precision=5))
+
+
 
 def mkdb():
     metadata.bind = "sqlite:///stars.sqlite"
@@ -234,7 +219,12 @@ def mkdb():
 
 
     #### Add in Luck Data ####
-    luckname,luckc,lucko = readluck('Comparison/Luck06/Luck06py.txt')
+    luckname,luckc505,luckc538,luckc659,luckc514,lucko = \
+        fxwid.rdfixwid('Comparison/Luck06/Luck06py.txt',
+                       [[0,10],[31,36],[43,48],[54,59],[65,69],[80,84]],
+                       ['|S10',np.float,np.float,np.float,np.float,np.float],
+                       empstr='')
+
     idxarr,oidarr = res2id('Comparison/Luck06/luckresults.sim')
 
     for i in range(len(luckname)):        
@@ -242,11 +232,15 @@ def mkdb():
             oid = str(oidarr[np.where(idxarr == i)[0][0]])
         else:
             oid = None
-
+            
+        carr = np.array([luckc505[i],luckc538[i],luckc659[i],luckc514[i]])
+        cavg = np.mean(carr)
+        cstd = np.std(carr)
         Luckstars(name=luckname[i],
                   oid = oid,
                   o_abund = round(lucko[i],3),
-                  c_abund = round(luckc[i],3)
+                  c_abund = round(cavg,3),
+                  c_staterr = round(cstd,3)
                   )
 
     #### Add in Exo Data ####
@@ -287,7 +281,11 @@ def mkdb():
 
     #### Add in Bensby Data ####
     idxarr,oidarr = res2id('Comparison/Bensby04/bensby04results.sim')
-    names,o_abund = readbensby('Comparison/Bensby04/bensby04.dat')
+    #This abundance has been "n-LTE corrected" meaning shifted 0.1 dex away from
+    #mine!
+    names,o_abund = fxwid.rdfixwid('Comparison/Bensby04/bensby04.dat',
+                                   [[0,6],[8,13]],['|S10',np.float],empstr='')
+
 
     for i in range(len(names)):        
         if (idxarr == i).any():
@@ -358,6 +356,24 @@ def mkdb():
               oid = oid,
               c_abund = round(c_abund[i]+feh[i],3),
               o_abund = round(o_abund[i]+feh[i],3),
+              )
+
+
+    idxarr,oidarr = res2id('Comparison/Bensby05/bensby05results.sim')    
+    names,o_abund = fxwid.rdfixwid('Comparison/Bensby05/table9.dat',
+                               [[0,6],[293,299]],
+                               ['|S10',np.float],empstr='')
+    
+
+    for i in range(len(names)):        
+        if (idxarr == i).any():
+            oid = str(oidarr[np.where(idxarr == i)[0][0]])
+        else:
+            oid = None
+
+        Ben05(name=names[i],
+              oid = oid,
+              o_abund = round(o_abund[i],3),
               )
         
     session.commit()

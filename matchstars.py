@@ -9,10 +9,9 @@ import fxwid
 
 def simquery(code):
     dir = 'Comparison/'
-    
-    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim']
+    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
 
-    datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat']
+    datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat','Bensby05/table9.dat','Luck05/table7.dat']
 
 
     for i in range(len(files)):
@@ -49,6 +48,14 @@ def simquery(code):
     if code == 7:
         names = (fxwid.rdfixwid(datfiles[code],[[17,23]],['|S10']))[0]
         simline = names2sim(names,cat='HIP')
+
+    if code == 8:
+        names = (fxwid.rdfixwid(datfiles[code],[[0,6]],['|S10']))[0]
+        simline = names2sim(names,cat='HIP')
+
+    if code == 9:
+        names,x,x = starsdb.readluck05(datfiles[code])
+        simline = names2sim(names,cat='HD')
 
 
     f = open(files[code],'w')
