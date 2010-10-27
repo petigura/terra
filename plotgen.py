@@ -7,6 +7,7 @@ import matchstars
 from scipy.optimize import leastsq
 import starsdb
 import sqlite3
+import scipy.stats as stats
 
 
 def globcut(elstr):
@@ -219,13 +220,12 @@ def exo(save=False):
     cur = conn.cursor()
 
     elements = ['O','C','Fe']
+    nel = len(elements)
     sol_abnd = [8.7,8.5,0]
 
-    nel = len(elements)
+    ax = []  #empty list to store axes
 
-    ax = [] 
-
-    for i in range(nel):
+    for i in range(nel): #loop over the different elements
         ax.append(plt.subplot(nel,1,i+1))
         elstr = elements[i]
         ax[i].set_xlabel('['+elstr+'/H]')
@@ -233,7 +233,6 @@ def exo(save=False):
         if elstr is 'Fe':
             cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
                 ' LEFT JOIN exo ON exo.oid = mystars.oid WHERE '           
-
         else:
             cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
                 ' LEFT JOIN exo ON exo.oid = mystars.oid '+\
@@ -243,33 +242,33 @@ def exo(save=False):
         cmd = cmd0 +' exo.name IS NOT NULL'
         cur.execute(cmd)
         #pull arrays and subtract solar offset
-        arr = np.array( cur.fetchall() ) - sol_abnd[i]
-
-        nstars = len(arr)
-        h1 = ax[i].hist(arr,normed=1,color='Red',bins=18,
-                   alpha=0.7,ec='black')
-        xlim = ax[i].get_xlim()
-
-
+        arrhost = (np.array( cur.fetchall() )).flatten() - sol_abnd[i]    
+        nhost = len(arrhost)
         print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
-            % (nstars,np.mean(arr),np.std(arr))
+            % (nhost,np.mean(arrhost),np.std(arrhost))
 
         #Grab Comparison Sample
         cmd = cmd0 +' exo.name IS NULL'
         cur.execute(cmd)
-
         #pull arrays and subtract solar offset
-        arr = np.array( cur.fetchall() ) - sol_abnd[i] 
-        nstars = len(arr)
-        h2 = ax[i].hist(arr,normed=1,color='Black',bins=18,
-                   alpha = 0.7)
-        
-        
+        arrcomp = (np.array( cur.fetchall() )).flatten() - sol_abnd[i] 
+        ncomp = len(arrcomp)
         print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
-            % (nstars,np.mean(arr),np.std(arr))
+            % (ncomp,np.mean(arrcomp),np.std(arrcomp))
 
+
+        # Make histogram
+        ax[i].hist([arrcomp,arrhost], 20, normed=1, histtype='bar',
+                   label=['Comparison','Planet Hosts'])
+        ax[i].legend(loc='upper left')
+
+        ######## Compute KS - statistic or probablity #########
+        D,p = stats.ks_2samp(arrhost,arrcomp)
+        print 'KS Test: D = %f  p = %f ' % (D,p)
+        
     plt.draw()
-
+    if save:
+        plt.savefig('Thesis/pyplots/exo.ps')
 
 
 def co(save=False):
