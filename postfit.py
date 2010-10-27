@@ -2,32 +2,6 @@ import getelnum
 import numpy as np
 import matplotlib.pyplot as plt
 
-def vbool(stars,line):
-    """
-    Return the TRUTH ARRAY of the stars that pass our global cut on vsini
-    """
-    p = getelnum.Getelnum(line)
-    return (stars.vsini > p.vsinirng[0]) & (stars.vsini < p.vsinirng[1])
-
-def fitbool(stars,line):
-    """
-    Returns the TRUTH ARRAY of the stars that had at least one sucessfull fit
-    """
-    p = getelnum.Getelnum(line)
-
-    exec('abund  = stars.'+p.abundfield)    
-    return (abund > 0)
-
-def ulbool(stars,line):
-    """
-    return the truth array of the stars that should be upper limits
-    """
-
-    line = getelnum.Getelnum(line)
-    exec('staterr = stars.'+line.staterrfield)
-    return staterr[:,1] - staterr[:,0] >0.3
-
-
 def tfit(stars,line):
     """
     Correct for temperature systematics.  Fit a polynomial to (teff,abund)
@@ -111,4 +85,32 @@ def plottfit(stars):
         plt.scatter(t,fitabund)
         plt.scatter(o.teff_sol,np.polyval(fitpar,o.teff_sol),color='red')
 
+
+######################################################
+#Boolean functions.  Makes cuts on stars structure.###
+######################################################
+def vbool(stars,line):
+    """
+    Return the TRUTH ARRAY of the stars that pass our global cut on vsini
+    """
+    p = getelnum.Getelnum(line)
+    return (stars.vsini > p.vsinirng[0]) & (stars.vsini < p.vsinirng[1])
+
+def fitbool(stars,line):
+    """
+    Returns the TRUTH ARRAY of the stars that had at least one sucessfull fit
+    """
+    p = getelnum.Getelnum(line)
+
+    exec('abund  = stars.'+p.abundfield)    
+    return (abund > 0)
+
+def ulbool(stars,line):
+    """
+    return the truth array of the stars that should be upper limits
+    """
+
+    line = getelnum.Getelnum(line)
+    exec('staterr = stars.'+line.staterrfield)
+    return staterr[:,1] - staterr[:,0] >0.3
 

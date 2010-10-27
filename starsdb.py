@@ -91,6 +91,7 @@ class Mystars(Entity):
 
     o_abund = Field(Float(precision=5))
     c_abund = Field(Float(precision=5))
+    fe_abund = Field(Float(precision=5))
 
     o_staterrlo = Field(Float(precision=5))
     o_staterrhi = Field(Float(precision=5))
@@ -203,10 +204,14 @@ def mkdb():
 
         Mystars(name=stars.name[i],
                 oid = oid,
+
                 vsini = round(stars.vsini[i],3),
                 teff  = round(stars.teff[i],0),
+
                 o_abund = round(stars.o_abund[i],3),
                 c_abund = round(stars.c_abund[i],3),
+                fe_abund = round(stars.feh[i],3),
+
                 o_staterrlo = round(stars.o_staterr[i,0],3),
                 o_staterrhi = round(stars.o_staterr[i,1],3),
                 

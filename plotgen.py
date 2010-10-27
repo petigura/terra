@@ -10,11 +10,12 @@ import sqlite3
 
 
 def globcut(elstr):
-    if elstr == 'o':
+    if elstr == 'O':
         vsinicut = '8'
-    if elstr == 'c':
+    elif elstr == 'C':
         vsinicut = '15'
-
+    else: 
+        return ''
     cut = ' mystars.vsini < '+vsinicut+\
         ' AND mystars.'+elstr+'_abund > 0  '
     return cut
@@ -23,8 +24,6 @@ def uplimcut(elstr):
     cut = ' mystars.'+elstr+'_staterrlo > -0.3 AND ' +\
     ' mystars.'+elstr+'_staterrhi < 0.3'
     return cut
-
-
 
 
 def tfit(stars,save=False):
@@ -132,6 +131,7 @@ def comp(save=False):
     conn = sqlite3.connect('stars.sqlite')
     cur = conn.cursor()    
 
+    f = plt.figure( figsize=(6,8) )
     ax1 = plt.subplot(211)
     ax2 = plt.subplot(212)
     ax1.set_xlabel('[O/H], Bensby 2005')
@@ -191,23 +191,85 @@ def comp(save=False):
             
             ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),color=color[j],
                            marker='o',ls='None',capsize=0,markersize=5)
-            xtot.append((x.tolist())[0])
-            ytot.append((y.tolist())[0])            
+            xtot.append( x.tolist() )
+            ytot.append( y.tolist() )            
 
         line = np.linspace(-3,3,10)
 
-        
+        xtot=np.array(xtot)        
         ytot=np.array(ytot)
-        xtot=np.array(xtot)
         symerr = (yerr[:,0]+yerr[:,1])/2.
 
         ax[i].plot(line,line)
         ax[i].set_xlim((-0.6,+0.6))
         ax[i].set_ylim((-0.6,+0.6))
 
-        print np.sqrt((((ytot-xtot)/symerr)**2).sum()/len(xtot-1))
+        print np.std(xtot[0]-ytot[0])
+    plt.draw()
+    if save:
+        plt.savefig('Thesis/pyplots/comp.ps')
+
+
+def exo(save=False):
+    """
+    Show a histogram of Carbon and Oxygen for planet harboring stars, and
+    comparison stars.
+    """
+    conn = sqlite3.connect('stars.sqlite')
+    cur = conn.cursor()
+
+    elements = ['O','C','Fe']
+    sol_abnd = [8.7,8.5,0]
+
+    nel = len(elements)
+
+    ax = [] 
+
+    for i in range(nel):
+        ax.append(plt.subplot(nel,1,i+1))
+        elstr = elements[i]
+        ax[i].set_xlabel('['+elstr+'/H]')
+        
+        if elstr is 'Fe':
+            cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
+                ' LEFT JOIN exo ON exo.oid = mystars.oid WHERE '           
+
+        else:
+            cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
+                ' LEFT JOIN exo ON exo.oid = mystars.oid '+\
+                ' WHERE '+globcut(elstr)+' AND '+uplimcut(elstr)+' AND '        
+
+        #Grab Planet Sample
+        cmd = cmd0 +' exo.name IS NOT NULL'
+        cur.execute(cmd)
+        #pull arrays and subtract solar offset
+        arr = np.array( cur.fetchall() ) - sol_abnd[i]
+
+        nstars = len(arr)
+        h1 = ax[i].hist(arr,normed=1,color='Red',bins=18,
+                   alpha=0.7,ec='black')
+        xlim = ax[i].get_xlim()
+
+
+        print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
+            % (nstars,np.mean(arr),np.std(arr))
+
+        #Grab Comparison Sample
+        cmd = cmd0 +' exo.name IS NULL'
+        cur.execute(cmd)
+
+        #pull arrays and subtract solar offset
+        arr = np.array( cur.fetchall() ) - sol_abnd[i] 
+        nstars = len(arr)
+        h2 = ax[i].hist(arr,normed=1,color='Black',bins=18,
+                   alpha = 0.7)
+        
+        
+        print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
+            % (nstars,np.mean(arr),np.std(arr))
 
     plt.draw()
+
 
 
 def co(save=False):
