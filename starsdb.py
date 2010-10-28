@@ -5,6 +5,7 @@ from elixir import *
 import matplotlib
 import fxwid
 import pdb
+import os
 
 def res2id(file):
     """
@@ -191,8 +192,15 @@ class Ben05(Entity):
 
 
 def mkdb():
-    metadata.bind = "sqlite:///stars.sqlite"
 #    metadata.bind.echo = True
+    metadata.bind = "sqlite:///stars.sqlite"
+
+
+    # if the file already exists destroy it
+    if os.path.exists('stars.sqlite'):
+        os.system('rm stars.sqlite')
+
+
 
 
     #### Add in mydata ####

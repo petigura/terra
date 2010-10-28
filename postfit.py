@@ -41,8 +41,8 @@ def tfit(line):
     conn = sqlite3.connect('stars.sqlite')
     cur = conn.cursor()
 
-    #pull in the abundances
-    cmd = 'SELECT '+elstr+'_abund,teff FROM mystars WHERE '+globcut(elstr)+ \
+    #pull in the abundances and the non-corrected abundances
+    cmd = 'SELECT '+elstr+'_abund_nt,teff FROM mystars WHERE '+globcut(elstr)+ \
         ' AND '+uplimcut(elstr)
     cur.execute(cmd)
     arr = np.array(cur.fetchall() ) 
@@ -56,6 +56,44 @@ def tfit(line):
     fitabund = abund - np.polyval(fitpar,t)
     return (fitabund,fitpar,t,abund)
 
+def applytfit():
+    lines = [6300,6587]
+    conn = sqlite3.connect('stars.sqlite')
+    cur = conn.cursor()
+
+
+    for line in lines:
+        #pull the data
+        
+
+        p = getelnum.Getelnum(line)
+        elstr = p.elstr
+
+        cut = ' WHERE '+elstr+'_abund > 0 ' #do not apply correction to the -99s
+        cmd = ' SELECT id FROM mystars '+cut
+        
+        cur.execute(cmd)
+        ids = (np.array( cur.fetchall() )).flatten()
+
+        cmd = ' SELECT teff,'+elstr+'_abund FROM  mystars '+cut
+        cur.execute(cmd)
+        arr = np.array( cur.fetchall() )
+        t,abund0 = arr[:,0],arr[:,1]
+
+        x,fitpar,x,x = tfit(line)
+
+        abund = abund0 - np.polyval(fitpar,t)
+        
+        for i in range(len(ids)):
+            cmd = 'UPDATE mystars SET %s_abund = %f WHERE mystars.id = %s' %\
+                (elstr,abund[i],ids[i])
+            if i in [0,1,2,3]:
+                print cmd+' '+str(abund0[i])
+
+            cur.execute(cmd)
+
+    conn.commit() #commit the changes
+    cur.close() #commit the changes
 
 def plotuplim(stars):
     """

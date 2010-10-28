@@ -11,7 +11,7 @@ import sqlite3
 import scipy.stats as stats
 
 
-def tfit(stars,save=False):
+def tfit(save=False):
 
     """
     A quick look at the fits to the temperature
@@ -39,7 +39,7 @@ def tfit(stars,save=False):
 
     for i in range(2):
         o = getelnum.Getelnum(line[i])           
-        fitabund, fitpar, t,abund = postfit.tfit(stars,line[i])    
+        fitabund, fitpar, t,abund = postfit.tfit(line[i])    
         tarr = np.linspace(t.min(),t.max(),100)
         
         ax[i].scatter(t,abund,color='black',s=10)
@@ -51,7 +51,7 @@ def tfit(stars,save=False):
         plt.savefig('Thesis/pyplots/teff.ps')
 
 
-def abundhist(stars,save=False):
+def abundhist(save=False):
 
     """
     A quick look at the fits to the temperature
