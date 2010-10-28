@@ -3,28 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import readstars
 import postfit
+
 import matchstars
 from scipy.optimize import leastsq
 import starsdb
 import sqlite3
 import scipy.stats as stats
-
-
-def globcut(elstr):
-    if elstr == 'O':
-        vsinicut = '8'
-    elif elstr == 'C':
-        vsinicut = '15'
-    else: 
-        return ''
-    cut = ' mystars.vsini < '+vsinicut+\
-        ' AND mystars.'+elstr+'_abund > 0  '
-    return cut
-
-def uplimcut(elstr):
-    cut = ' mystars.'+elstr+'_staterrlo > -0.3 AND ' +\
-    ' mystars.'+elstr+'_staterrhi < 0.3'
-    return cut
 
 
 def tfit(stars,save=False):
@@ -170,7 +154,7 @@ def comp(save=False):
             cmd = cmd + \
                 ' WHERE mystars.oid = '+table+'.oid AND '+\
                 table+'.'+elstr+'_abund IS NOT NULL AND '+\
-                globcut(elstr)+' AND '+uplimcut(elstr)
+                postfit.globcut(elstr)+' AND '+postfit.uplimcut(elstr)
             if table is 'luckstars':
                 cmd = cmd+' AND '+table+'.c_staterr < 0.3'
 
@@ -211,13 +195,15 @@ def comp(save=False):
         plt.savefig('Thesis/pyplots/comp.ps')
 
 
-def exo(save=False):
+def exo(save=False,textab=False):
     """
     Show a histogram of Carbon and Oxygen for planet harboring stars, and
     comparison stars.
     """
     conn = sqlite3.connect('stars.sqlite')
     cur = conn.cursor()
+    f = plt.figure( figsize=(6,8) )
+    f.subplots_adjust(top=0.95,bottom=0.05)
 
     elements = ['O','C','Fe']
     nel = len(elements)
@@ -231,31 +217,27 @@ def exo(save=False):
         ax[i].set_xlabel('['+elstr+'/H]')
         
         if elstr is 'Fe':
-            cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
-                ' LEFT JOIN exo ON exo.oid = mystars.oid WHERE '           
+            cmd0 = 'SELECT distinct(mystars.oid),mystars.'+elstr+'_abund '+\
+                ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid WHERE '
         else:
-            cmd0 = 'SELECT DISTINCT (mystars.'+elstr+'_abund) FROM mystars'+\
-                ' LEFT JOIN exo ON exo.oid = mystars.oid '+\
-                ' WHERE '+globcut(elstr)+' AND '+uplimcut(elstr)+' AND '        
+            cmd0 = 'SELECT distinct(mystars.oid),mystars.'+elstr+'_abund '+\
+                ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
+                ' WHERE '+postfit.globcut(elstr)+' AND '+\
+                postfit.uplimcut(elstr)+' AND '        
 
         #Grab Planet Sample
         cmd = cmd0 +' exo.name IS NOT NULL'
         cur.execute(cmd)
         #pull arrays and subtract solar offset
-        arrhost = (np.array( cur.fetchall() )).flatten() - sol_abnd[i]    
+        arrhost = np.array( cur.fetchall() ,dtype=float)[:,1] - sol_abnd[i]    
         nhost = len(arrhost)
-        print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
-            % (nhost,np.mean(arrhost),np.std(arrhost))
 
         #Grab Comparison Sample
         cmd = cmd0 +' exo.name IS NULL'
         cur.execute(cmd)
         #pull arrays and subtract solar offset
-        arrcomp = (np.array( cur.fetchall() )).flatten() - sol_abnd[i] 
+        arrcomp = np.array( cur.fetchall() ,dtype=float)[:,1] - sol_abnd[i] 
         ncomp = len(arrcomp)
-        print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
-            % (ncomp,np.mean(arrcomp),np.std(arrcomp))
-
 
         # Make histogram
         ax[i].hist([arrcomp,arrhost], 20, normed=1, histtype='bar',
@@ -264,7 +246,21 @@ def exo(save=False):
 
         ######## Compute KS - statistic or probablity #########
         D,p = stats.ks_2samp(arrhost,arrcomp)
-        print 'KS Test: D = %f  p = %f ' % (D,p)
+
+        
+        if textab:
+            # element number mean std ncomp compmean compstd KS p
+            print r'%s & %i & %.2f & %.2f & %i & %.2f & %.2f & %.2f & %f \\'\
+                % (elstr,nhost,np.mean(arrhost),np.std(arrhost),
+                   ncomp,np.mean(arrcomp),np.std(arrcomp),D,p)
+
+        else:
+            print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
+                % (nhost,np.mean(arrhost),np.std(arrhost))
+            print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
+                % (ncomp,np.mean(arrcomp),np.std(arrcomp))
+            print 'KS Test: D = %f  p = %f ' % (D,p)
+
         
     plt.draw()
     if save:
@@ -325,7 +321,7 @@ def compmany(elstr='o'):
                 cut  = ' WHERE '+tabx+'.oid = '+taby+'.oid '+'AND '+\
                     colx+' IS NOT NULL AND '+coly+' IS NOT NULL '
                 if tabx == 'mystars' or taby == 'mystars':
-                    cut = cut+' AND '+uplimcut(elstr) + ' AND '+globcut(elstr) 
+                    cut = cut+' AND '+postfit.uplimcut(elstr) + ' AND '+postfit.globcut(elstr) 
             
                 ax = plt.subplot(ncomp,ncomp,i*ncomp+j+1)
                 cmd = 'SELECT DISTINCT '+colx+','+coly+' FROM '+tabx+','+taby+cut

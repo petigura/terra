@@ -1,35 +1,59 @@
 import getelnum
 import numpy as np
 import matplotlib.pyplot as plt
+import sqlite3
 
-def tfit(stars,line):
+def globcut(elstr):
+    if elstr == 'O':
+        vsinicut = '8'
+    elif elstr == 'C':
+        vsinicut = '15'
+    else: 
+        return ''
+    cut = ' mystars.vsini < '+vsinicut+\
+        ' AND mystars.'+elstr+'_abund > 0  '
+    return cut
+
+def uplimcut(elstr):
+    cut = ' mystars.'+elstr+'_staterrlo > -0.3 AND ' +\
+    ' mystars.'+elstr+'_staterrhi < 0.3'
+    return cut
+
+
+def tfit(line):
     """
     Correct for temperature systematics.  Fit a polynomial to (teff,abund)
     and require that the corrected solar value be 0.  We cut on vsini, 
-    
+
+    returns:
+    (fitabund,fitpar,t,abund)
+    fitabund - the temperature corrected abundance
+    fitpar   - the parameters to the polynomial fit
+    t        - the temperature array
+    abund    - the non-temp-corrected abundances
+
     """
     deg  = 3 # fit with a 3rd degree polynomial
     #define abundance for the particular line we're looking at
     p = getelnum.Getelnum(line)
-    exec('abund  = stars.'+p.abundfield)    
+    elstr = p.elstr
+
+    conn = sqlite3.connect('stars.sqlite')
+    cur = conn.cursor()
+
+    #pull in the abundances
+    cmd = 'SELECT '+elstr+'_abund,teff FROM mystars WHERE '+globcut(elstr)+ \
+        ' AND '+uplimcut(elstr)
+    cur.execute(cmd)
+    arr = np.array(cur.fetchall() ) 
+    abund,t = arr[:,0],arr[:,1]
     abund = abund - p.abnd_sol
 
-    #cut off bad fits doesn't make sense to fit on upper limits
-    fitpass = fitbool(stars,line)
-    vpass = vbool(stars,line)
-    ul = ulbool(stars,line)
-    
-    idx = np.where(~ul &fitpass & vpass)
-
-    t = stars.teff[idx]
-    tarr = np.linspace(t.min(),t.max(),100)
-    abund = abund[idx]
-
+    #fit the points
     fitpar = np.polyfit(t,abund,deg)
     #subtract out the fit, while requiring that the solar value be 0.
     fitpar[deg] = fitpar[deg] - np.polyval(fitpar,p.teff_sol)
     fitabund = abund - np.polyval(fitpar,t)
-
     return (fitabund,fitpar,t,abund)
 
 

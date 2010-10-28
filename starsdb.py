@@ -91,6 +91,11 @@ class Mystars(Entity):
 
     o_abund = Field(Float(precision=5))
     c_abund = Field(Float(precision=5))
+
+    #abundances not corrected for temperature
+    o_abund_nt = Field(Float(precision=5)) 
+    c_abund_nt = Field(Float(precision=5))
+
     fe_abund = Field(Float(precision=5))
 
     o_staterrlo = Field(Float(precision=5))
@@ -208,8 +213,13 @@ def mkdb():
                 vsini = round(stars.vsini[i],3),
                 teff  = round(stars.teff[i],0),
 
+                o_abund_nt = round(stars.o_abund[i],3),
+                c_abund_nt = round(stars.c_abund[i],3),
+
+                #place holders for the temperature corrected abundances
                 o_abund = round(stars.o_abund[i],3),
                 c_abund = round(stars.c_abund[i],3),
+
                 fe_abund = round(stars.feh[i],3),
 
                 o_staterrlo = round(stars.o_staterr[i,0],3),
@@ -381,5 +391,7 @@ def mkdb():
               o_abund = round(o_abund[i],3),
               )
         
+
+
     session.commit()
     session.close()
