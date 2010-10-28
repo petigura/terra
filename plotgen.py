@@ -11,16 +11,15 @@ import sqlite3
 import scipy.stats as stats
 
 
-def tfit(save=False):
+def tfit(save=False,fitres=False):
 
     """
     A quick look at the fits to the temperature
     """
 
-
     line = [6300,6587]
     subplot = ((1,2))
-    plt.clf()
+
     f = plt.figure( figsize=(6,6) )
     f.set_facecolor('white')  #we wamt the canvas to be white
 
@@ -29,20 +28,22 @@ def tfit(save=False):
     ax1.set_xticklabels('',visible=False)
     ax1.set_yticks(np.arange(-0.8,0.4,0.2))
 
-    
     ax2 = plt.subplot(212,sharex=ax1)
     ax1.set_ylabel('[O/H]')
     ax2.set_ylabel('[C/H]')
     ax2.set_xlabel('$\mathbf{ T_{eff} }$')
-
     ax = (ax1,ax2)
 
     for i in range(2):
         o = getelnum.Getelnum(line[i])           
         fitabund, fitpar, t,abund = postfit.tfit(line[i])    
-        tarr = np.linspace(t.min(),t.max(),100)
-        
+        if fitres:
+            abund = fitabund
+
+        tarr = np.linspace(t.min(),t.max(),100)        
         ax[i].scatter(t,abund,color='black',s=10)
+        
+
         ax[i].scatter(o.teff_sol,0.,color='red',s=30)
         ax[i].plot(tarr,np.polyval(fitpar,tarr),lw=2,color='red')        
 
