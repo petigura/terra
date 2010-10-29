@@ -17,6 +17,21 @@ class Plotgen():
     ###Pull up database.
     conn = sqlite3.connect('stars.sqlite')
     cur = conn.cursor()    
+    feherr = 0.03
+    tefferr= 44
+
+    elements = ['O','C']
+
+    for elstr in elements:
+        cmd = 'SELECT %s_abund,%s_staterrlo,%s_staterrhi FROM mystars '\
+            % (elstr,elstr,elstr)
+        wcmd = ' WHERE '+postfit.globcut(elstr)+' AND '+postfit.uplimcut(elstr)
+        cur.execute(cmd+wcmd)
+
+        temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
+        arr = np.array(cur.fetchall(),dtype=temptype)
+        arr = [np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])]
+        exec(elstr+'stats = arr')    
     
     def tfit(self,save=False,fitres=False):
         """
@@ -24,7 +39,6 @@ class Plotgen():
             """
         line = [6300,6587]
         subplot = ((1,2))
-
         f = plt.figure( figsize=(6,6) )
         f.set_facecolor('white')  #we wamt the canvas to be white
 
@@ -41,23 +55,31 @@ class Plotgen():
 
         for i in range(2):
             o = getelnum.Getelnum(line[i])           
+            elstr = o.elstr.upper()
+
             fitabund, fitpar, t,abund = postfit.tfit(line[i])    
             if fitres:
                 abund = fitabund
 
             tarr = np.linspace(t.min(),t.max(),100)        
             ax[i].scatter(t,abund,color='black',s=10)
-
-
             ax[i].scatter(o.teff_sol,0.,color='red',s=30)
             ax[i].plot(tarr,np.polyval(fitpar,tarr),lw=2,color='red')        
 
-        plt.xlim(4500,6500)    
+            exec('yerr = self.'+elstr+'stats')
+            yerr = [[yerr[0]],[yerr[1]]]
+            inv = ax[i].transData.inverted()
+            errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
+            print errpt
+            ax[i].errorbar(errpt[0],errpt[1],xerr=self.tefferr,
+                           yerr=yerr,capsize=0)
+
+
         if save:
             plt.savefig('Thesis/pyplots/teff.ps')
 
 
-    def feh(self,save=False):
+    def feh(self,save=False,noratio=False):
         """
         Show the trends of X/Fe as a function of Fe/H.
         """
@@ -68,11 +90,11 @@ class Plotgen():
 
         binmin = -0.5
         binwid = 0.1
-        nbins = 10
+        nbins = 11
+        qtype= [('abund',float),('feh',float),('staterrlo',float),
+                ('staterrhi',float),('pop_flag','|S10')]    
         
         bins = np.linspace(binmin,binmin+binwid*nbins,nbins)
-
-        antxt = ['[O/H]','[C/H]']
 
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
@@ -82,6 +104,7 @@ class Plotgen():
         ax1 = plt.subplot(211)
         ax1.set_xticklabels('',visible=False)
         ax2 = plt.subplot(212,sharex=ax1)
+
 
 
         ax2.set_xlabel('[Fe/H]')
@@ -97,10 +120,7 @@ class Plotgen():
                 postfit.uplimcut(elstr)+' AND pop_flag = "dn"'
 
             self.cur.execute(cmd+wcmd)
-            arrthin = np.array(self.cur.fetchall(),
-                           dtype=[('abund',float),('feh',float),
-                                  ('staterrlo',float),
-                                  ('staterrhi',float),('pop_flag','|S10')])
+            arrthin = np.array(self.cur.fetchall(),dtype=qtype)
             
             arrthin['abund'] -= p.abnd_sol
 
@@ -109,10 +129,18 @@ class Plotgen():
             self.cur.execute(cmd+wcmd)
 
             arrthick = np.array(self.cur.fetchall(),
-                           dtype=[('abund',float),('feh',float),
-                                  ('staterrlo',float),
-                                  ('staterrhi',float),('pop_flag','|S10')])
+                           dtype=qtype)
             arrthick['abund'] -= p.abnd_sol
+
+                                
+            if noratio:
+                ythin = arrthin['abund']
+                ythick = arrthick['abund']
+                ax[i].set_ylabel('[%s/H]' % (elstr) )
+            else:
+                ythin = arrthin['abund'] -arrthin['feh']
+                ythick = arrthick['abund'] -arrthick['feh']
+                ax[i].set_ylabel('[%s/Fe]' % (elstr) )
 
             ### Compute Avg Thin disk in bins ###
             binind = np.digitize(arrthin['feh'],bins)
@@ -120,23 +148,32 @@ class Plotgen():
             for j in np.arange(nbins-1)+1:
                 ind = (np.where(binind == j))[0]
                 binx.append(binmin+binwid*(j-0.5))
-                biny.append(np.mean(arrthin['abund'][ind]-arrthin['feh'][ind]))
+                biny.append(np.mean(ythin[ind]))
                 
             binx,biny = np.array(binx),np.array(biny)            
-                                
-            ax[i].plot(arrthin['feh'],arrthin['abund']-arrthin['feh'],'bo')
-            ax[i].plot(arrthick['feh'],arrthick['abund']-arrthick['feh'],'go')
+
+
+            ax[i].plot(arrthin['feh'],ythin,'bo')
+            ax[i].plot(arrthick['feh'],ythick,'go')
             ax[i].plot(binx,biny,'rx-',lw=2,ms=5,mew=2)
 
-            leg = ax[i].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='lower left')
+            #plot typical errorbars
+
+            leg = ax[i].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
             for t in leg.get_texts():
                 t.set_fontsize('small')
 
-            ax[i].set_ylabel('[%s/Fe]' % (elstr) )
 
+            exec('yerr = self.'+elstr+'stats')
+            yerr = [[yerr[0]],[yerr[1]]]
+            inv = ax[i].transData.inverted()
+            errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
+            ax[i].errorbar(errpt[0],errpt[1],xerr=self.feherr,
+                           yerr=yerr,capsize=0)
 
         yticks = ax2.get_yticks()[:-1]
         ax2.set_yticks(yticks)
+
 
         if save:
             plt.savefig('Thesis/pyplots/feh.ps')
