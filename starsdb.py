@@ -86,6 +86,7 @@ class Mystars(Entity):
     using_options(allowcoloverride=True,tablename='mystars')
     name = Field(Text)
     oid  = Field(Text)
+    pop_flag = Field(Text)
 
     vsini = Field(Float(precision=5))
     teff = Field(Float(precision=5))
@@ -214,12 +215,12 @@ def mkdb():
         else:
             oid = None
 
-
         Mystars(name=stars.name[i],
                 oid = oid,
 
                 vsini = round(stars.vsini[i],3),
                 teff  = round(stars.teff[i],0),
+                pop_flag = stars.pop_flag[i],
 
                 o_abund_nt = round(stars.o_abund[i],3),
                 c_abund_nt = round(stars.c_abund[i],3),
