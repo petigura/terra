@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import readstars
 import postfit
-
 import matchstars
 from scipy.optimize import leastsq
 import starsdb
@@ -31,6 +30,7 @@ class Plotgen():
         temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
         arr = np.array(cur.fetchall(),dtype=temptype)
         arr = [np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])]
+        #stats is lo, hi
         exec(elstr+'stats = arr')    
     
     def tfit(self,save=False,fitres=False):
@@ -224,7 +224,6 @@ class Plotgen():
     ###  Bensby corrects his 6300 abundances for a non-LTE effect which shifts the
     ###  correlation away from mine by about 0.1 dex
     ###
-
         tables = [['ben05'],['luckstars']]
         offset = [[0],[8.5]]
         literr = [[0.06],[0.1]]
@@ -382,40 +381,53 @@ class Plotgen():
             plt.savefig('Thesis/pyplots/exo.ps')
 
 
-    def co(self,save=False):
-        stars = readstars.ReadStars('Stars/keck-fit-lite.sav')
-
-        vpasso = postfit.vbool(stars,6300)
-        fitpasso = postfit.fitbool(stars,6300)
-        fitpassc = postfit.fitbool(stars,6587)
-        ulc = postfit.ulbool(stars,6587)
-        ulo = postfit.ulbool(stars,6300)    
-        ratioidx = np.where(vpasso & fitpasso & fitpassc & ~ulo & ~ulc)[0]
-        ax = plt.subplot(111)
-        ax.scatter(stars.o_abund[ratioidx]-8.7,stars.c_abund[ratioidx]-8.5)
-        ax.set_ylabel('[C/H]')
-        ax.set_xlabel('[O/H]')
-
-        x = np.linspace(-0.8,0.6,10)
-        plt.plot(x,x+0.2)
-        if save:
-            plt.savefig('Thesis/pyplots/co.ps')
-
     def cofe(self,save=False):
-        stars = readstars.ReadStars('Stars/keck-fit-lite.sav')
+        cmd0 = 'SELECT distinct(mystars.oid),'+\
+            ' mystars.o_abund,mystars.c_abund,mystars.fe_abund '+\
+            ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
+            ' WHERE '+postfit.globcut('C')+' AND '+postfit.globcut('O')+\
+            ' AND '+postfit.uplimcut('C')+' AND '+postfit.uplimcut('O')
 
-        vpasso = postfit.vbool(stars,6300)
-        fitpasso = postfit.fitbool(stars,6300)
-        fitpassc = postfit.fitbool(stars,6587)
-        ulc = postfit.ulbool(stars,6587)
-        ulo = postfit.ulbool(stars,6300)    
-        ratioidx = np.where(vpasso & fitpasso & fitpassc & ~ulo & ~ulc)[0]
+        qtype= [('oid','|S10'),('o_abund',float),('c_abund',float),('feh',float)]
+
+        #Grab Planet Sample
+        cmd = cmd0 +' AND exo.name IS NOT NULL'
+        self.cur.execute(cmd)
+        #pull arrays and subtract solar offset
+        arrhost = np.array( self.cur.fetchall() ,dtype=qtype)
+        nhost = len(arrhost)
+
+        #Grab Comparison Sample
+        cmd = cmd0 +' AND exo.name IS NULL'
+        self.cur.execute(cmd)
+        #pull arrays and subtract solar offset
+        arrcomp = np.array( self.cur.fetchall() ,dtype=qtype)
+        ncomp = len(arrcomp)
+
+        #calculate C/O  logeps(c) - logeps(o)
+        c2ohost = 10**(arrhost['c_abund']-arrhost['o_abund'])
+        c2ocomp = 10**(arrcomp['c_abund']-arrcomp['o_abund'])
+
         ax = plt.subplot(111)
-        ax.scatter(stars.feh[ratioidx],10**(stars.c_abund[ratioidx]-stars.o_abund[ratioidx]))
-        ax.set_ylabel('C/O')
+        ax.plot(arrcomp['feh'],c2ocomp,'bo')
+        ax.plot(arrhost['feh'],c2ohost,'go')
+        ax.legend(('Comparision','Hosts'))
         ax.set_xlabel('[Fe/H]')
+        ax.set_ylabel('C/O')
 
+        yerr = [[np.sqrt( np.log(10)*( self.Cstats[0]**2+self.Ostats[0]**2 ))],
+                [np.sqrt( np.log(10)*( self.Cstats[1]**2+self.Ostats[1]**2 ))]]
+        inv = ax.transData.inverted()
+        errpt = inv.transform( ax.transAxes.transform( (0.8,0.8) ) )
+        ax.errorbar(errpt[0],errpt[1],xerr=self.feherr,
+                       yerr=yerr,capsize=0)
 
+        ax.set_ybound(0,ax.get_ylim()[1])
+        plt.show()
+        return ax
+        if save:
+            plt.savefig('Thesis/pyplots/cofe.ps')
+        
     def compmany(self,elstr='o'):
         if elstr == 'o':
             tables = ['mystars','luckstars','ramstars']
