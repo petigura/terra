@@ -10,6 +10,7 @@ import sqlite3
 import scipy
 import scipy.stats as stats
 import pdb
+import flt2tex
 
 class Plotgen():
 
@@ -200,24 +201,30 @@ class Plotgen():
         ax2 = plt.subplot(212,sharex=ax1)
         ax2.set_yticks(np.arange(0,200,50))
         ax2.set_xlabel('[Fe/H]')
-
         ax = (ax1,ax2)
+
+        outex = []
         for i in range(2):
             p = getelnum.Getelnum(line[i])           
-
+            fitabund,x,x,x = postfit.tfit(line[i])
             ax[i].set_ylabel('Number of Stars')
             ax[i].hist(fitabund,range=(-1,1),bins=20,fc='gray')
             ax[i].set_ylim(0,200)
             ax[i].annotate(antxt[i],(-0.8,150))
-
+            N,m,s,min,max = fitabund.size,fitabund.mean(), \
+                fitabund.std(),fitabund.min(),fitabund.max()
+            if save:
             #output moments for tex write up
-            print 'N, mean, std, min, max' + antxt[i]
-            print '(%i,%f,%f,%f,%f)' % (fitabund.size,fitabund.mean(), \
-                fitabund.luckstd(),fitabund.min(),fitabund.max())
-
-
+                outex.append(r'\text {%s} & %i & %.2f & %.2f & %.2f & %.2f\\' % 
+                             (antxt[i],N,m,s,min,max))
+            else:
+                print 'N, mean, std, min, max' + antxt[i]
+                print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
+                
         if save:
             plt.savefig('Thesis/pyplots/abundhist.ps')
+            f = open('Thesis/tables/abundhist.tex','w')
+            f.writelines(outex)
 
     def comp(self,save=False):
     ###
@@ -311,7 +318,7 @@ class Plotgen():
             plt.savefig('Thesis/pyplots/comp.ps')
 
 
-    def exo(self,save=False,textab=False):
+    def exo(self,save=False):
         """
         Show a histogram of Carbon and Oxygen for planet harboring stars, and
         comparison stars.
@@ -324,7 +331,7 @@ class Plotgen():
         sol_abnd = [8.7,8.5,0]
 
         ax = []  #empty list to store axes
-
+        outex = []
         for i in range(nel): #loop over the different elements
             ax.append(plt.subplot(nel,1,i+1))
             elstr = elements[i]
@@ -359,26 +366,27 @@ class Plotgen():
             ax[i].legend(loc='upper left')
 
             ######## Compute KS - statistic or probablity #########
+            mhost,shost,mcomp,scomp = np.mean(arrhost),np.std(arrhost),\
+                np.mean(arrcomp),np.std(arrcomp)
+
             D,p = stats.ks_2samp(arrhost,arrcomp)
 
-
-            if textab:
+            if save:
                 # element number mean std ncomp compmean compstd KS p
-                print r'%s & %i & %.2f & %.2f & %i & %.2f & %.2f & %.2f & %f \\'\
-                    % (elstr,nhost,np.mean(arrhost),np.std(arrhost),
-                       ncomp,np.mean(arrcomp),np.std(arrcomp),D,p)
+                outex.append(r'%s & %i & %.2f & %.2f & & %i & %.2f & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,D,flt2tex.flt2tex(p,sigfig=1) ) )
 
             else:
                 print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
-                    % (nhost,np.mean(arrhost),np.std(arrhost))
+                    % (nhost,mhost,shost)
                 print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
-                    % (ncomp,np.mean(arrcomp),np.std(arrcomp))
+                    % (ncomp,mhost,shost)
                 print 'KS Test: D = %f  p = %f ' % (D,p)
-
 
         plt.draw()
         if save:
             plt.savefig('Thesis/pyplots/exo.ps')
+            f = open('Thesis/tables/exo.tex','w')
+            f.writelines(outex)
 
 
     def cofe(self,save=False):
@@ -408,6 +416,7 @@ class Plotgen():
         c2ohost = 10**(arrhost['c_abund']-arrhost['o_abund'])
         c2ocomp = 10**(arrcomp['c_abund']-arrcomp['o_abund'])
 
+        f = plt.figure( figsize=(6,4) )
         ax = plt.subplot(111)
         ax.plot(arrcomp['feh'],c2ocomp,'bo')
         ax.plot(arrhost['feh'],c2ohost,'go')
@@ -423,10 +432,11 @@ class Plotgen():
                        yerr=yerr,capsize=0)
 
         ax.set_ybound(0,ax.get_ylim()[1])
+        ax.axhline(1.)
         plt.show()
-        return ax
         if save:
             plt.savefig('Thesis/pyplots/cofe.ps')
+        return ax
         
     def compmany(self,elstr='o'):
         if elstr == 'o':
