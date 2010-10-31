@@ -25,7 +25,7 @@ class Plotgen():
     for elstr in elements:
         cmd = 'SELECT %s_abund,%s_staterrlo,%s_staterrhi FROM mystars '\
             % (elstr,elstr,elstr)
-        wcmd = ' WHERE '+postfit.globcut(elstr)+' AND '+postfit.uplimcut(elstr)
+        wcmd = ' WHERE '+postfit.globcut(elstr)
         cur.execute(cmd+wcmd)
 
         temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
@@ -117,16 +117,14 @@ class Plotgen():
             elstr = p.elstr
 
             cmd = 'SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag FROM mystars ' % (elstr,elstr,elstr)
-            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND '+\
-                postfit.uplimcut(elstr)+' AND pop_flag = "dn"'
+            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND pop_flag = "dn"'
 
             self.cur.execute(cmd+wcmd)
             arrthin = np.array(self.cur.fetchall(),dtype=qtype)
             
             arrthin['abund'] -= p.abnd_sol
 
-            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND '+\
-                postfit.uplimcut(elstr)+' AND pop_flag = "dk"'
+            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND pop_flag = "dk"'
             self.cur.execute(cmd+wcmd)
 
             arrthick = np.array(self.cur.fetchall(),
@@ -277,7 +275,7 @@ class Plotgen():
                 cmd = cmd + \
                     ' WHERE mystars.oid = '+table+'.oid AND '+\
                     table+'.'+elstr+'_abund IS NOT NULL AND '+\
-                    postfit.globcut(elstr)+' AND '+postfit.uplimcut(elstr)
+                    postfit.globcut(elstr)
                 if table is 'luckstars':
                     cmd = cmd+' AND '+table+'.c_staterr < 0.3'
 
@@ -343,8 +341,7 @@ class Plotgen():
             else:
                 cmd0 = 'SELECT distinct(mystars.oid),mystars.'+elstr+'_abund '+\
                     ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
-                    ' WHERE '+postfit.globcut(elstr)+' AND '+\
-                    postfit.uplimcut(elstr)+' AND '        
+                    ' WHERE '+postfit.globcut(elstr)+' AND '
 
             #Grab Planet Sample
             cmd = cmd0 +' exo.name IS NOT NULL'
@@ -393,8 +390,7 @@ class Plotgen():
         cmd0 = 'SELECT distinct(mystars.oid),'+\
             ' mystars.o_abund,mystars.c_abund,mystars.fe_abund '+\
             ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
-            ' WHERE '+postfit.globcut('C')+' AND '+postfit.globcut('O')+\
-            ' AND '+postfit.uplimcut('C')+' AND '+postfit.uplimcut('O')
+            ' WHERE '+postfit.globcut('C')+' AND '+postfit.globcut('O')
 
         qtype= [('oid','|S10'),('o_abund',float),('c_abund',float),('feh',float)]
 
@@ -456,7 +452,7 @@ class Plotgen():
                     cut  = ' WHERE '+tabx+'.oid = '+taby+'.oid '+'AND '+\
                         colx+' IS NOT NULL AND '+coly+' IS NOT NULL '
                     if tabx == 'mystars' or taby == 'mystars':
-                        cut = cut+' AND '+postfit.uplimcut(elstr) + ' AND '+postfit.globcut(elstr) 
+                        cut = cut+' AND '+postfit.globcut(elstr) 
 
                     ax = plt.subplot(ncomp,ncomp,i*ncomp+j+1)
                     cmd = 'SELECT DISTINCT '+colx+','+coly+' FROM '+tabx+','+taby+cut

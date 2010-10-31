@@ -5,20 +5,20 @@ import sqlite3
 
 def globcut(elstr):
     if elstr == 'O':
-        vsinicut = '8'
+        vsinicut = 8
     elif elstr == 'C':
-        vsinicut = '15'
+        vsinicut = 15
     else: 
         return ''
-    cut = ' mystars.vsini < '+vsinicut+\
-        ' AND mystars.'+elstr+'_abund > 0  '
-    return cut
+    
+    locut = -0.3
+    hicut = 0.3
+    cut = """
+mystars.vsini < %d AND mystars.%s_abund > 0  AND 
+mystars.%s_staterrlo > %.2f AND mystars.%s_staterrhi < %.2f """\
+        % (vsinicut,elstr,elstr,locut,elstr,hicut)
 
-def uplimcut(elstr):
-    cut = ' mystars.'+elstr+'_staterrlo > -0.3 AND ' +\
-    ' mystars.'+elstr+'_staterrhi < 0.3'
     return cut
-
 
 def tfit(line):
     """
@@ -42,8 +42,7 @@ def tfit(line):
     cur = conn.cursor()
 
     #pull in the abundances and the non-corrected abundances
-    cmd = 'SELECT '+elstr+'_abund_nt,teff FROM mystars WHERE '+globcut(elstr)+ \
-        ' AND '+uplimcut(elstr)
+    cmd = 'SELECT '+elstr+'_abund_nt,teff FROM mystars WHERE '+globcut(elstr)
     cur.execute(cmd)
     arr = np.array(cur.fetchall() ) 
     abund,t = arr[:,0],arr[:,1]
