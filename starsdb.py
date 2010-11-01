@@ -87,6 +87,10 @@ class Mystars(Entity):
     name = Field(Text)
     oid  = Field(Text)
     pop_flag = Field(Text)
+    d = Field(Integer)
+    vmag = Field(Float(precision=5))
+    logg = Field(Float(precision=5))
+    monh = Field(Float(precision=5))
 
     vsini = Field(Float(precision=5))
     teff = Field(Float(precision=5))
@@ -99,6 +103,8 @@ class Mystars(Entity):
     c_abund_nt = Field(Float(precision=5))
 
     fe_abund = Field(Float(precision=5))
+    ni_abund = Field(Float(precision=5))
+
 
     o_staterrlo = Field(Float(precision=5))
     o_staterrhi = Field(Float(precision=5))
@@ -215,12 +221,19 @@ def mkdb():
         else:
             oid = None
 
+        #ni abund normalized to the sun
+        ni_abund = stars.smeabund[i][27]-stars.smeabund[i][0]+12-6.17
+
         Mystars(name=stars.name[i],
                 oid = oid,
 
                 vsini = round(stars.vsini[i],3),
                 teff  = round(stars.teff[i],0),
                 pop_flag = stars.pop_flag[i],
+                vmag = round(stars.vmag[i],3),
+                d = 1/stars.prlx[i],
+                logg = round(stars.logg[i],3),
+                monh = round(stars.monh[i],3),
 
                 o_abund_nt = round(stars.o_abund[i],3),
                 c_abund_nt = round(stars.c_abund[i],3),
@@ -230,6 +243,7 @@ def mkdb():
                 c_abund = round(stars.c_abund[i],3),
 
                 fe_abund = round(stars.feh[i],3),
+                ni_abund = round(ni_abund,3),
 
                 o_staterrlo = round(stars.o_staterr[i,0],3),
                 o_staterrhi = round(stars.o_staterr[i,1],3),
