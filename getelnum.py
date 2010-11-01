@@ -1,7 +1,7 @@
 class Getelnum:
     def __init__(self,line):
         self.teff_sol = 5700
-        if line == 6300:
+        if line == 6300 or line == 'O':
             self.elnum=8.
             self.line = 6300
             self.wran = [6295,6305]
@@ -15,15 +15,15 @@ class Getelnum:
             self.chirng = [6300.000,6300.600]
             self.elstr = 'O'
             self.abnd_sol = 8.7 #solar abnd of oself.ygen
-            self.vsinirng = [-10,7]
+            self.vsinicut = 7
 
             self.abnd_sol_luck = 8.75
             self.err_luck = 0.05
             
 
 
-        if line == 6587:
-            self.elnum=6.
+        if line == 6587 or line == 'C':
+            self.elnum=6
             self.line = 6587
             self.wran = [6584,6591]
             self.sran = [6587.2,6588]
@@ -40,7 +40,7 @@ class Getelnum:
             self.tellrng = [6587.4,6587.8]
             self.abnd_sol = 8.5
             # Carbon line is farther from other lines, so it can be broader
-            self.vsinirng = [-10,15] 
+            self.vsinicut = 15
 
             self.abnd_sol_luck = 8.54
             self.err_luck = 0.05
