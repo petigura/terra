@@ -17,10 +17,10 @@ def dump(file='Thesis/texcmd.tex'):
     f = open(file,'w')
     line = []
 
-    line.append(r'\newcommand{\nStarsTot}{%i}' % table.dump_stars(texcmd=True))
+    line.append(r'\newcommand{\nStarsTot}{%i} %% Total # of Stars Analyzed (C & O) ' % table.dump_stars(texcmd=True))
 
     plotter = plotgen.Plotgen()
-    ncomp = plotter.comp(texcmd=True)
+    ncomp,stdcomp = plotter.comp(texcmd=True)
 
     #number of different disk populations
 
@@ -39,23 +39,25 @@ AND
         cur.execute(cmd)
         npop = (cur.fetchall())[0][0]
         npoptot.append(npop)
-        line.append(r'\newcommand{\n%s}{%i}' % (popnames[i],npop))
+        line.append(r'\newcommand{\n%s}{%i} %% # of stars in %s pop.' % (popnames[i],npop,popnames[i]))
 
     npoptot = np.array(npoptot).sum()
-    line.append(r'\newcommand{\nPop}{%i}' % npoptot)
+    line.append(r'\newcommand{\nPop}{%i} %% # of stars with pop prob' % npoptot)
     
     for i in range(len(lines)):
         p = getelnum.Getelnum(el[i])
-        line.append(r'\newcommand{\vsiniCut%s}{%i}' % (el[i],p.vsinicut))
+        line.append(r'\newcommand{\vsiniCut%s}{%i} %% vsinicut for %s' % (el[i],p.vsinicut,el[i]))
 
         fitabund,x,x,abund = postfit.tfit(lines[i])
         maxTcorr = max(np.abs(fitabund-abund))
-        print maxTcorr
 
-        line.append(r'\newcommand{\maxT%s}{%.2f}' % (el[i],maxTcorr))
-        line.append(r'\newcommand{\nComp%s}{%i}' % (el[i],ncomp[i]))
+        line.append(r'\newcommand{\maxT%s}{%.2f} %% max temp correction %s' % (el[i],maxTcorr,el[i]))
+        line.append(r'\newcommand{\nComp%s}{%i} %% # of comparison stars %s' % (el[i],ncomp[i],el[i]))
+        line.append(r'\newcommand{\StdComp%s}{%.2f} %% std of comparison stars %s' % (el[i],stdcomp[i],el[i]))
     
-
         
 
+    for l in line:
+        
+        f.write(l+'\n')
     return line

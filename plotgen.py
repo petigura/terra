@@ -247,6 +247,7 @@ class Plotgen():
         ax2.set_ylabel('[C/H], This Work')
         ax = [ax1,ax2]
         ncomp = []
+        stdcomp = []
 
         for i in [0,1]:        
             xtot =[] #total array of comparison studies
@@ -306,10 +307,13 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
             ax[i].set_xlim((-0.6,+0.6))
             ax[i].set_ylim((-0.6,+0.6))
 
-            print np.std(xtot[0]-ytot[0])
+            S = np.std(xtot[0]-ytot[0])
+            print S
+            stdcomp.append(S)
+
         plt.draw()
         if texcmd:
-            return ncomp
+            return ncomp,stdcomp
 
         if save:
             plt.savefig('Thesis/pyplots/comp.ps')
