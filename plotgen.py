@@ -213,8 +213,8 @@ class Plotgen():
                 fitabund.std(),fitabund.min(),fitabund.max()
             if save:
             #output moments for tex write up
-                outex.append(r'\text {%s} & %i & %.2f & %.2f & %.2f & %.2f\\' % 
-                             (antxt[i],N,m,s,min,max))
+                outex.append(r'$\text {%s}$& %i & %.2f & %.2f & %.2f & %.2f\\'
+                             % (antxt[i],N,m,s,min,max))
             else:
                 print 'N, mean, std, min, max' + antxt[i]
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
@@ -224,7 +224,7 @@ class Plotgen():
             f = open('Thesis/tables/abundhist.tex','w')
             f.writelines(outex)
 
-    def comp(self,save=False):
+    def comp(self,save=False,texcmd=False):
     ###
     ###  Bensby corrects his 6300 abundances for a non-LTE effect which shifts the
     ###  correlation away from mine by about 0.1 dex
@@ -246,14 +246,14 @@ class Plotgen():
         ax1.set_ylabel('[O/H], This Work')
         ax2.set_ylabel('[C/H], This Work')
         ax = [ax1,ax2]
-
+        ncomp = []
 
         for i in [0,1]:        
             xtot =[] #total array of comparison studies
             ytot =[] #total array of comparison studies
 
             p = getelnum.Getelnum(lines[i])
-            elstr = p.elstr.lower()
+            elstr = p.elstr
             abnd_sol = p.abnd_sol
 
             print abnd_sol
@@ -261,21 +261,15 @@ class Plotgen():
                 table = tables[i][j]            
 
                 #SELECT
-                cmd = 'SELECT DISTINCT '+\
-                    ' mystars.'+elstr+'_abund,'+\
-                    ' mystars.'+elstr+'_staterrlo,'+\
-                    ' mystars.'+elstr+'_staterrhi,'+\
-                    table+'.'+elstr+'_abund'
+                cmd = """
+SELECT DISTINCT 
+mystars.%s_abund,mystars.%s_staterrlo,
+mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
                 if table is 'luckstars':
                     cmd = cmd + ','+table+'.c_staterr '
 
                 #FROM WHERE
-                cmd = cmd + \
-                    ' FROM mystars,'+table
-                cmd = cmd + \
-                    ' WHERE mystars.oid = '+table+'.oid AND '+\
-                    table+'.'+elstr+'_abund IS NOT NULL AND '+\
-                    postfit.globcut(elstr)
+                cmd = cmd + ' FROM mystars,%s WHERE mystars.oid = %s.oid AND %s.%s_abund IS NOT NULL AND %s' % (table,table,table,elstr,postfit.globcut(elstr))
                 if table is 'luckstars':
                     cmd = cmd+' AND '+table+'.c_staterr < 0.3'
 
@@ -293,7 +287,9 @@ class Plotgen():
 
                 yerr = np.abs(arr[:,1:3])
                 print cmd
-                print str(len(x)) + 'comparisons'
+                n = len(x)
+                ncomp.append(n)
+                print str(n) + 'comparisons'
 
                 ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),color=color[j],
                                marker='o',ls='None',capsize=0,markersize=5)
@@ -312,6 +308,9 @@ class Plotgen():
 
             print np.std(xtot[0]-ytot[0])
         plt.draw()
+        if texcmd:
+            return ncomp
+
         if save:
             plt.savefig('Thesis/pyplots/comp.ps')
 

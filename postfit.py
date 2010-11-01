@@ -3,12 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sqlite3
 
-def globcut(elstr):
-    if elstr == 'O':
-        vsinicut = 8
-    elif elstr == 'C':
-        vsinicut = 15
-    else: 
+def globcut(elstr):    
+    p = getelnum.Getelnum(elstr)
+    vsinicut = p.vsinicut
+
+    if (elstr == np.array(['O','C'])).any() is False:
         return ''
     
     locut = -0.3
