@@ -48,3 +48,5 @@ class Getelnum:
         lowelstr = self.elstr.lower()
         self.abundfield = lowelstr+'_abund'
         self.staterrfield = lowelstr+'_staterr'
+        self.feherr = 0.03
+        self.tefferr= 44
