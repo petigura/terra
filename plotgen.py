@@ -11,29 +11,29 @@ import scipy
 import scipy.stats as stats
 import pdb
 import flt2tex
-
+import uncertainties
+from uncertainties import unumpy
 class Plotgen():
 
+    def __init__(self):
     ###Pull up database.
-    conn = sqlite3.connect('stars.sqlite')
-    cur = conn.cursor()    
-    feherr = 0.03
-    tefferr= 44
+        self.conn = sqlite3.connect('stars.sqlite')
+        self.cur = self.conn.cursor()    
+        elements = ['O','C']    
+        self.stats = {}
 
-    elements = ['O','C']
+        for elstr in elements:
+            cmd = 'SELECT %s_abund,%s_staterrlo,%s_staterrhi FROM mystars '\
+                % (elstr,elstr,elstr)
+            wcmd = ' WHERE '+postfit.globcut(elstr)
+            self.cur.execute(cmd+wcmd)
 
-    for elstr in elements:
-        cmd = 'SELECT %s_abund,%s_staterrlo,%s_staterrhi FROM mystars '\
-            % (elstr,elstr,elstr)
-        wcmd = ' WHERE '+postfit.globcut(elstr)
-        cur.execute(cmd+wcmd)
+            temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
+            arr = np.array(self.cur.fetchall(),dtype=temptype)
+            m,slo,shi = np.mean(arr['abund']),np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])                
+            self.stats[elstr] = unumpy.uarray(([m,m],[slo,shi])) 
 
-        temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
-        arr = np.array(cur.fetchall(),dtype=temptype)
-        arr = [np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])]
-        #stats is lo, hi
-        exec(elstr+'stats = arr')    
-    
+   
     def tfit(self,save=False,fitres=False):
         """
         A quick look at the fits to the temperature
@@ -49,30 +49,28 @@ class Plotgen():
         ax1.set_yticks(np.arange(-0.8,0.4,0.2))
 
         ax2 = plt.subplot(212,sharex=ax1)
-        ax1.set_ylabel('[O/H]')
-        ax2.set_ylabel('[C/H]')
         ax2.set_xlabel('$\mathbf{ T_{eff} }$')
         ax = (ax1,ax2)
 
         for i in range(2):
-            o = getelnum.Getelnum(line[i])           
-            elstr = o.elstr.upper()
+            p = getelnum.Getelnum(line[i])           
+            elstr = p.elstr.upper()
 
             fitabund, fitpar, t,abund = postfit.tfit(line[i])    
             if fitres:
                 abund = fitabund
 
             tarr = np.linspace(t.min(),t.max(),100)        
+            ax[i].set_ylabel('[%s/H]' % elstr)
             ax[i].scatter(t,abund,color='black',s=10)
-            ax[i].scatter(o.teff_sol,0.,color='red',s=30)
+            ax[i].scatter(p.teff_sol,0.,color='red',s=30)
             ax[i].plot(tarr,np.polyval(fitpar,tarr),lw=2,color='red')        
 
-            exec('yerr = self.'+elstr+'stats')
-            yerr = [[yerr[0]],[yerr[1]]]
+            yerr = np.array([s.std_dev() for s in self.stats[elstr]])
+            yerr = yerr.reshape((2,1))
             inv = ax[i].transData.inverted()
             errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
-            print errpt
-            ax[i].errorbar(errpt[0],errpt[1],xerr=self.tefferr,
+            ax[i].errorbar(errpt[0],errpt[1],xerr=p.tefferr,
                            yerr=yerr,capsize=0)
 
 
@@ -115,10 +113,8 @@ class Plotgen():
         for i in range(2):
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
-
             cmd = 'SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag FROM mystars ' % (elstr,elstr,elstr)
             wcmd = ' WHERE '+postfit.globcut(elstr)+' AND pop_flag = "dn"'
-
             self.cur.execute(cmd+wcmd)
             arrthin = np.array(self.cur.fetchall(),dtype=qtype)
             
@@ -167,7 +163,7 @@ class Plotgen():
             yerr = [[yerr[0]],[yerr[1]]]
             inv = ax[i].transData.inverted()
             errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
-            ax[i].errorbar(errpt[0],errpt[1],xerr=self.feherr,
+            ax[i].errorbar(errpt[0],errpt[1],xerr=p.feherr,
                            yerr=yerr,capsize=0)
 
         yticks = ax2.get_yticks()[:-1]
@@ -178,7 +174,7 @@ class Plotgen():
             plt.savefig('Thesis/pyplots/feh.ps')
 
 
-    def abundhist(self,save=False):
+    def abundhist(self,save=False,texcmd=False):
         """
         Plot the distributions of abundances.  Possibly not needed with the exo 
         plot.
@@ -200,7 +196,7 @@ class Plotgen():
         ax2.set_yticks(np.arange(0,200,50))
         ax2.set_xlabel('[Fe/H]')
         ax = (ax1,ax2)
-
+        nstars  = []
         outex = []
         for i in range(2):
             p = getelnum.Getelnum(line[i])           
@@ -211,6 +207,7 @@ class Plotgen():
             ax[i].annotate(antxt[i],(-0.8,150))
             N,m,s,min,max = fitabund.size,fitabund.mean(), \
                 fitabund.std(),fitabund.min(),fitabund.max()
+            nstars.append(N)
             if save:
             #output moments for tex write up
                 outex.append(r'$\text {%s}$& %i & %.2f & %.2f & %.2f & %.2f\\'
@@ -219,6 +216,8 @@ class Plotgen():
                 print 'N, mean, std, min, max' + antxt[i]
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
                 
+        if texcmd:
+            return nstars
         if save:
             plt.savefig('Thesis/pyplots/abundhist.ps')
             f = open('Thesis/tables/abundhist.tex','w')
@@ -390,6 +389,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
 
 
     def cofe(self,save=False):
+        p = getelnum.Getelnum('O')
         cmd0 = 'SELECT distinct(mystars.oid),'+\
             ' mystars.o_abund,mystars.c_abund,mystars.fe_abund '+\
             ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
@@ -423,16 +423,17 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
         ax.set_xlabel('[Fe/H]')
         ax.set_ylabel('C/O')
 
-        yerr = [[np.sqrt( np.log(10)*( self.Cstats[0]**2+self.Ostats[0]**2 ))],
-                [np.sqrt( np.log(10)*( self.Cstats[1]**2+self.Ostats[1]**2 ))]]
+        c2o = 10**(self.stats['C']-self.stats['O'])
+        yerr = np.array([s.std_dev() for s in c2o]).reshape((2,1))
+
         inv = ax.transData.inverted()
         errpt = inv.transform( ax.transAxes.transform( (0.8,0.8) ) )
-        ax.errorbar(errpt[0],errpt[1],xerr=self.feherr,
-                       yerr=yerr,capsize=0)
+        ax.errorbar(errpt[0],errpt[1],xerr=p.feherr,yerr=yerr,capsize=0)
 
         ax.set_ybound(0,ax.get_ylim()[1])
         ax.axhline(1.)
         plt.show()
+
         if save:
             plt.savefig('Thesis/pyplots/cofe.ps')
         return ax
