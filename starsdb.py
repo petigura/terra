@@ -222,7 +222,7 @@ def mkdb():
             oid = None
 
         #ni abund normalized to the sun
-        ni_abund = stars.smeabund[i][27]-stars.smeabund[i][0]+12-6.17
+        ni_abund = stars.smeabund[i][27]-np.log10(stars.smeabund[i][0])+12.-6.17
 
         Mystars(name=stars.name[i],
                 oid = oid,
