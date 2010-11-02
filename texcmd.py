@@ -21,6 +21,7 @@ def dump(file='Thesis/texcmd.tex'):
 
     plotter = plotgen.Plotgen()
     ncomp,stdcomp = plotter.comp(texcmd=True)
+    nstars= plotter.abundhist(texcmd=True)
 
     #number of different disk populations
 
@@ -54,7 +55,7 @@ AND
         line.append(r'\newcommand{\maxT%s}{%.2f} %% max temp correction %s' % (el[i],maxTcorr,el[i]))
         line.append(r'\newcommand{\nComp%s}{%i} %% # of comparison stars %s' % (el[i],ncomp[i],el[i]))
         line.append(r'\newcommand{\StdComp%s}{%.2f} %% std of comparison stars %s' % (el[i],stdcomp[i],el[i]))
-    
+        line.append(r'\newcommand{\nStars%s}{%i} %% Number of stars with %s analysis' % (el[i],nstars[i],el[i]))
         
 
     for l in line:
