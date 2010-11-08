@@ -2,10 +2,12 @@ import getelnum
 import numpy as np
 import matplotlib.pyplot as plt
 import sqlite3
+import os
 
-def globcut(elstr):    
+def globcut(elstr,table='mystars'):    
     p = getelnum.Getelnum(elstr)
     vsinicut = p.vsinicut
+    teffrng = p.teffrng
 
     if (elstr == np.array(['O','C'])).any() is False:
         return ''
@@ -13,10 +15,11 @@ def globcut(elstr):
     locut = -0.3
     hicut = 0.3
     cut = """
-mystars.vsini < %d AND mystars.%s_abund > 0  AND 
-mystars.%s_staterrlo > %.2f AND mystars.%s_staterrhi < %.2f """\
-        % (vsinicut,elstr,elstr,locut,elstr,hicut)
-
+tab.vsini < %d AND tab.%s_abund > 0  AND 
+tab.%s_staterrlo > %.2f AND tab.%s_staterrhi < %.2f AND 
+tab.teff > %d AND tab.teff < %d""" % (vsinicut,elstr,elstr,locut,elstr,hicut,teffrng[0],teffrng[1])
+   
+    cut = cut.replace('tab',table)
     return cut
 
 def tfit(line):
@@ -37,7 +40,7 @@ def tfit(line):
     p = getelnum.Getelnum(line)
     elstr = p.elstr
 
-    conn = sqlite3.connect('stars.sqlite')
+    conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
 
     #pull in the abundances and the non-corrected abundances
@@ -56,7 +59,7 @@ def tfit(line):
 
 def applytfit():
     lines = [6300,6587]
-    conn = sqlite3.connect('stars.sqlite')
+    conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
 
 
@@ -146,3 +149,19 @@ def plottfit(stars):
         plt.scatter(o.teff_sol,np.polyval(fitpar,o.teff_sol),color='red')
 
 
+def names(el):
+    """
+    return a bunch of names
+    """
+    conn = sqlite3.connect(os.environ['STARSDB'])
+    cur = conn.cursor()
+
+    #pull in the abundances and the non-corrected abundances
+    cmd = 'SELECT name FROM mystars WHERE '+globcut(el)
+    cur.execute(cmd)
+    arr = np.array(cur.fetchall(),dtype='|S10') 
+    list = ''
+    for a in arr:
+        list = list+a[0]+' '
+
+    return list
