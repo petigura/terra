@@ -12,8 +12,8 @@ def globcut(elstr,table='mystars'):
     if (elstr == np.array(['O','C'])).any() is False:
         return ''
     
-    locut = -0.3
-    hicut = 0.3
+    locut = -0.2
+    hicut = 0.2
     cut = """
 tab.vsini < %d AND tab.%s_abund > 0  AND 
 tab.%s_staterrlo > %.2f AND tab.%s_staterrhi < %.2f AND 
