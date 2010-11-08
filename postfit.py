@@ -16,7 +16,7 @@ def globcut(elstr,table='mystars'):
     hicut = 0.2
     cut = """
 tab.vsini < %d AND tab.%s_abund > 0  AND 
-tab.%s_staterrlo > %.2f AND tab.%s_staterrhi < %.2f AND 
+tab.%s_scatterlo > %.2f AND tab.%s_scatterhi < %.2f AND 
 tab.teff > %d AND tab.teff < %d""" % (vsinicut,elstr,elstr,locut,elstr,hicut,teffrng[0],teffrng[1])
    
     cut = cut.replace('tab',table)

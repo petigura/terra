@@ -261,6 +261,12 @@ def mkdb():
                 c_staterrlo = round(stars.c_staterr[i,0],3),
                 c_staterrhi =  round(stars.c_staterr[i,1],3),
 
+                o_scatterlo = round(stars.o_scatter[i,0],3),
+                o_scatterhi = round(stars.o_scatter[i,1],3),
+                
+                c_scatterlo = round(stars.c_scatter[i,0],3),
+                c_scatterhi =  round(stars.c_scatter[i,1],3),
+
                 
                 o_nierrlo = round(stars.o_nierr[i,0],3),
                 o_nierrhi = round(stars.o_nierr[i,1],3),
