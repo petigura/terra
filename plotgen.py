@@ -13,11 +13,13 @@ import pdb
 import flt2tex
 import uncertainties
 from uncertainties import unumpy
+import os
+
 class Plotgen():
 
     def __init__(self):
     ###Pull up database.
-        self.conn = sqlite3.connect('stars.sqlite')
+        self.conn = sqlite3.connect(os.environ['STARSDB'])
         self.cur = self.conn.cursor()    
         elements = ['O','C']    
         self.stats = {}
@@ -37,7 +39,9 @@ class Plotgen():
     def tfit(self,save=False,fitres=False):
         """
         A quick look at the fits to the temperature
-            """
+        save - saves the plot
+        fitres - plots the residuals
+        """
         line = [6300,6587]
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
@@ -81,6 +85,8 @@ class Plotgen():
     def feh(self,save=False,noratio=False):
         """
         Show the trends of X/Fe as a function of Fe/H.
+        save - saves the file
+        noratio - plots X/H as opposed to X/Fe
         """
         #pull in fitted abundances from tfit
 
@@ -103,8 +109,6 @@ class Plotgen():
         ax1 = plt.subplot(211)
         ax1.set_xticklabels('',visible=False)
         ax2 = plt.subplot(212,sharex=ax1)
-
-
 
         ax2.set_xlabel('[Fe/H]')
         ax = (ax1,ax2)
@@ -132,6 +136,7 @@ class Plotgen():
                 ythin = arrthin['abund']
                 ythick = arrthick['abund']
                 ax[i].set_ylabel('[%s/H]' % (elstr) )
+
             else:
                 ythin = arrthin['abund'] -arrthin['feh']
                 ythick = arrthick['abund'] -arrthick['feh']
@@ -146,25 +151,28 @@ class Plotgen():
                 biny.append(np.mean(ythin[ind]))
                 
             binx,biny = np.array(binx),np.array(biny)            
-
-
             ax[i].plot(arrthin['feh'],ythin,'bo')
             ax[i].plot(arrthick['feh'],ythick,'go')
             ax[i].plot(binx,biny,'rx-',lw=2,ms=5,mew=2)
 
             #plot typical errorbars
 
-            leg = ax[i].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
-            for t in leg.get_texts():
-                t.set_fontsize('small')
+            yerr = np.array([s.std_dev() for s in self.stats[elstr]])
+            if not noratio:
+                yerr = np.sqrt(yerr**2 + p.feherr**2)
+            yerr = yerr.reshape((2,1))
 
-
-            exec('yerr = self.'+elstr+'stats')
-            yerr = [[yerr[0]],[yerr[1]]]
             inv = ax[i].transData.inverted()
             errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
             ax[i].errorbar(errpt[0],errpt[1],xerr=p.feherr,
                            yerr=yerr,capsize=0)
+
+            
+        leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='lower left')
+        for t in leg.get_texts():
+            t.set_fontsize('small')
+
+            
 
         yticks = ax2.get_yticks()[:-1]
         ax2.set_yticks(yticks)
@@ -178,6 +186,9 @@ class Plotgen():
         """
         Plot the distributions of abundances.  Possibly not needed with the exo 
         plot.
+        save - save the plot
+        texcmd - returns what the tex command dumper wants
+
         """
         #pull in fitted abundances from tfit
 
@@ -224,10 +235,11 @@ class Plotgen():
             f.writelines(outex)
 
     def comp(self,save=False,texcmd=False):
-    ###
-    ###  Bensby corrects his 6300 abundances for a non-LTE effect which shifts the
-    ###  correlation away from mine by about 0.1 dex
-    ###
+        """
+        Plots my results as a function of literature
+        save - saves the file
+        """
+
         tables = [['ben05'],['luckstars']]
         offset = [[0],[8.5]]
         literr = [[0.06],[0.1]]
@@ -389,6 +401,11 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
 
 
     def cofe(self,save=False):
+        """
+        Plots C/O as a function of Fe/H
+        save - save the file
+        """
+
         p = getelnum.Getelnum('O')
         cmd0 = 'SELECT distinct(mystars.oid),'+\
             ' mystars.o_abund,mystars.c_abund,mystars.fe_abund '+\
@@ -419,7 +436,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
         ax = plt.subplot(111)
         ax.plot(arrcomp['feh'],c2ocomp,'bo')
         ax.plot(arrhost['feh'],c2ohost,'go')
-        ax.legend(('Comparision','Hosts'))
+        ax.legend(('Comparision','Hosts'),loc='best')
         ax.set_xlabel('[Fe/H]')
         ax.set_ylabel('C/O')
 

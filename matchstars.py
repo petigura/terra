@@ -6,9 +6,18 @@ import readstars
 import matplotlib.mlab as mlab
 import starsdb
 import fxwid
+import os
 
 def simquery(code):
-    dir = 'Comparison/'
+    """
+    Generates scripted queries to SIMBAD database.  Must rerun anytime the
+    ORDER of the structure changes.
+
+    Future work:
+    Automate the calls to SIMBAD.
+    """
+
+    dir = os.environ['COMP']
     files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
 
     datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat','Bensby05/table9.dat','Luck05/table7.dat']
@@ -19,7 +28,7 @@ def simquery(code):
         datfiles[i] = dir+datfiles[i]
 
     if code == 0:
-        stars = readstars.ReadStars('keck-fit-lite.sav')
+        stars = readstars.ReadStars(os.environ['PYSTARS'])
         names = stars.name
         simline = names2sim(names,cat='HD')
     if code == 1:

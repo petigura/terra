@@ -4,13 +4,14 @@ import sqlite3
 import plotgen
 import postfit
 import getelnum
+import os
 
 def dump(file='Thesis/texcmd.tex'):
     """
     Dumps the short hands used in the latex paper.
     """
 
-    conn = sqlite3.connect('stars.sqlite')
+    conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
     lines = [6300,6587]
     el    = ['O','C']
