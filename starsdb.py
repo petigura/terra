@@ -95,6 +95,9 @@ class Mystars(Entity):
     vsini = Field(Float(precision=5))
     teff = Field(Float(precision=5))
 
+    o_nfits = Field(Float(precision=5))
+    c_nfits = Field(Float(precision=5))
+
     o_abund = Field(Float(precision=5))
     c_abund = Field(Float(precision=5))
 
@@ -111,6 +114,12 @@ class Mystars(Entity):
 
     c_staterrlo = Field(Float(precision=5))
     c_staterrhi = Field(Float(precision=5))
+
+    o_scatterlo = Field(Float(precision=5))
+    o_scatterhi = Field(Float(precision=5))
+
+    c_scatterlo = Field(Float(precision=5))
+    c_scatterhi = Field(Float(precision=5))
 
     o_nierrlo = Field(Float(precision=5))
     o_nierrhi = Field(Float(precision=5))
@@ -200,18 +209,15 @@ class Ben05(Entity):
 
 def mkdb():
 #    metadata.bind.echo = True
-    metadata.bind = "sqlite:///stars.sqlite"
-
+    metadata.bind = "sqlite:///"+os.environ['STARSDB']
 
     # if the file already exists destroy it
-    if os.path.exists('stars.sqlite'):
-        os.system('rm stars.sqlite')
-
-
+    if os.path.exists(os.environ['STARSDB']):
+        os.system('rm '+os.environ['STARSDB'])
 
 
     #### Add in mydata ####
-    stars = readstars.ReadStars('keck-fit-lite.sav')
+    stars = readstars.ReadStars(os.environ['PYSTARS'])
     idxarr,oidarr = res2id('Comparison/myresults.sim')
 
     setup_all(True)
@@ -221,7 +227,7 @@ def mkdb():
         else:
             oid = None
 
-        #ni abund normalized to the sun
+        #ni abnd normalized to the sun
         ni_abund = stars.smeabund[i][27]-np.log10(stars.smeabund[i][0])+12.-6.17
 
         Mystars(name=stars.name[i],
@@ -234,6 +240,10 @@ def mkdb():
                 d = 1/stars.prlx[i],
                 logg = round(stars.logg[i],3),
                 monh = round(stars.monh[i],3),
+
+
+                o_nfits = float(stars.o_nfits[i]),
+                c_nfits = float(stars.c_nfits[i]),
 
                 o_abund_nt = round(stars.o_abund[i],3),
                 c_abund_nt = round(stars.c_abund[i],3),
@@ -250,6 +260,7 @@ def mkdb():
                 
                 c_staterrlo = round(stars.c_staterr[i,0],3),
                 c_staterrhi =  round(stars.c_staterr[i,1],3),
+
                 
                 o_nierrlo = round(stars.o_nierr[i,0],3),
                 o_nierrhi = round(stars.o_nierr[i,1],3),
