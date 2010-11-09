@@ -1,16 +1,11 @@
-import getelnum
-import numpy as np
-import matplotlib.pyplot as plt
-import readstars
-import postfit
-import matchstars
-from scipy.optimize import leastsq
-import starsdb
-import sqlite3
+import readstars,postfit,matchstars,starsdb,getelnum,flt2tex
 import scipy
 import scipy.stats as stats
+from scipy.optimize import leastsq
+import numpy as np
+import matplotlib.pyplot as plt
+import sqlite3
 import pdb
-import flt2tex
 import uncertainties
 from uncertainties import unumpy
 import os
@@ -193,7 +188,6 @@ class Plotgen():
         #pull in fitted abundances from tfit
 
         line = [6300,6587]
-        antxt = ['[O/H]','[C/H]']
 
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
@@ -205,26 +199,34 @@ class Plotgen():
 
         ax2 = plt.subplot(212,sharex=ax1)
         ax2.set_yticks(np.arange(0,200,50))
-        ax2.set_xlabel('[Fe/H]')
+        ax2.set_xlabel('[X/H]')
         ax = (ax1,ax2)
         nstars  = []
         outex = []
+
         for i in range(2):
             p = getelnum.Getelnum(line[i])           
+            elstr = p.elstr
             fitabund,x,x,x = postfit.tfit(line[i])
             ax[i].set_ylabel('Number of Stars')
             ax[i].hist(fitabund,range=(-1,1),bins=20,fc='gray')
             ax[i].set_ylim(0,200)
-            ax[i].annotate(antxt[i],(-0.8,150))
+
+            #Annotate to show which lable we're on
+            antxt = '[%s/H]' % elstr
+            inv = ax[i].transData.inverted()
+            txtpt = inv.transform( ax[i].transAxes.transform( (0.05,0.85) ) )
+            ax[i].annotate(antxt,txtpt)
+
             N,m,s,min,max = fitabund.size,fitabund.mean(), \
                 fitabund.std(),fitabund.min(),fitabund.max()
             nstars.append(N)
             if save:
             #output moments for tex write up
                 outex.append(r'$\text {%s}$& %i & %.2f & %.2f & %.2f & %.2f\\'
-                             % (antxt[i],N,m,s,min,max))
+                             % (antxt,N,m,s,min,max))
             else:
-                print 'N, mean, std, min, max' + antxt[i]
+                print 'N, mean, std, min, max' + antxt
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
                 
         if texcmd:
@@ -330,13 +332,15 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
             plt.savefig('Thesis/pyplots/comp.ps')
 
 
-    def exo(self,save=False):
+    def exo(self,save=False,prob=True):
         """
         Show a histogram of Carbon and Oxygen for planet harboring stars, and
         comparison stars.
         """
         f = plt.figure( figsize=(6,8) )
-        f.subplots_adjust(top=0.95,bottom=0.05)
+
+        f.subplots_adjust(hspace=0.0001)
+        ax1 = plt.subplot(211)
 
         elements = ['O','C','Fe']
         nel = len(elements)
@@ -345,9 +349,12 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
         ax = []  #empty list to store axes
         outex = []
         for i in range(nel): #loop over the different elements
-            ax.append(plt.subplot(nel,1,i+1))
+            if i is 0:
+                ax.append(plt.subplot(nel,1,i+1))
+            else:
+                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
+                
             elstr = elements[i]
-            ax[i].set_xlabel('['+elstr+'/H]')
 
             if elstr is 'Fe':
                 cmd0 = 'SELECT distinct(mystars.oid),mystars.'+elstr+'_abund '+\
@@ -371,10 +378,47 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
             arrcomp = np.array( self.cur.fetchall() ,dtype=float)[:,1] - sol_abnd[i] 
             ncomp = len(arrcomp)
 
-            # Make histogram
-            ax[i].hist([arrcomp,arrhost], 20, normed=1, histtype='bar',
-                       label=['Comparison','Planet Hosts'])
-            ax[i].legend(loc='upper left')
+            binwid = 0.1
+            rng = [-0.4,0.4]
+            nbins = (rng[1]-rng[0])/binwid
+            if prob:
+                exohist,bins = np.histogram(arrhost,bins=nbins,range=rng)
+                comphist,bins = np.histogram(arrcomp,bins=nbins,range=rng)
+         
+                exohisterr  = unumpy.uarray( (exohist,np.sqrt(exohist)))
+                comphisterr  = unumpy.uarray( (comphist,np.sqrt(comphist)))
+
+                ratio = exohisterr/comphisterr*100
+                
+                y = unumpy.nominal_values(ratio)
+
+                yerr = unumpy.std_devs(ratio)
+                x = bins[:-1]+0.5*binwid
+
+                ax[i].hist(x,bins=bins,weights=y)
+                ax[i].errorbar(x,y,yerr=yerr,marker='o',elinewidth=2,ls='None')
+            else:
+                # Make histogram
+                ax[i].hist([arrcomp,arrhost], bins=nbins,range=rng, histtype='bar',
+                           label=['Comparison','Planet Hosts'])
+                ax[i].legend(loc='upper left')
+
+            if i is nel-1:
+                ax[i].set_xlabel('[X/H]')
+                ax[i].set_ylabel('% Stars with Planets')
+            else:
+                ax[i].set_xlabel('['+elstr+'/H]')
+                ax[i].set_xticklabels('',visible=False)
+                #remove overlapping zeroes
+                yticks = ax[i].get_yticks()[1:]
+                ax[i].set_yticks(yticks)
+
+
+            #Annotate to show which lable we're on
+            inv = ax[i].transData.inverted()
+            txtpt = inv.transform( ax[i].transAxes.transform( (0.05,0.85) ) )
+            ax[i].annotate('[%s/H]' % elstr,txtpt)
+
 
             ######## Compute KS - statistic or probablity #########
             mhost,shost,mcomp,scomp = np.mean(arrhost),np.std(arrhost),\
@@ -390,7 +434,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
                 print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
                     % (nhost,mhost,shost)
                 print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
-                    % (ncomp,mhost,shost)
+                    % (ncomp,mcomp,scomp)
                 print 'KS Test: D = %f  p = %f ' % (D,p)
 
         plt.draw()
