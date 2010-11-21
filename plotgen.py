@@ -30,6 +30,20 @@ class Plotgen():
             m,slo,shi = np.mean(arr['abund']),np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])                
             self.stats[elstr] = unumpy.uarray(([m,m],[slo,shi])) 
 
+
+    def errpt(self,ax,coord,xerr=None,yerr=None):
+        """
+        Plot a point that shows an error 
+        ax - axis object to manipulate and return
+        coord - the coordinates of error point (in device coordinates)
+        """
+        inv = ax.transData.inverted()
+        pt = inv.transform( ax.transAxes.transform( coord ) )
+        ax.errorbar(pt[0],pt[1],xerr=xerr,yerr=yerr,
+                    capsize=0,
+                    color='red',
+                    elinewidth = 2)
+        return ax
    
     def tfit(self,save=False,fitres=False):
         """
@@ -38,23 +52,20 @@ class Plotgen():
         fitres - plots the residuals
         """
         line = [6300,6587]
-        subplot = ((1,2))
+        nel = len(line)
         f = plt.figure( figsize=(6,6) )
-        f.set_facecolor('white')  #we wamt the canvas to be white
-
         f.subplots_adjust(hspace=0.0001)
-        ax1 = plt.subplot(211)
-        ax1.set_xticklabels('',visible=False)
-        ax1.set_yticks(np.arange(-0.8,0.4,0.2))
 
-        ax2 = plt.subplot(212,sharex=ax1)
-        ax2.set_xlabel('$\mathbf{ T_{eff} }$')
-        ax = (ax1,ax2)
-
-        for i in range(2):
+        ax = []
+        for i in range(nel):
             p = getelnum.Getelnum(line[i])           
             elstr = p.elstr.upper()
 
+            if i is 0:
+                ax.append(plt.subplot(nel,1,i+1))
+            else:
+                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
+                
             fitabund, fitpar, t,abund = postfit.tfit(line[i])    
             if fitres:
                 abund = fitabund
@@ -67,11 +78,17 @@ class Plotgen():
 
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
             yerr = yerr.reshape((2,1))
-            inv = ax[i].transData.inverted()
-            errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
-            ax[i].errorbar(errpt[0],errpt[1],xerr=p.tefferr,
-                           yerr=yerr,capsize=0)
 
+            ax[i] = self.errpt(ax[i],(0.9,0.9),xerr=p.tefferr,yerr=yerr)
+            ax[i].set_ylabel('['+elstr+'/H]')
+
+            if i is nel-1:
+                ax[i].set_xlabel('$\mathbf{ T_{eff} }$')
+            else:
+                ax[i].set_xticklabels('',visible=False)
+                #remove overlapping zeroes
+                yticks = ax[i].get_yticks()[1:]
+                ax[i].set_yticks(yticks)
 
         if save:
             plt.savefig('Thesis/pyplots/teff.ps')
@@ -86,6 +103,7 @@ class Plotgen():
         #pull in fitted abundances from tfit
 
         lines = [6300,6587]
+        nel = len(lines)
         flags  = ['dn','dk']
 
         binmin = -0.5
@@ -98,18 +116,18 @@ class Plotgen():
 
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
-        f.set_facecolor('white')  #we wamt the canvas to be white
 
         f.subplots_adjust(hspace=0.0001)
-        ax1 = plt.subplot(211)
-        ax1.set_xticklabels('',visible=False)
-        ax2 = plt.subplot(212,sharex=ax1)
-
-        ax2.set_xlabel('[Fe/H]')
-        ax = (ax1,ax2)
+        ax = []
 
 
-        for i in range(2):
+        for i in range(nel):
+            if i is 0:
+                ax.append(plt.subplot(nel,1,i+1))
+            else:
+                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
+
+
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
             cmd = 'SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag FROM mystars ' % (elstr,elstr,elstr)
@@ -131,19 +149,31 @@ class Plotgen():
                 ythin = arrthin['abund']
                 ythick = arrthick['abund']
                 ax[i].set_ylabel('[%s/H]' % (elstr) )
-
+                savename = 'xonh'
             else:
                 ythin = arrthin['abund'] -arrthin['feh']
                 ythick = arrthick['abund'] -arrthick['feh']
                 ax[i].set_ylabel('[%s/Fe]' % (elstr) )
+                savename = 'xonfe'
 
             ### Compute Avg Thin disk in bins ###
             binind = np.digitize(arrthin['feh'],bins)
             binx,biny = [] , []
             for j in np.arange(nbins-1)+1:
                 ind = (np.where(binind == j))[0]
-                binx.append(binmin+binwid*(j-0.5))
-                biny.append(np.mean(ythin[ind]))
+                midbin = binmin+binwid*(j-0.5)
+                binmean = np.mean(ythin[ind])
+                nbin = len(ythin[ind]) # numer of points in a bin
+
+                mederr = 0.5*(arrthin['staterrhi'][ind]-arrthin['staterrlo'][ind])
+                pull = (ythin[ind] - binmean)/mederr
+                binx.append(midbin)
+                biny.append(binmean)
+
+                print 'Bin %.2f: n = %i, stdpull =  %.2f ' % (midbin,nbin,np.std(pull))
+
+
+
                 
             binx,biny = np.array(binx),np.array(biny)            
             ax[i].plot(arrthin['feh'],ythin,'bo')
@@ -151,33 +181,28 @@ class Plotgen():
             ax[i].plot(binx,biny,'rx-',lw=2,ms=5,mew=2)
 
             #plot typical errorbars
-
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
             if not noratio:
                 yerr = np.sqrt(yerr**2 + p.feherr**2)
             yerr = yerr.reshape((2,1))
 
-            inv = ax[i].transData.inverted()
-            errpt = inv.transform( ax[i].transAxes.transform( (0.9,0.9) ) )
-            ax[i].errorbar(errpt[0],errpt[1],xerr=p.feherr,
-                           yerr=yerr,capsize=0)
 
+            ax[i] = self.errpt(ax[i],(0.9,0.9),xerr=p.feherr,yerr=yerr)
+
+            if i is nel-1:
+                ax[i].set_xlabel('[Fe/H]')                
+            else:
+                ax[i].set_xticklabels('',visible=False)
+                #remove overlapping zeroes
+                yticks = ax[i].get_yticks()[2:] #hack
+                ax[i].set_yticks(yticks)
             
-        leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='lower left')
-        for t in leg.get_texts():
-            t.set_fontsize('small')
-
-            
-
-        yticks = ax2.get_yticks()[:-1]
-        ax2.set_yticks(yticks)
-
-
+        leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
         if save:
-            plt.savefig('Thesis/pyplots/feh.ps')
+            plt.savefig('Thesis/pyplots/%s.ps' % savename)
 
 
-    def abundhist(self,save=False,texcmd=False):
+    def abundhist(self,save=False,texcmd=False,uplim=False):
         """
         Plot the distributions of abundances.  Possibly not needed with the exo 
         plot.
@@ -207,9 +232,17 @@ class Plotgen():
         for i in range(2):
             p = getelnum.Getelnum(line[i])           
             elstr = p.elstr
-            fitabund,x,x,x = postfit.tfit(line[i])
+            
+            cut = postfit.globcut(elstr,uplim=uplim)
+            cmd = 'SELECT %s_abund from MYSTARS WHERE %s'% (elstr,cut)
+            self.cur.execute(cmd)
+
+
+            out = self.cur.fetchall()
+            abund = np.array(out,dtype=float).flatten()-p.abnd_sol
+
             ax[i].set_ylabel('Number of Stars')
-            ax[i].hist(fitabund,range=(-1,1),bins=20,fc='gray')
+            ax[i].hist(abund,range=(-1,1),bins=20,fc='gray')
             ax[i].set_ylim(0,200)
 
             #Annotate to show which lable we're on
@@ -218,8 +251,8 @@ class Plotgen():
             txtpt = inv.transform( ax[i].transAxes.transform( (0.05,0.85) ) )
             ax[i].annotate(antxt,txtpt)
 
-            N,m,s,min,max = fitabund.size,fitabund.mean(), \
-                fitabund.std(),fitabund.min(),fitabund.max()
+            N,m,s,min,max = abund.size,abund.mean(), \
+                abund.std(),abund.min(),abund.max()
             nstars.append(N)
             if save:
             #output moments for tex write up
@@ -278,12 +311,14 @@ class Plotgen():
                 cmd = """
 SELECT DISTINCT 
 mystars.%s_abund,mystars.%s_staterrlo,
-mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
+mystars.%s_staterrhi,%s.%s_abund """ % (elstr,elstr,elstr,table,elstr)
                 if table is 'luckstars':
-                    cmd = cmd + ','+table+'.c_staterr '
+                    cmd += ','+table+'.c_staterr '
 
                 #FROM WHERE
-                cmd = cmd + ' FROM mystars,%s WHERE mystars.oid = %s.oid AND %s.%s_abund IS NOT NULL AND %s' % (table,table,table,elstr,postfit.globcut(elstr))
+                cmd +=""" 
+FROM mystars,%s WHERE mystars.oid = %s.oid 
+AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcut(elstr))
                 if table is 'luckstars':
                     cmd = cmd+' AND '+table+'.c_staterr < 0.3'
 
@@ -332,7 +367,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
             plt.savefig('Thesis/pyplots/comp.ps')
 
 
-    def exo(self,save=False,prob=True):
+    def exo(self,save=False,prob=True,texcmd=False):
         """
         Show a histogram of Carbon and Oxygen for planet harboring stars, and
         comparison stars.
@@ -348,14 +383,14 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
 
         ax = []  #empty list to store axes
         outex = []
+        statdict = { 'host':{},'comp':{} }
         for i in range(nel): #loop over the different elements
             if i is 0:
                 ax.append(plt.subplot(nel,1,i+1))
             else:
                 ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
-                
-            elstr = elements[i]
 
+            elstr = elements[i]
             if elstr is 'Fe':
                 cmd0 = 'SELECT distinct(mystars.oid),mystars.'+elstr+'_abund '+\
                     ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid WHERE '
@@ -379,7 +414,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
             ncomp = len(arrcomp)
 
             binwid = 0.1
-            rng = [-0.4,0.4]
+            rng = [-0.5,0.5]
             nbins = (rng[1]-rng[0])/binwid
             if prob:
                 exohist,bins = np.histogram(arrhost,bins=nbins,range=rng)
@@ -388,7 +423,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
                 exohisterr  = unumpy.uarray( (exohist,np.sqrt(exohist)))
                 comphisterr  = unumpy.uarray( (comphist,np.sqrt(comphist)))
 
-                ratio = exohisterr/comphisterr*100
+                ratio = exohisterr/(comphisterr+exohisterr)*100.
                 
                 y = unumpy.nominal_values(ratio)
 
@@ -428,7 +463,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
 
             if save:
                 # element number mean std ncomp compmean compstd KS p
-                outex.append(r'%s & %i & %.2f & %.2f & & %i & %.2f & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,D,flt2tex.flt2tex(p,sigfig=1) ) )
+                outex.append(r'$\text{[%s/H]}$ & %i & %.2f & %.2f & & %i & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,flt2tex.flt2tex(p,sigfig=1) ) )
 
             else:
                 print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
@@ -437,14 +472,21 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
                     % (ncomp,mcomp,scomp)
                 print 'KS Test: D = %f  p = %f ' % (D,p)
 
+
+                statdict['host'][elstr] = {'n':nhost,'m':mhost,'s':shost}
+                statdict['comp'][elstr] = {'n':ncomp,'m':mcomp,'s':scomp}
+
+
         plt.draw()
         if save:
             plt.savefig('Thesis/pyplots/exo.ps')
             f = open('Thesis/tables/exo.tex','w')
             f.writelines(outex)
 
+        if texcmd:
+            return statdict
 
-    def cofe(self,save=False):
+    def cofe(self,save=False,texcmd=False):
         """
         Plots C/O as a function of Fe/H
         save - save the file
@@ -487,9 +529,7 @@ mystars.%s_staterrhi,%s.%s_abund""" % (elstr,elstr,elstr,table,elstr)
         c2o = 10**(self.stats['C']-self.stats['O'])
         yerr = np.array([s.std_dev() for s in c2o]).reshape((2,1))
 
-        inv = ax.transData.inverted()
-        errpt = inv.transform( ax.transAxes.transform( (0.8,0.8) ) )
-        ax.errorbar(errpt[0],errpt[1],xerr=p.feherr,yerr=yerr,capsize=0)
+        ax = self.errpt(ax,(0.1,0.7),xerr=p.feherr,yerr=yerr)
 
         ax.set_ybound(0,ax.get_ylim()[1])
         ax.axhline(1.)

@@ -1,6 +1,9 @@
 class Getelnum:
     def __init__(self,line):
         self.teff_sol = 5770
+        self.scattercut = 0.3
+        self.coThresh = 1  #theshold (high) value of C/O
+        
         if line == 6300 or line == 'O':
             self.elnum=8.
             self.line = 6300

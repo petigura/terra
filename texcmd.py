@@ -18,8 +18,6 @@ def dump(file='Thesis/texcmd.tex'):
     f = open(file,'w')
     line = []
 
-    line.append(r'\newcommand{\nStarsTot}{%i} %% Total # of Stars Analyzed (C & O) ' % table.dump_stars(texcmd=True))
-
     plotter = plotgen.Plotgen()
     ncomp,stdcomp = plotter.comp(texcmd=True)
     nstars= plotter.abundhist(texcmd=True)
@@ -41,25 +39,59 @@ AND
         cur.execute(cmd)
         npop = (cur.fetchall())[0][0]
         npoptot.append(npop)
-        line.append(r'\newcommand{\n%s}{%i} %% # of stars in %s pop.' % (popnames[i],npop,popnames[i]))
+        line.append(r'\nc{\n%s}{%i} %% # of stars in %s pop.' % (popnames[i],npop,popnames[i]))
 
     npoptot = np.array(npoptot).sum()
-    line.append(r'\newcommand{\nPop}{%i} %% # of stars with pop prob' % npoptot)
+    line.append(r'\nc{\nPop}{%i} %% # of stars with pop prob' % npoptot)
+    
+    #Cuts specific to each line.
     
     for i in range(len(lines)):
         p = getelnum.Getelnum(el[i])
-        line.append(r'\newcommand{\vsiniCut%s}{%i} %% vsinicut for %s' % (el[i],p.vsinicut,el[i]))
+        line.append(r'\nc{\vsiniCut%s}{%i} %% vsinicut for %s' % (el[i],p.vsinicut,el[i]))
+
+        line.append(r'\nc{\teffCut%slo}{%i} %% teff for %s' % (el[i],p.teffrng[0],el[i]))
+        line.append(r'\nc{\teffCut%shi}{%i} %% teff for %s' % (el[i],p.teffrng[1],el[i]))
+
 
         fitabund,x,x,abund = postfit.tfit(lines[i])
         maxTcorr = max(np.abs(fitabund-abund))
 
-        line.append(r'\newcommand{\maxT%s}{%.2f} %% max temp correction %s' % (el[i],maxTcorr,el[i]))
-        line.append(r'\newcommand{\nComp%s}{%i} %% # of comparison stars %s' % (el[i],ncomp[i],el[i]))
-        line.append(r'\newcommand{\StdComp%s}{%.2f} %% std of comparison stars %s' % (el[i],stdcomp[i],el[i]))
-        line.append(r'\newcommand{\nStars%s}{%i} %% Number of stars with %s analysis' % (el[i],nstars[i],el[i]))
+        line.append(r'\nc{\maxT%s}{%.2f} %% max temp correction %s' % (el[i],maxTcorr,el[i]))
+        line.append(r'\nc{\nComp%s}{%i} %% # of comparison stars %s' % (el[i],ncomp[i],el[i]))
+        line.append(r'\nc{\StdComp%s}{%.2f} %% std of comparison stars %s' % (el[i],stdcomp[i],el[i]))
+        line.append(r'\nc{\nStars%s}{%i} %% Number of stars with %s analysis' % (el[i],nstars[i],el[i]))
         
 
-    for l in line:
-        
+    #Values sepecific to both lines
+    line.append(r'\nc{\coThresh}{%.2f} %% Theshhold for high co' % (p.coThresh))
+    line.append(r'\nc{\scatterCut}{%.2f} %% Cut on the scatter' % (p.scattercut))
+    line.append(r'\nc{\teffSol}{%i} %% Solar Effective Temp' % (p.teff_sol))
+
+
+    statdict = plotter.exo(texcmd=True)
+    for pop in statdict.keys():
+        for elstr in statdict[pop].keys():
+            for moment in statdict[pop][elstr].keys():
+                value = statdict[pop][elstr][moment]
+                if moment[0] is 'n':
+                    line.append(r'\nc{\%s%s%s}{%i} %% %s - %s - %s'% 
+                                (pop,elstr,moment,value,pop,elstr,moment))
+                else:
+                    line.append(r'\nc{\%s%s%s}{%.2f} %% %s - %s - %s'% 
+                                (pop,elstr,moment,value,pop,elstr,moment))
+
+
+    statdict = table.dump_stars(texcmd=True)
+    for key in statdict.keys():
+        value = statdict[key]
+        if key[0] is 'n': #treat integers a certain way
+            line.append(r'\nc{\%s}{%d} %% '% (key,value))
+        else:
+            line.append(r'\nc{\%s}{%.2f} %% '% (key,value))
+
+    for l in line:        
+        l = l.replace('\nc','\newcommand')
         f.write(l+'\n')
+
     return line

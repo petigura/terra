@@ -12,8 +12,8 @@ def globcut(elstr,table='mystars'):
     if (elstr == np.array(['O','C'])).any() is False:
         return ''
     
-    locut = -0.2
-    hicut = 0.2
+    locut = -0.3
+    hicut = 0.3
     cut = """
 tab.vsini < %d AND tab.%s_abund > 0  AND 
 tab.%s_scatterlo > %.2f AND tab.%s_scatterhi < %.2f AND 
@@ -21,6 +21,33 @@ tab.teff > %d AND tab.teff < %d""" % (vsinicut,elstr,elstr,locut,elstr,hicut,tef
    
     cut = cut.replace('tab',table)
     return cut
+
+
+def globcut(elstr,table='mystars',uplim=False):    
+    p = getelnum.Getelnum(elstr)
+    vsinicut = p.vsinicut
+    teffrng = p.teffrng
+
+    if (elstr == np.array(['O','C'])).any() is False:
+        return ''
+    
+    locut = -0.3
+    hicut = 0.3
+    cut = """
+tab.vsini < %d AND tab.%s_abund > 0  AND 
+tab.teff > %d AND tab.teff < %d AND""" % (vsinicut,elstr,teffrng[0],teffrng[1])
+
+    if uplim:
+        cut += """
+tab.%s_scatterlo < %.2f OR tab.%s_scatterhi > %.2f"""%(elstr,locut,elstr,hicut)
+    else:
+        cut += """
+tab.%s_scatterlo > %.2f AND tab.%s_scatterhi < %.2f"""%(elstr,locut,elstr,hicut)
+
+    cut = cut.replace('tab',table)
+    return cut
+
+
 
 def tfit(line):
     """
