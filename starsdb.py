@@ -432,6 +432,5 @@ def mkdb():
               )
         
 
-
     session.commit()
     session.close()
