@@ -81,9 +81,8 @@ def readbensby06(file):
     return star,c_abund
 
 class Mystars(Entity):
-    
+    using_options(allowcoloverride=True,tablename=tablename)
     using_table_options(useexisting=True)
-    using_options(allowcoloverride=True,tablename='mystars')
     name = Field(Text)
     oid  = Field(Text)
     pop_flag = Field(Text)
