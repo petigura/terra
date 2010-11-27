@@ -1,30 +1,11 @@
-import readstars
+import matplotlib
 import numpy as np
 import re
-from elixir import *
-import matplotlib
-import fxwid
-import pdb
 import os
+from elixir import *
 
-def res2id(file):
-    """
-    convert simbad query result into list simbad id
-    """
-    f = open(file,'r')
-    lines = f.readlines()
-    idxarr =[]
-    oidarr = []
-
-    for i in np.arange(len(lines)):
-        if re.search('#1',lines[i]) is not None:
-            idx,sep,oid = lines[i].partition('#1: ')
-            idxarr.append(int(idx[idx.rfind('x')+1:]))
-            oidarr.append(int(oid[:-1]))
-
-    idxarr = np.array(idxarr)
-    oidarr = np.array(oidarr)
-    return idxarr,oidarr
+import readstars,fxwid
+from matchstars import res2id
 
 def readluck05(file):
     names,el,abund,err = \
