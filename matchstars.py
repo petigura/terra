@@ -1,12 +1,10 @@
 import numpy as np
+import matplotlib.mlab as mlab
 from string import ascii_letters
 import re
-import postfit
-import readstars
-import matplotlib.mlab as mlab
-import starsdb
-import fxwid
 import os
+
+import starsdb,readstars,fxwid,postfit
 
 def simquery(code):
     """
@@ -18,9 +16,11 @@ def simquery(code):
     """
 
     dir = os.environ['COMP']
-    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
 
     datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat','Bensby05/table9.dat','Luck05/table7.dat']
+
+    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
+
 
 
     for i in range(len(files)):
@@ -71,8 +71,6 @@ def simquery(code):
     f.writelines(simline)
     f.close()
 
-
-
 def names2sim(names,cat=''):
     """
     make simbad script from stars names.
@@ -115,29 +113,3 @@ def res2id(file):
     idxarr = np.array(idxarr)
     oidarr = np.array(oidarr)
     return idxarr,oidarr
-
-def matchstars(file1,names1,file2,names2):
-    idxarr1,oidarr1 = res2id(file1)
-    idxarr2,oidarr2 = res2id(file2)
-
-    intoid = set(oidarr1) & set(oidarr2)
-    comname1 = []
-    comname2 = []
-    comidx1  = []
-    comidx2  = []
-
-    for oid in intoid:
-        #pull index
-        idx1 = idxarr1[np.where(oidarr1 == oid)]
-        idx2 = idxarr2[np.where(oidarr2 == oid)]
-
-        comidx1.append( idx1[0])
-        comidx2.append( idx2[0])
-
-        comname1.append( (names1[idx1])[0]  )
-        comname2.append( (names2[idx2])[0]  )
-
-    return np.array(comidx1),np.array(comname1),np.array(comidx2),np.array(comname2)
-
-
-
