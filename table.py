@@ -7,7 +7,7 @@ from uncertainties import unumpy
 import os
 import postfit
 
-def dump_stars(save=True,texcmd=False):
+def dump_stars(save=True,texcmd=False,ascii=False):
     conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
 
@@ -61,6 +61,12 @@ t1.name
 
     out = np.array(out,dtype=temptype)
     outstr = []
+    asciistr = []
+
+
+    b = '%s %s %s %s %s %s %s %s \n' % ('name','o_abund','o_staterrlo','o_staterrhi','c_abund','c_staterrlo','c_staterrhi','pop_flag')
+    asciistr.append(b)
+
     
     out['o_nfits'][np.where(np.isnan(out['o_nfits']))[0]]  = 0
     out['c_nfits'][np.where(np.isnan(out['c_nfits']))[0]]  = 0
@@ -124,6 +130,8 @@ t1.name
 
         outstr.append(a)
 
+        b = '%s %.2f %.2f %.2f %.2f %.2f %.2f %s \n' % (o['name'],o['o_abund'],o['o_staterrlo'],o['o_staterrhi'],o['c_abund'],o['c_staterrlo'],o['c_staterrhi'],o['pop_flag'])
+        asciistr.append(b)
     
     c2ohist = np.histogram(c2oarr,bins = [0.,p.coThresh,1000.])[0]
     # Total number of c2o measurments
@@ -139,3 +147,5 @@ t1.name
     if save:
         f = open('Thesis/tables/bigtable.tex','w')
         f.writelines(outstr)
+        f2 = open('petigura_marcy_info.ascii','w')
+        f2.writelines(asciistr)
