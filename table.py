@@ -1,22 +1,26 @@
-import sqlite3
 import numpy as np
-import getelnum
-import pdb
-import uncertainties
 from uncertainties import unumpy
-import os
-import postfit
+import sqlite3
+
+import getelnum,postfit
 
 def dump_stars(save=True,texcmd=False,ascii=False):
     conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
 
     elements = ['O','C']
-    cuts={}
-    texdict = {}
+
+    # Initialize empty buckets
+    cuts,texdict,abund,errhi,errlo,abndone,logeps = {},{},{},{},{},{},{}
+    outstr,asciistr = [],[]
+    c2oarr = np.array([])
+
     cuts['C'] = postfit.globcut('C',table='t3')
     cuts['O'] = postfit.globcut('O',table='t2')
 
+    #############################
+    ### Massive sqlite3 Query ###
+    #############################
 
     cmd0 = """
 SELECT
@@ -49,33 +53,33 @@ ORDER BY
 t1.name
 """ % (cuts['C'],cuts['O'],cuts['C'],cuts['O'])
 
+
     temptype = [('name','|S10'),('vmag',float),('d',int),('teff',int),
-                ('logg',float),('pop_flag','|S10'),('monh',float),('ni_abund',float),
-                ('o_nfits',float),('o_abund',float),('o_staterrlo',float),('o_staterrhi',float),
-                ('c_nfits',float),('c_abund',float),('c_staterrlo',float),('c_staterrhi',float),
+                ('logg',float),('pop_flag','|S10'),
+                ('monh',float),('ni_abund',float),
+                ('o_nfits',float),('o_abund',float),
+                ('o_staterrlo',float),('o_staterrhi',float),
+                ('c_nfits',float),('c_abund',float),
+                ('c_staterrlo',float),('c_staterrhi',float),
                 ('exoname','|S10')]
 
-
+    # Dump query results into record array
     cur.execute(cmd0)
-    out = cur.fetchall()#,dtype=temptype)
+    out = np.array(cur.fetchall(),dtype=temptype)
 
-    out = np.array(out,dtype=temptype)
-    outstr = []
-    asciistr = []
-
-
-    b = '%s %s %s %s %s %s %s %s \n' % ('name','o_abund','o_staterrlo','o_staterrhi','c_abund','c_staterrlo','c_staterrhi','pop_flag')
+    # Header for ASCII Table
+    b = '%s %s %s %s %s %s %s %s \n' % \
+        ('name','o_abund','o_staterrlo','o_staterrhi','c_abund',
+         'c_staterrlo','c_staterrhi','pop_flag')
     asciistr.append(b)
-
     
     out['o_nfits'][np.where(np.isnan(out['o_nfits']))[0]]  = 0
     out['c_nfits'][np.where(np.isnan(out['c_nfits']))[0]]  = 0
-    
-    #subtract of solar abundance
-    elements = ['O','C']
-    abund,errhi,errlo,abndone,logeps = {},{},{},{},{}
 
-    c2oarr = np.array([])
+    ################################
+    ### Subtract off solar abundance
+    ################################
+
     for el in elements:
         p = getelnum.Getelnum(el)        
         elo = el.lower()
@@ -85,9 +89,11 @@ t1.name
         errlo[el] = out['%s_staterrhi' % elo]
     
     for i in range(len(out)):
+        o = out[i] # The current element of record array.
+
+        # Parse the C/O Field
         abundarr = np.array([abund['C'][i],abund['O'][i]])
-        
-        if np.isnan(abundarr).any():
+        if np.isnan(abundarr).any():      # Must have O AND C measurements
             c2ostr = '$nan_{nan}^{+nan}$'
         else:
             for el in elements:
@@ -96,14 +102,18 @@ t1.name
                 abndone[el] = unumpy.uarray(([cent,cent],err))
 
             c2o = 10**(abndone['C']-abndone['O'])
-            c2ostr = '$%.2f_{-%.2f}^{+%.2f}$' % (c2o[0].nominal_value,c2o[0].std_dev(),c2o[1].std_dev() )
+            c2ostr = '$%.2f_{-%.2f}^{+%.2f}$' % \
+                (c2o[0].nominal_value,c2o[0].std_dev(),c2o[1].std_dev() )
             c2oarr = np.append(c2oarr,c2o[0].nominal_value)
 
-        o = out[i]
-
+        # Does this star have a planet?
         planetstr = 'no'
         if o['exoname'] != 'None':
             planetstr = 'yes'
+
+        ###################################
+        ### Build LaTeX Formatted Table ###
+        ###################################
 
         #Indentation character
         a = '\\\[0ex] '
@@ -116,30 +126,46 @@ t1.name
         a += '%.2f & %.2f & '%(o['monh'],o['ni_abund'])
         
         #Oxygen
-        a += '%d & $%.2f_{%.2f}^{+%.2f}$ & '%(o['o_nfits'],abund['O'][i],o['o_staterrlo'],o['o_staterrhi'])
+        a += '%d & $%.2f_{%.2f}^{+%.2f}$ & ' \
+            %(o['o_nfits'],abund['O'][i],o['o_staterrlo'],o['o_staterrhi'])
 
         #Carbon
-        a += '%d & $%.2f_{%.2f}^{+%.2f}$ & '%(o['c_nfits'],abund['C'][i],o['c_staterrlo'],o['c_staterrhi'])
+        a += '%d & $%.2f_{%.2f}^{+%.2f}$ & ' \
+            %(o['c_nfits'],abund['C'][i],o['c_staterrlo'],o['c_staterrhi'])
 
-        #The Ratio
+        # C/O
         a += '%s \\\ \n ' % c2ostr
 
+        # Replace Empty Values with \nd
         a = a.replace('$nan_{nan}^{+nan}$',r'\nd')
         a = a.replace('None',r'\nd')
         a = a.replace('nan',r'\nd')
 
         outstr.append(a)
 
-        b = '%s %.2f %.2f %.2f %.2f %.2f %.2f %s \n' % (o['name'],o['o_abund'],o['o_staterrlo'],o['o_staterrhi'],o['c_abund'],o['c_staterrlo'],o['c_staterrhi'],o['pop_flag'])
+        ###################################
+        ### Build ASCII Formatted Table ###
+        ###################################
+
+        b = '%s %.2f %.2f %.2f %.2f %.2f %.2f %s \n' % \
+            (o['name'],o['o_abund'],o['o_staterrlo'],o['o_staterrhi'],
+             o['c_abund'],o['c_staterrlo'],o['c_staterrhi'],o['pop_flag'])
+
         asciistr.append(b)
-    
+
+    ####################################
+    ### Build Dict of TeX Shorthands ###
+    ####################################
+
+    # Information about C/O Measurments
     c2ohist = np.histogram(c2oarr,bins = [0.,p.coThresh,1000.])[0]
-    # Total number of c2o measurments
+    texdict['ncoLtThresh'],texdict['ncoGtThresh'] = tuple(c2ohist)
+    texdict['ncoStarsTot'] = len(c2oarr)
+    texdict['coMin'],texdict['coMax'] = c2oarr.min(),c2oarr.max()
+
+    # Total number of stars/planets in set.
     texdict['nPlanetTot'] = len(np.where(out['exoname'] != 'None')[0])
     texdict['nStarsTot'] = len(out)
-    texdict['ncoStarsTot'] = len(c2oarr)
-    texdict['ncoLtThresh'],texdict['ncoGtThresh'] = tuple(c2ohist)
-    texdict['coMin'],texdict['coMax'] = c2oarr.min(),c2oarr.max()
 
     if texcmd:
         return texdict
