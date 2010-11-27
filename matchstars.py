@@ -22,7 +22,6 @@ def simquery(code):
     files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
 
 
-
     for i in range(len(files)):
         files[i] = dir+files[i]
         datfiles[i] = dir+datfiles[i]
@@ -73,43 +72,89 @@ def simquery(code):
 
 def names2sim(names,cat=''):
     """
-    make simbad script from stars names.
-    
-    implicit_hd kw assumes if the string is just a number it is from the HD
-    catalog.
+    Creates a SIMBAD scripted query from from an of star names.
+
+    cat - SIMBAD must know what catalog the star is from. If names already
+          specify the catalog, we're done.  If not set cat to append the
+          catalog to the names file.
+          
+          HD  - Henry-Draper Catalog
+          HIP - Hiparcos Catalog
+
+    >>> names = np.array(['14412','4915'])
+    >>> sim = names2sim(names,cat='HD')
+
+    To use in a SIMBAD script, one must write to a file
+    --------------File Output--------------
+    result oid
+
+    echodata -n x0
+    query id  14412
+
+    echodata -n x1
+    query id  4915
+    ---------------------------------------
+
+    Future work:
+    Make unit tests.
     """
-    nstars = len(names)
-    simnames  = np.zeros(nstars,dtype='|S20')
-    simline =  np.zeros(nstars+1,dtype='|S50')
-    simline[0] = 'result oid\n'
 
-    for i in np.arange(nstars):
+    query   = np.array([],dtype='|S50')
+
+    #Add whitespace between catalog and star name
+    if cat is not '':
+        cat += ' '
+
+    #First line of query - specifies we want oid output
+    query = np.append(query,'result oid\n')
+
+    for i in np.arange( len(names) ):
         name = names[i]
-        if re.search(name[0],ascii_letters) is None:
-            simnames[i] = cat+' '+name
-        else:
-            simnames[i] = name
+        name = cat+name
 
-        placeholder = 'x'+str(i)+'\n'
-        simline[i+1] = 'echodata -n '+placeholder+'query id '+simnames[i]+'\n'
+        # Two lines of SIMBAD script per star.  The 'x' is a necessary
+        # placehold for subsequent parsing
+        queryline = 'echodata -n x%i\nquery id %s\n' % (i,name)
+        query = np.append(query,queryline) 
 
-    return simline
+    return query
 
 def res2id(file):
     """
-    convert simbad query result into list simbad id
+    Parses SIMBAD query results into matched pairs of (idx,oid)
+
+    Query Results have this form:
+    
+    :: Header :::::::
+    script snipet
+    console
+    error messages
+
+    :: data :::::::::
+
+    x0#1: 1356191
+    x1#1: 1225912
+    x2#1: 759900
+    x3#1: 936604
+
+    res2id chops off the header and returns    
+    0, 1356191
+    1, 1225912
+    2, 759900
+    3, 936604
+
+    Future Work:
+    Create unit test.
     """
+
+    idxarr,oidarr = np.array([]),np.array([])
+
     f = open(file,'r')
     lines = f.readlines()
-    idxarr =[]
-    oidarr = []
-
     for i in np.arange(len(lines)):
         if re.search('#1',lines[i]) is not None:
             idx,sep,oid = lines[i].partition('#1: ')
-            idxarr.append(int(idx[idx.rfind('x')+1:]))
-            oidarr.append(int(oid[:-1]))
+            idxarr = np.append(idxarr,int(idx[idx.rfind('x')+1:]))
+            oidarr = np.append(oidarr,int(oid[:-1]))
 
-    idxarr = np.array(idxarr)
-    oidarr = np.array(oidarr)
     return idxarr,oidarr
