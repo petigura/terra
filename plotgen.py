@@ -1,26 +1,24 @@
-import readstars,postfit,matchstars,starsdb,getelnum,flt2tex
-import scipy
-import scipy.stats as stats
+from scipy import  stats
 from scipy.optimize import leastsq
 import numpy as np
 import matplotlib.pyplot as plt
-import sqlite3
-import pdb
-import uncertainties
-from uncertainties import unumpy
-from plotplus import mergeAxes,errpt
 import os
 
-class Plotgen():
+import sqlite3
+from uncertainties import unumpy
 
+import readstars,postfit,matchstars,starsdb,getelnum,flt2tex
+from plotplus import mergeAxes,errpt,appendAxes
+
+class Plotgen():
     def __init__(self):
     ###Pull up database.
         self.conn = sqlite3.connect(os.environ['STARSDB'])
         self.cur = self.conn.cursor()    
-        elements = ['O','C']    
+        self.params = getelnum.Getelnum('')
         self.stats = {}
 
-        for elstr in elements:
+        for elstr in self.params.elements:
             cmd = '''
 SELECT %s_abund,%s_staterrlo,%s_staterrhi 
 FROM mystars 
@@ -43,24 +41,18 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         line = [6300,6587]
         nel = len(line)
         f = plt.figure( figsize=(6,6) )
-        f.subplots_adjust(hspace=0.0001)
 
         ax = []
         for i in range(nel):
             p = getelnum.Getelnum(line[i])           
-            elstr = p.elstr.upper()
-
-            if i is 0:
-                ax.append(plt.subplot(nel,1,i+1))
-            else:
-                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
+            ax = appendAxes(ax,nel,i)
                 
             fitabund, fitpar, t,abund = postfit.tfit(line[i])    
             if fitres:
                 abund = fitabund
 
             tarr = np.linspace(t.min(),t.max(),100)        
-            ax[i].set_ylabel('[%s/H]' % elstr)
+
             ax[i].scatter(t,abund,color='black',s=10)
             ax[i].scatter(p.teff_sol,0.,color='red',s=30)
             ax[i].plot(tarr,np.polyval(fitpar,tarr),lw=2,color='red')        
@@ -69,16 +61,11 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
             yerr = yerr.reshape((2,1))
 
             ax[i] = errpt(ax[i],(0.9,0.9),xerr=p.tefferr,yerr=yerr)
-            ax[i].set_ylabel('['+elstr+'/H]')
 
-            if i is nel-1:
-                ax[i].set_xlabel('$\mathbf{ T_{eff} }$')
-            else:
-                ax[i].set_xticklabels('',visible=False)
-                #remove overlapping zeroes
-                yticks = ax[i].get_yticks()[1:]
-                ax[i].set_yticks(yticks)
+            ax[i].set_ylabel('[%s/H]' % elstr)
+            ax[i].set_xlabel('$\mathbf{ T_{eff} }$')
 
+        f  = mergeAxes(f)
         if save:
             plt.savefig('Thesis/pyplots/teff.ps')
 
@@ -90,13 +77,10 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         noratio - Plot [X/H] against [Fe/H]
         """
         #pull in fitted abundances from tfit
-        lines = [6300,6587]
-        nel = len(lines)
         flags  = ['dn','dk']
 
-        binmin = -0.5
-        binwid = 0.1
-        nbins = 11
+        binmin,binwid,nbins = -0.5,0.1,11
+
         qtype= [('abund',float),('feh',float),('staterrlo',float),
                 ('staterrhi',float),('pop_flag','|S10')]    
         
@@ -105,16 +89,12 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
 
-        f.subplots_adjust(hspace=0.0001)
         ax = []
-
+        nel = self.params.nel
+        lines = self.params.lines
 
         for i in range(nel):
-            if i is 0:
-                ax.append(plt.subplot(nel,1,i+1))
-            else:
-                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
-
+            ax = appendAxes(ax,nel,i)
 
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
@@ -177,17 +157,12 @@ WHERE  %s AND pop_flag = "%s"
                 yerr = np.sqrt(yerr**2 + p.feherr**2)
             yerr = yerr.reshape((2,1))
 
-            ax[i] = errpt(ax[i],(0.9,0.9),xerr=p.feherr,yerr=yerr)
+            ax[i] = errpt(ax[i],(0.8,0.8),xerr=p.feherr,yerr=yerr)
+            ax[i].set_xlabel('[Fe/H]')                
 
-            if i is nel-1:
-                ax[i].set_xlabel('[Fe/H]')                
-            else:
-                ax[i].set_xticklabels('',visible=False)
-                #remove overlapping zeroes
-                yticks = ax[i].get_yticks()[2:] #hack
-                ax[i].set_yticks(yticks)
-            
         leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
+
+        f = mergeAxes(f)
         if save:
             plt.savefig('Thesis/pyplots/%s.ps' % savename)
 
@@ -200,40 +175,28 @@ WHERE  %s AND pop_flag = "%s"
         texcmd - returns what the tex command dumper wants
 
         """
-        #pull in fitted abundances from tfit
+        ax,nstars,outex = [],[],[]
 
-        line = [6300,6587]
+        lines = self.params.lines
+        nel = self.params.nel
 
-        subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
 
-        f.subplots_adjust(hspace=0.0001)
-        ax1 = plt.subplot(211)
-        ax1.set_xticklabels('',visible=False)
-        ax1.set_yticks(np.arange(0,200,50))
-
-        ax2 = plt.subplot(212,sharex=ax1)
-        ax2.set_yticks(np.arange(0,200,50))
-        ax2.set_xlabel('[X/H]')
-        ax = (ax1,ax2)
-        nstars  = []
-        outex = []
-
-        for i in range(2):
-            p = getelnum.Getelnum(line[i])           
+        for i in range(nel):
+            p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
-            
+
+            ax = appendAxes(ax,nel,i)
+
             cut = postfit.globcut(elstr,uplim=uplim)
             cmd = 'SELECT %s_abund from MYSTARS WHERE %s'% (elstr,cut)
             self.cur.execute(cmd)
-
 
             out = self.cur.fetchall()
             abund = np.array(out,dtype=float).flatten()-p.abnd_sol
 
             ax[i].set_ylabel('Number of Stars')
             ax[i].hist(abund,range=(-1,1),bins=20,fc='gray')
-            ax[i].set_ylim(0,200)
 
             #Annotate to show which lable we're on
             antxt = '[%s/H]' % elstr
@@ -253,8 +216,8 @@ WHERE  %s AND pop_flag = "%s"
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
                 
 
-        import pdb
-        pdb.set_trace()
+        f = mergeAxes(f)
+
         if texcmd:
             return nstars
         if save:
@@ -267,99 +230,79 @@ WHERE  %s AND pop_flag = "%s"
         Plots my results as a function of literature
         save - saves the file
         """
+        ax = []
+        texdict = { 'nComp':{},'StdComp':{} }
 
-        tables = [['ben05'],['luckstars']]
-        offset = [[0],[8.5]]
-        literr = [[0.06],[0.1]]
-
-        lines = [6300,6587]
-        color = ['blue','red','green']
-
+        lines = self.params.lines
+        nel   = self.params.nel
 
         f = plt.figure( figsize=(6,8) )
-        ax1 = plt.subplot(211)
-        ax2 = plt.subplot(212)
-        ax1.set_xlabel('[O/H], Bensby 2005')
-        ax2.set_xlabel('[C/H], Luck 2006')
 
-        ax1.set_ylabel('[O/H], This Work')
-        ax2.set_ylabel('[C/H], This Work')
-        ax = [ax1,ax2]
-        ncomp = []
-        stdcomp = []
-
-        for i in [0,1]:        
-            xtot =[] #total array of comparison studies
-            ytot =[] #total array of comparison studies
-
+        for i in range(nel):        
             p = getelnum.Getelnum(lines[i])
             elstr = p.elstr
-            abnd_sol = p.abnd_sol
 
-            print abnd_sol
-            for j in range(len(tables[i])):
-                table = tables[i][j]            
+            table = p.comptable
 
-                #SELECT
-                cmd = """
+            if table is 'luckstars':
+                xfield = ',%s.c_staterr ' % table
+                xcut   = ' AND %s.c_staterr < 0.3' % table
+            else:
+                xcut,xfield = '',''
+
+            cmd = """
 SELECT DISTINCT 
-mystars.%s_abund,mystars.%s_staterrlo,
-mystars.%s_staterrhi,%s.%s_abund """ % (elstr,elstr,elstr,table,elstr)
+mystars.elstr_abund, mystars.elstr_staterrlo, mystars.elstr_staterrhi,
+table.elstr_abund %s 
+FROM 
+mystars,table 
+WHERE 
+mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s 
+""" % (xfield,postfit.globcut(elstr),xcut)
+            
+            cmd = cmd.replace('table',table)
+            cmd = cmd.replace('elstr',elstr)
+            print cmd
 
-                if table is 'luckstars':
-                    cmd += ','+table+'.c_staterr '
+            self.cur.execute(cmd)
+            arr = np.array(self.cur.fetchall())
 
-                #FROM WHERE
-                cmd +=""" 
-FROM mystars,%s WHERE mystars.oid = %s.oid 
-AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcut(elstr))
-                if table is 'luckstars':
-                    cmd = cmd+' AND '+table+'.c_staterr < 0.3'
+            x = arr[:,3] - p.compoffset
+            y = arr[:,0] - p.abnd_sol
 
-                self.cur.execute(cmd)
-                arr = np.array(self.cur.fetchall())
-                x = arr[:,3] - offset[i][j]
-                y = arr[:,0] -abnd_sol
+            # Save moments into TeX shorthands
+            texdict['StdComp'][elstr] = np.std(x-y)
+            texdict['nComp'][elstr] = len(x)
 
-                ###pull literature errors###
-                if table is 'ben05':
-                    xerr = np.zeros( (2,len(x)) ) + 0.06
-                if table is 'luckstars':
-                    xerr = arr[:,4].tolist()
-                    xerr = np.array([xerr,xerr])            
+            ###pull literature errors###
+            if table is 'ben05':
+                xerr = np.zeros( (2,len(x)) ) + p.comperr
+            if table is 'luckstars':
+                xerr = arr[:,4].tolist()
+                xerr = np.array([xerr,xerr])            
 
-                yerr = np.abs(arr[:,1:3])
-                print cmd
-                n = len(x)
-                ncomp.append(n)
-                print str(n) + 'comparisons'
+            yerr = np.abs(arr[:,1:3])
 
-                ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),color=color[j],
-                               marker='o',ls='None',capsize=0,markersize=5)
-                xtot.append( x.tolist() )
-                ytot.append( y.tolist() )            
+            # Plot the comparison
+            ax.append(plt.subplot(nel,1,i+1))
+            ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),
+                           marker='o',ls='None',capsize=0,markersize=5)
 
-            line = np.linspace(-3,3,10)
-
-            xtot=np.array(xtot)        
-            ytot=np.array(ytot)
-            symerr = (yerr[:,0]+yerr[:,1])/2.
-
+            line = np.linspace(-3,3,10) # Plot 1:1 Correlation
             ax[i].plot(line,line)
+
+            # Label and format plots
+            ax[i].set_xlabel('[%s/H], %s' % (elstr,p.compref))
+            ax[i].set_ylabel('[%s/H], This Work' % (elstr) )
             ax[i].set_xlim((-0.6,+0.6))
             ax[i].set_ylim((-0.6,+0.6))
-
-            S = np.std(xtot[0]-ytot[0])
-            print S
-            stdcomp.append(S)
-
+            
         plt.draw()
         if texcmd:
-            return ncomp,stdcomp
+            return texdict
 
         if save:
             plt.savefig('Thesis/pyplots/comp.ps')
-
 
     def exo(self,save=False,prob=True,texcmd=False):
         """
@@ -368,21 +311,15 @@ AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcu
         """
         f = plt.figure( figsize=(6,8) )
 
-        f.subplots_adjust(hspace=0.0001)
-        ax1 = plt.subplot(211)
-
         elements = ['O','C','Fe']
         nel = len(elements)
         sol_abnd = [8.7,8.5,0]
 
-        ax = []  #empty list to store axes
-        outex = []
+        ax,outex = [],[]  #empty list to store axes
+
         statdict = { 'host':{},'comp':{} }
         for i in range(nel): #loop over the different elements
-            if i is 0:
-                ax.append(plt.subplot(nel,1,i+1))
-            else:
-                ax.append(plt.subplot(nel,1,i+1,sharex=ax[0]))
+            ax = appendAxes(ax,nel,i)
 
             elstr = elements[i]
             if elstr is 'Fe':
@@ -432,27 +369,17 @@ AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcu
                            label=['Comparison','Planet Hosts'])
                 ax[i].legend(loc='upper left')
 
-            if i is nel-1:
-                ax[i].set_xlabel('[X/H]')
-                ax[i].set_ylabel('% Stars with Planets')
-            else:
-                ax[i].set_xlabel('['+elstr+'/H]')
-                ax[i].set_xticklabels('',visible=False)
-                #remove overlapping zeroes
-                yticks = ax[i].get_yticks()[1:]
-                ax[i].set_yticks(yticks)
-
+            ax[i].set_xlabel('[X/H]')
+            ax[i].set_ylabel('% Stars with Planets')
 
             #Annotate to show which lable we're on
             inv = ax[i].transData.inverted()
             txtpt = inv.transform( ax[i].transAxes.transform( (0.05,0.85) ) )
             ax[i].annotate('[%s/H]' % elstr,txtpt)
 
-
             ######## Compute KS - statistic or probablity #########
             mhost,shost,mcomp,scomp = np.mean(arrhost),np.std(arrhost),\
                 np.mean(arrcomp),np.std(arrcomp)
-
             D,p = stats.ks_2samp(arrhost,arrcomp)
 
             if save:
@@ -460,16 +387,16 @@ AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcu
                 outex.append(r'$\text{[%s/H]}$ & %i & %.2f & %.2f & & %i & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,flt2tex.flt2tex(p,sigfig=1) ) )
 
             else:
-                print elstr+' in stars w/  planets: N = %i Mean = %f Std %f ' \
-                    % (nhost,mhost,shost)
-                print elstr+' in stars w/o planets: N = %i Mean = %f Std %f ' \
-                    % (ncomp,mcomp,scomp)
-                print 'KS Test: D = %f  p = %f ' % (D,p)
-
+                print """
+%s in stars w/  planets: N = %i Mean = %f Std %f 
+%s in stars w/o planets: N = %i Mean = %f Std %f
+KS Test: D = %f  p = %f
+""" % (elstr,nhost,mhost,shost,elstr,ncomp,mcomp,scomp,D,p)
 
                 statdict['host'][elstr] = {'n':nhost,'m':mhost,'s':shost}
                 statdict['comp'][elstr] = {'n':ncomp,'m':mcomp,'s':scomp}
 
+        f = mergeAxes(f)
 
         plt.draw()
         if save:
@@ -570,7 +497,3 @@ AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcu
 
         plt.draw()
         self.conn.close()
-
-
-
-
