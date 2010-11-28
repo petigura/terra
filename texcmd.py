@@ -1,26 +1,25 @@
-import table
 import numpy as np
-import sqlite3
-import plotgen
-import postfit
-import getelnum
 import os
+
+import table,plotgen,postfit,getelnum
 
 def dump(file='Thesis/texcmd.tex'):
     """
     Dumps the short hands used in the latex paper.
     """
 
-    conn = sqlite3.connect(os.environ['STARSDB'])
-    cur = conn.cursor()
-    lines = [6300,6587]
-    el    = ['O','C']
+    plotter = plotgen.Plotgen()
+    cur = plotter.cur
+
+    params = getelnum.Getelnum('')
+    lines = params.lines
+    el    = params.elements
+
     f = open(file,'w')
     line = []
 
-    plotter = plotgen.Plotgen()
-    ncomp,stdcomp = plotter.comp(texcmd=True)
-    nstars= plotter.abundhist(texcmd=True)
+
+    nstars = plotter.abundhist(texcmd=True)
 
     #number of different disk populations
 
@@ -58,8 +57,7 @@ AND
         maxTcorr = max(np.abs(fitabund-abund))
 
         line.append(r'\nc{\maxT%s}{%.2f} %% max temp correction %s' % (el[i],maxTcorr,el[i]))
-        line.append(r'\nc{\nComp%s}{%i} %% # of comparison stars %s' % (el[i],ncomp[i],el[i]))
-        line.append(r'\nc{\StdComp%s}{%.2f} %% std of comparison stars %s' % (el[i],stdcomp[i],el[i]))
+
         line.append(r'\nc{\nStars%s}{%i} %% Number of stars with %s analysis' % (el[i],nstars[i],el[i]))
         
 
@@ -68,7 +66,19 @@ AND
     line.append(r'\nc{\scatterCut}{%.2f} %% Cut on the scatter' % (p.scattercut))
     line.append(r'\nc{\teffSol}{%i} %% Solar Effective Temp' % (p.teff_sol))
 
+    compdict = plotter.comp(texcmd=True)
 
+
+    # Add in keywords from comparison study
+    for moment in compdict.keys():
+        for elstr in compdict[moment].keys():
+            value = compdict[moment][elstr]
+            if moment[0] is 'n':
+                line.append(r'\nc{\%s%s}{%i}   ' % (moment,elstr,value) )
+            else:
+                line.append(r'\nc{\%s%s}{%.2f} ' % (moment,elstr,value) )
+
+    # Add in keywords from exoplanet study
     statdict = plotter.exo(texcmd=True)
     for pop in statdict.keys():
         for elstr in statdict[pop].keys():
@@ -81,7 +91,7 @@ AND
                     line.append(r'\nc{\%s%s%s}{%.2f} %% %s - %s - %s'% 
                                 (pop,elstr,moment,value,pop,elstr,moment))
 
-
+    # Add in keywords from table generation
     statdict = table.dump_stars(texcmd=True)
     for key in statdict.keys():
         value = statdict[key]
