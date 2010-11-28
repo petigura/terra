@@ -1,6 +1,7 @@
 import numpy as np
 from uncertainties import unumpy
 import sqlite3
+import os
 
 import getelnum,postfit
 

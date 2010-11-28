@@ -9,7 +9,7 @@ import starsdb,readstars,fxwid,postfit
 def simquery(code):
     """
     Generates scripted queries to SIMBAD database.  Must rerun anytime the
-    ORDER of the structure changes.
+    ORDER of the initial stars structure changes.
 
     Future work:
     Automate the calls to SIMBAD.
