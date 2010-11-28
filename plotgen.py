@@ -8,6 +8,7 @@ import sqlite3
 import pdb
 import uncertainties
 from uncertainties import unumpy
+from plotplus import mergeAxes,errpt
 import os
 
 class Plotgen():
@@ -20,30 +21,18 @@ class Plotgen():
         self.stats = {}
 
         for elstr in elements:
-            cmd = 'SELECT %s_abund,%s_staterrlo,%s_staterrhi FROM mystars '\
-                % (elstr,elstr,elstr)
-            wcmd = ' WHERE '+postfit.globcut(elstr)
-            self.cur.execute(cmd+wcmd)
+            cmd = '''
+SELECT %s_abund,%s_staterrlo,%s_staterrhi 
+FROM mystars 
+WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
+            self.cur.execute(cmd)
 
+            # Dump SQLite3 output into recordarray 
             temptype =[('abund',float),('staterrlo',float),('staterrhi',float)]
             arr = np.array(self.cur.fetchall(),dtype=temptype)
+
             m,slo,shi = np.mean(arr['abund']),np.abs(np.median(arr['staterrlo'])),np.median(arr['staterrhi'])                
             self.stats[elstr] = unumpy.uarray(([m,m],[slo,shi])) 
-
-
-    def errpt(self,ax,coord,xerr=None,yerr=None):
-        """
-        Plot a point that shows an error 
-        ax - axis object to manipulate and return
-        coord - the coordinates of error point (in device coordinates)
-        """
-        inv = ax.transData.inverted()
-        pt = inv.transform( ax.transAxes.transform( coord ) )
-        ax.errorbar(pt[0],pt[1],xerr=xerr,yerr=yerr,
-                    capsize=0,
-                    color='red',
-                    elinewidth = 2)
-        return ax
    
     def tfit(self,save=False,fitres=False):
         """
@@ -79,7 +68,7 @@ class Plotgen():
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
             yerr = yerr.reshape((2,1))
 
-            ax[i] = self.errpt(ax[i],(0.9,0.9),xerr=p.tefferr,yerr=yerr)
+            ax[i] = errpt(ax[i],(0.9,0.9),xerr=p.tefferr,yerr=yerr)
             ax[i].set_ylabel('['+elstr+'/H]')
 
             if i is nel-1:
@@ -96,12 +85,11 @@ class Plotgen():
 
     def feh(self,save=False,noratio=False):
         """
-        Show the trends of X/Fe as a function of Fe/H.
-        save - saves the file
-        noratio - plots X/H as opposed to X/Fe
+        Plot  [X/Fe] against [Fe/H]
+        save    - saves the file
+        noratio - Plot [X/H] against [Fe/H]
         """
         #pull in fitted abundances from tfit
-
         lines = [6300,6587]
         nel = len(lines)
         flags  = ['dn','dk']
@@ -130,20 +118,25 @@ class Plotgen():
 
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
-            cmd = 'SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag FROM mystars ' % (elstr,elstr,elstr)
-            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND pop_flag = "dn"'
-            self.cur.execute(cmd+wcmd)
+            cmd = '''
+SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag 
+FROM mystars
+WHERE %s  AND pop_flag = "%s" 
+''' % (elstr,elstr,elstr,postfit.globcut(elstr),'dn')
+            self.cur.execute(cmd)
             arrthin = np.array(self.cur.fetchall(),dtype=qtype)
             
             arrthin['abund'] -= p.abnd_sol
 
-            wcmd = ' WHERE '+postfit.globcut(elstr)+' AND pop_flag = "dk"'
-            self.cur.execute(cmd+wcmd)
+            cmd = '''
+SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag 
+FROM mystars
+WHERE  %s AND pop_flag = "%s" 
+''' % (elstr,elstr,elstr,postfit.globcut(elstr),'dk')
+            self.cur.execute(cmd)
 
-            arrthick = np.array(self.cur.fetchall(),
-                           dtype=qtype)
+            arrthick = np.array(self.cur.fetchall(),dtype=qtype)
             arrthick['abund'] -= p.abnd_sol
-
                                 
             if noratio:
                 ythin = arrthin['abund']
@@ -172,8 +165,6 @@ class Plotgen():
 
                 print 'Bin %.2f: n = %i, stdpull =  %.2f ' % (midbin,nbin,np.std(pull))
 
-
-
                 
             binx,biny = np.array(binx),np.array(biny)            
             ax[i].plot(arrthin['feh'],ythin,'bo')
@@ -186,8 +177,7 @@ class Plotgen():
                 yerr = np.sqrt(yerr**2 + p.feherr**2)
             yerr = yerr.reshape((2,1))
 
-
-            ax[i] = self.errpt(ax[i],(0.9,0.9),xerr=p.feherr,yerr=yerr)
+            ax[i] = errpt(ax[i],(0.9,0.9),xerr=p.feherr,yerr=yerr)
 
             if i is nel-1:
                 ax[i].set_xlabel('[Fe/H]')                
@@ -262,6 +252,9 @@ class Plotgen():
                 print 'N, mean, std, min, max' + antxt
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
                 
+
+        import pdb
+        pdb.set_trace()
         if texcmd:
             return nstars
         if save:
@@ -312,6 +305,7 @@ class Plotgen():
 SELECT DISTINCT 
 mystars.%s_abund,mystars.%s_staterrlo,
 mystars.%s_staterrhi,%s.%s_abund """ % (elstr,elstr,elstr,table,elstr)
+
                 if table is 'luckstars':
                     cmd += ','+table+'.c_staterr '
 
@@ -529,7 +523,7 @@ AND %s.%s_abund IS NOT NULL AND %s"""  % (table,table,table,elstr,postfit.globcu
         c2o = 10**(self.stats['C']-self.stats['O'])
         yerr = np.array([s.std_dev() for s in c2o]).reshape((2,1))
 
-        ax = self.errpt(ax,(0.1,0.7),xerr=p.feherr,yerr=yerr)
+        ax = errpt(ax,(0.1,0.7),xerr=p.feherr,yerr=yerr)
 
         ax.set_ybound(0,ax.get_ylim()[1])
         ax.axhline(1.)
