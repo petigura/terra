@@ -1,6 +1,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+def appendAxes(axlist,nplots,plotidx):
+    """
+    Append axes to a list.  Share with the first axes.
+    axlist  - list of axis objects
+    nplots  - total number of plots
+    plotidx - which plot are we on?
+    """
+    
+    if plotidx is 0:
+        axlist.append( plt.subplot(nplots,1,plotidx+1) )
+    else:
+        axlist.append( plt.subplot(nplots,1,plotidx+1,sharex=axlist[0]) )
+
+    return axlist
+
 def mergeAxes(figure):
     """
     A simple function which merges the x-axes of a figure.
@@ -10,12 +25,17 @@ def mergeAxes(figure):
     nax = len(axlist)
 
     for i in np.arange(nax):
-    #special treatment for last axis
+        # Special treatment for last axis
+
         if i != nax-1 :
             axlist[i].set_xticklabels('',visible=False)
             yticks = axlist[i].get_yticks()[1:]
             axlist[i].set_yticks(yticks)
             axlist[i].set_xlabel('')
+
+            # Don't plot duplicate y axes
+            if axlist[i].get_ylabel() == axlist[nax-1].get_ylabel():
+                axlist[i].set_ylabel('')
 
     return figure
 
@@ -34,6 +54,7 @@ def mergeAxesTest():
         ax.append( plt.subplot(nplots,1,i+1) )
         ax[i].scatter(x,y)
         ax[i].set_xlabel('test')
+        ax[i].set_ylabel('test y')
 
     f = mergeAxes(f)
     plt.show()
