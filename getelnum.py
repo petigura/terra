@@ -8,6 +8,10 @@ class Getelnum:
         self.scattercut = 0.3       # Cut on the scatter of derived fits
         self.coThresh = 1  #theshold (high) value of C/O
 
+        self.lines = [6300,6587]
+        self.elements = ['O','C']
+        self.nel = len(self.lines) 
+
         # Parameters specific to Oxygen line
         if line == 6300 or line == 'O':
             # Line IDs
@@ -21,22 +25,13 @@ class Getelnum:
             self.vsinicut = 7          # Permitted range of Teff
 
             # Comparison Info
-            self.abnd_sol_luck = 8.75
-            self.err_luck = 0.05
-
-            # Plotting & Preprocessing parameters (might be unessasary)
-            self.wran = [6295,6305]
-            self.sran = [6299.3,6301.]
-            self.yrg  = [.9,1.02]
-            self.sampxr = [6299.9,6300.6]
-            self.chip = 'r'
-            self.boolidiv = 1
-            self.booltell = 1
-            self.ord = 14
-            self.chirng = [6300.000,6300.600]
+            self.comptable  = 'ben05'
+            self.compoffset = 0.
+            self.compref    = 'Bensby 2005'
+            self.comperr    = 0.06   
 
         # Parameters specific to Carbon line
-        if line == 6587 or line == 'C':
+        elif line == 6587 or line == 'C':
             # Line IDs
             self.elnum = 6
             self.line  = 6587
@@ -48,25 +43,19 @@ class Getelnum:
             self.teffrng = [5300,6500] # Permitted range of Teff
 
             # Comparison Data
-            self.abnd_sol_luck = 8.54
-            self.err_luck = 0.05
+            self.comptable   = 'luckstars'
+            self.compoffset  = 8.5
+            self.compref     = 'Luck 2006'
+            self.comperr     = 0.1
 
-            # Plotting & Preprocessing parameters (might be unessasary)
-            self.wran = [6584,6591]
-            self.sran = [6587.2,6588]
-            self.chirng = [6587.4,6587.8]
-            self.yrg  = [.9,1.02]
-            self.sampxr = [6587.2,6588.]            
-            self.chip = 'i'
-            self.boolidiv = 0
-            self.booltell = 0
-            self.ord = 0
-            self.tellrng = [6587.4,6587.8]
-            
-        # Field IDs
-        lowelstr = self.elstr.lower()
-        self.abundfield = lowelstr+'_abund'
-        self.staterrfield = lowelstr+'_staterr'
+        else:
+            self.elstr =  None
+
+        if self.elstr is not None:
+            # Field IDs
+            lowelstr = self.elstr.lower()
+            self.abundfield = lowelstr+'_abund'
+            self.staterrfield = lowelstr+'_staterr'
 
 
 
