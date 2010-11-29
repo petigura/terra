@@ -38,16 +38,18 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         save - saves the plot
         fitres - plots the residuals
         """
-        line = [6300,6587]
-        nel = len(line)
+        nel = self.params.nel
+        lines = self.params.lines
+
         f = plt.figure( figsize=(6,6) )
 
         ax = []
         for i in range(nel):
-            p = getelnum.Getelnum(line[i])           
+            p = getelnum.Getelnum(lines[i])           
+            elstr = p.elstr
             ax = appendAxes(ax,nel,i)
                 
-            fitabund, fitpar, t,abund = postfit.tfit(line[i])    
+            fitabund, fitpar, t,abund = postfit.tfit(lines[i])    
             if fitres:
                 abund = fitabund
 

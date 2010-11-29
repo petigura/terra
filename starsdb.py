@@ -1,9 +1,5 @@
 # To do Monday ...
-# Transfer over the star table function
-# Replace the class definitions with calls to star_table
-# See if the OID logic can be tightened (put in its own function)
-# Define an exoplanet object
-# Make sure the throughly test the pipeline 
+# luck staterr is not making it through
 
 import matplotlib
 import numpy as np
@@ -91,6 +87,8 @@ def star_table(tabname,metadata):
                     Column('ni_abund',Float(precision=4) ),
 
                     ####### Fields Specific To Both Elements #######
+                    Column('o_nfits',Float(precision=4) ),
+                    Column('c_nfits',Float(precision=4) ),
 
                     Column('o_abund_nt',Float(precision=4) ),
                     Column('c_abund_nt',Float(precision=4) ),
@@ -100,35 +98,36 @@ def star_table(tabname,metadata):
 
                     Column('o_staterrlo',Float(precision=4) ),
                     Column('o_staterrhi',Float(precision=4) ),
-
                     Column('c_staterrlo',Float(precision=4) ),
                     Column('c_staterrhi',Float(precision=4) ),
 
                     Column('o_scatterlo',Float(precision=4) ),
                     Column('o_scatterhi',Float(precision=4) ),
-
                     Column('c_scatterlo',Float(precision=4) ),
                     Column('c_scatterhi',Float(precision=4) ),
 
+                    # Symetric Error Fields
+                    Column('o_staterr',Float(precision=4) ),
+                    Column('c_staterr',Float(precision=4) ),
 
                     ####### Fields Specific To Both Elements #######
 
                     Column('o_nierrlo',Float(precision=4) ),
                     Column('o_nierrhi',Float(precision=4) ),
-                
+                    useexisting=True                
                     )
     return alchobj
 
 def exo_table(tabname,metadata):
     alchobj = Table(tabname,metadata,
                     Column('id',Integer,primary_key=True),
-
                     Column('name',String(20)),
                     Column('oid',Integer),
                     Column('msini',Float(precision=4) ),
                     Column('ecc',Float(precision=4) ),
                     Column('a',Float(precision=4) ),
                     Column('per',Float(precision=4) ),
+                    useexisting=True
                     )
     return alchobj
 
@@ -142,16 +141,17 @@ def fmtoid(idxarr,oidarr,i):
         return None
 
 def mkdb():
-#    metadata.bind.echo = True
-    engine = create_engine("sqlite:///"+os.environ['STARSDB'],echo=True)
+    engine = create_engine("sqlite:///"+os.environ['STARSDB'],echo=False)
     metadata = MetaData(bind=engine)
-    
 
     # if the file already exists destroy it
     if os.path.exists(os.environ['STARSDB']):
         os.system('rm '+os.environ['STARSDB'])
 
     # Declare tables.
+    Mystars = star_table('mystars',metadata)
+    Exo = star_table('exo',metadata)
+
     Luckstars = star_table('luckstars',metadata)
     Ramstars =  star_table('ramstars',metadata)
     Ben04 =  star_table('ben04',metadata)
@@ -167,10 +167,6 @@ def mkdb():
     #### Add in mydata ####
     stars = readstars.ReadStars(os.environ['PYSTARS'])
     idxarr,oidarr = res2id('Comparison/myresults.sim')
-
-
-
-
     for i in range(len(stars.name)):        
         ins = Mystars.insert()
         oid = fmtoid(idxarr,oidarr,i)
@@ -188,7 +184,6 @@ def mkdb():
                           d = 1/stars.prlx[i],
                           logg = round(stars.logg[i],3),
                           monh = round(stars.monh[i],3),
-
 
                           o_nfits = float(stars.o_nfits[i]),
                           c_nfits = float(stars.c_nfits[i]),
@@ -244,42 +239,40 @@ def mkdb():
                           c_abund = round(cavg,3),
                           c_staterr = round(cstd,3)
                           )
+        conn.execute(star)
 
     #### Add in Exo Data ####
     idxarr,oidarr = res2id('Comparison/exoresults.sim')
     rec = matplotlib.mlab.csv2rec('Comparison/exoplanets-org.csv')
     for i in range(len(rec['star'])):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
+        oid = fmtoid(idxarr,oidarr,i)
 
-        else:
-            oid = None
-
-        Exo(name=rec['star'][i],
-            oid = oid,
-            msini = round(rec['msini'][i],3),
-            ecc   = round(rec['ecc'][i],3),
-            a     = round(rec['a'][i],3),
-            per   = round(rec['per'][i],3)
-            )            
-
+        ins = Exo.insert()
+        exo = ins.values(name=rec['star'][i],
+                         oid = oid,
+                         msini = round(rec['msini'][i],3),
+                         ecc   = round(rec['ecc'][i],3),
+                         a     = round(rec['a'][i],3),
+                         per   = round(rec['per'][i],3)
+                         )            
+        conn.execute(exo)
 
     #### Add in Ramirez Data ####
     idxarr,oidarr = res2id('Comparison/Ramirez07/ramirezresults.sim')
     names,teff,o,o_err = readramirez('Comparison/Ramirez07/ramirez.dat')
 
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
+        oid = fmtoid(idxarr,oidarr,i)
 
-        Ramstars(name=names[i],
-                  oid = oid,
-                  teff = round(teff[i],0),
-                  o_abund = round(o[i],3),
-                  o_err = round(o_err[i],3)
-                  )
+        ins = Ramstars.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          teff = round(teff[i],0),
+                          o_abund = round(o[i],3),
+                          o_err = round(o_err[i],3)
+                          )
+        conn.execute(star)
+
 
     #### Add in Bensby Data ####
     idxarr,oidarr = res2id('Comparison/Bensby04/bensby04results.sim')
@@ -290,30 +283,29 @@ def mkdb():
 
 
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
+        oid = fmtoid(idxarr,oidarr,i)
 
-        Ben04(name=names[i],
-              oid = oid,
-              o_abund = round(o_abund[i],3),
-              )
+        ins = Ben04.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          o_abund = round(o_abund[i],3),
+                          )
         
+        conn.execute(star)
 
     idxarr,oidarr = res2id('Comparison/Bensby06/bensby06results.sim')
     names,c_abund = readbensby06('Comparison/Bensby06/bensby06.dat')
 
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
+        oid = fmtoid(idxarr,oidarr,i)
 
-        Ben06(name=names[i],
-              oid = oid,
-              c_abund = round(c_abund[i],3),
-              )
+        ins = Ben06.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          c_abund = round(c_abund[i],3),
+                          )
+
+        conn.execute(star)
         
 
     idxarr,oidarr = res2id('Comparison/Reddy03/reddy03results.sim')
@@ -324,22 +316,17 @@ def mkdb():
                                [[0,6],[7,12],[19,23]],
                                ['|S10',np.float,np.float],empstr='----')
     
-
+    ### Reddy data  ###
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
-
-        Red03(name=names[i],
-              oid = oid,
-              feh = round(feh[i],3),
-              c_abund = round(c_abund[i]+feh[i],3),
-              o_abund = round(o_abund[i]+feh[i],3),
-              )
-        
-
-
+        oid = fmtoid(idxarr,oidarr,i)
+        ins = Red03.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          feh = round(feh[i],3),
+                          c_abund = round(c_abund[i]+feh[i],3),
+                          o_abund = round(o_abund[i]+feh[i],3),
+                          )
+        conn.execute(star)
 
 
     idxarr,oidarr = res2id('Comparison/Reddy06/reddy06results.sim')    
@@ -347,19 +334,17 @@ def mkdb():
                                [[17,23],[24,29],[30,35],[36,41]],
                                ['|S10',np.float,np.float,np.float],empstr='---')
     
-
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
+        oid = fmtoid(idxarr,oidarr,i)
 
-        Red06(name=names[i],
-              oid = oid,
-              c_abund = round(c_abund[i]+feh[i],3),
-              o_abund = round(o_abund[i]+feh[i],3),
-              )
+        ins = Red06.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          c_abund = round(c_abund[i]+feh[i],3),
+                          o_abund = round(o_abund[i]+feh[i],3),
+                          )
 
+        conn.execute(star)
 
     idxarr,oidarr = res2id('Comparison/Bensby05/bensby05results.sim')    
     names,o_abund = fxwid.rdfixwid('Comparison/Bensby05/table9.dat',
@@ -368,16 +353,12 @@ def mkdb():
     
 
     for i in range(len(names)):        
-        if (idxarr == i).any():
-            oid = str(oidarr[np.where(idxarr == i)[0][0]])
-        else:
-            oid = None
+        oid = fmtoid(idxarr,oidarr,i)
 
-        Ben05(name=names[i],
-              oid = oid,
-              o_abund = round(o_abund[i],3),
-              )
-        
+        ins = Ben05.insert()
+        star = ins.values(name=names[i],
+                          oid = oid,
+                          o_abund = round(o_abund[i],3),
+                          )
+        conn.execute(star)
 
-    session.commit()
-    session.close()
