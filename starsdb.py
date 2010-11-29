@@ -1,7 +1,3 @@
-# To do Monday ...
-# luck staterr is not making it through
-
-import matplotlib
 import numpy as np
 import re
 import os
