@@ -246,7 +246,7 @@ WHERE  %s AND pop_flag = "%s"
 
             table = p.comptable
 
-            if table is 'luckstars':
+            if table is 'luck06':
                 xfield = ',%s.c_staterr ' % table
                 xcut   = ' AND %s.c_staterr < 0.3' % table
             else:
@@ -279,7 +279,7 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
             ###pull literature errors###
             if table is 'ben05':
                 xerr = np.zeros( (2,len(x)) ) + p.comperr
-            if table is 'luckstars':
+            if table is 'luck06':
                 xerr = arr[:,4].tolist()
                 xerr = np.array([xerr,xerr])            
 
@@ -464,9 +464,9 @@ KS Test: D = %f  p = %f
         
     def compmany(self,elstr='o'):
         if elstr == 'o':
-            tables = ['mystars','luckstars','ramstars']
+            tables = ['mystars','luck06','ramstars']
         if elstr =='c':
-            tables = ['mystars','luckstars','red06']
+            tables = ['mystars','luck06','red06']
 
         ncomp = len(tables)
         for i in range(ncomp):

@@ -43,7 +43,7 @@ class Getelnum:
             self.teffrng = [5300,6500] # Permitted range of Teff
 
             # Comparison Data
-            self.comptable   = 'luckstars'
+            self.comptable   = 'luck06'
             self.compoffset  = 8.5
             self.compref     = 'Luck 2006'
             self.comperr     = 0.1
