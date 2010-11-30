@@ -151,8 +151,26 @@ def mkdb():
                     {'reader':readben05,
                      'simfile':'Comparison/Bensby05/bensby05results.sim',
                      'datfile':'Comparison/Bensby05/table9.dat'
-                     }
+                     },
                 }
+
+    #### Add in Exo Data ####
+    idxarr,oidarr = res2id('Comparison/exoresults.sim')
+    rec = csv2rec('Comparison/exoplanets-org.csv')
+
+    for i in range(len(rec['star'])):        
+        oid = fmtoid(idxarr,oidarr,i)
+
+        ins = Exo.insert()
+        exo = ins.values(name=rec['star'][i],
+                         oid = oid,
+                         msini = round(rec['msini'][i],3),
+                         ecc   = round(rec['ecc'][i],3),
+                         a     = round(rec['a'][i],3),
+                         per   = round(rec['per'][i],3)
+                         )            
+        conn.execute(exo)
+
 
     for key in compdict.keys():
         compdict[key]['tabob'] = star_table(key,metadata)
@@ -233,21 +251,6 @@ def mkdb():
 
 
 
-    #### Add in Exo Data ####
-    idxarr,oidarr = res2id('Comparison/exoresults.sim')
-    rec = csv2rec('Comparison/exoplanets-org.csv')
 
-    for i in range(len(rec['star'])):        
-        oid = fmtoid(idxarr,oidarr,i)
-
-        ins = Exo.insert()
-        exo = ins.values(name=rec['star'][i],
-                         oid = oid,
-                         msini = round(rec['msini'][i],3),
-                         ecc   = round(rec['ecc'][i],3),
-                         a     = round(rec['a'][i],3),
-                         per   = round(rec['per'][i],3)
-                         )            
-        conn.execute(exo)
 
 
