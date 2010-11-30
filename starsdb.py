@@ -1,3 +1,5 @@
+# convert the git diff lines into the readers
+
 import numpy as np
 import re
 import os
@@ -9,6 +11,10 @@ from sqlalchemy import Integer, String, Float
 import readstars,fxwid
 from fxwid import fxwd2rec
 from matchstars import res2id
+
+#####################################
+########## Reader Functions #########
+#####################################
 
 def readluck06(file):
     rec = fxwd2rec(file,
@@ -35,7 +41,66 @@ def readben05(file):
                    [('name','|S10'),('o_abund',float)],empstr='')
     return rec
 
+def readram07(file):
+    rec = fxwd2rec(file,[[0,6],[73,78],[79,83]],
+                    [('name','|S10'),('o_abund',float),('o_err',float)],
+                    empstr='')
+    return rec
+
+def readben04(file):
+    rec = fxwd2rec(file,[[0,6],[8,13]],
+                   [('name','|S10'),('o_abund',float)],empstr='')
+    return rec
+
+def readred06(file):
+    rec = fxwd2rec(file,[[17,23],[24,29],[30,35],[36,41]],
+                   [('name','|S10'),('feh',float),('c_abund',float),
+                    ('o_abund',float)],empstr='---')
+    rec['c_abund'] += rec['feh']
+    rec['o_abund'] += rec['feh']
+    return rec
+
+
+compdict = {'luck06':
+                {'reader':readluck06,
+                 'simfile':'Comparison/Luck06/luckresults.sim',
+                 'datfile':'Comparison/Luck06/Luck06py.txt',
+                 },
+            'ben05':
+                {'reader':readben05,
+                 'simfile':'Comparison/Bensby05/bensby05results.sim',
+                 'datfile':'Comparison/Bensby05/table9.dat',
+                 },
+            'ram07':
+                {'reader':readram07,
+                 'simfile':'Comparison/Ramirez07/ramirezresults.sim',
+                 'datfile':'Comparison/Ramirez07/ramirez.dat',
+                 },
+            'ben04':
+                {'reader':readben04,
+                 'simfile':'Comparison/Bensby04/bensby04results.sim',
+                 'datfile':'Comparison/Bensby04/bensby04.dat',
+                 },
+
+            #This abundance has been "n-LTE corrected" meaning shifted
+            #0.1 dex away from mine!
+            'red06':
+                {'reader':readred06,
+                 'simfile':'Comparison/Reddy06/reddy06results.sim',
+                 'datfile':'Comparison/Reddy06/table45.dat',
+                 },
+            }
+
+#################################
+
 def star_table(tabname,metadata):
+    """
+    Returns a generic SQLAlchemy object with the necessary fields.
+
+    User specifies the name of the data table that appears in the sql
+    database
+    """
+
     alchobj = Table(tabname,metadata,
                     Column('id',Integer,primary_key=True),
 
@@ -124,7 +189,6 @@ def insrec(rec):
         else:
             cmd += '%s = %s, ' % (field,rec[field])
 
-
     cmd = cmd.replace('nan','np.nan') # Deal with the nans
     cmd = cmd[:-2] #chop off the last ' ,'
     return cmd
@@ -141,35 +205,6 @@ def mkdb():
     Mystars = star_table('mystars',metadata)
     Exo = star_table('exo',metadata)
 
-
-    compdict = {'luck06':
-                    {'reader':readluck06,
-                     'simfile':'Comparison/Luck06/luckresults.sim',
-                     'datfile':'Comparison/Luck06/Luck06py.txt'
-                     },
-                'ben05':
-                    {'reader':readben05,
-                     'simfile':'Comparison/Bensby05/bensby05results.sim',
-                     'datfile':'Comparison/Bensby05/table9.dat'
-                     },
-                }
-
-    #### Add in Exo Data ####
-    idxarr,oidarr = res2id('Comparison/exoresults.sim')
-    rec = csv2rec('Comparison/exoplanets-org.csv')
-
-    for i in range(len(rec['star'])):        
-        oid = fmtoid(idxarr,oidarr,i)
-
-        ins = Exo.insert()
-        exo = ins.values(name=rec['star'][i],
-                         oid = oid,
-                         msini = round(rec['msini'][i],3),
-                         ecc   = round(rec['ecc'][i],3),
-                         a     = round(rec['a'][i],3),
-                         per   = round(rec['per'][i],3)
-                         )            
-        conn.execute(exo)
 
 
     for key in compdict.keys():
@@ -248,9 +283,19 @@ def mkdb():
                           )
         conn.execute(star)
 
+    #### Add in Exo Data ####
+    idxarr,oidarr = res2id('Comparison/exoresults.sim')
+    rec = csv2rec('Comparison/exoplanets-org.csv')
 
+    for i in range(len(rec['star'])):        
+        oid = fmtoid(idxarr,oidarr,i)
 
-
-
-
-
+        ins = Exo.insert()
+        exo = ins.values(name=rec['star'][i],
+                         oid = oid,
+                         msini = round(rec['msini'][i],3),
+                         ecc   = round(rec['ecc'][i],3),
+                         a     = round(rec['a'][i],3),
+                         per   = round(rec['per'][i],3)
+                         )            
+        conn.execute(exo)
