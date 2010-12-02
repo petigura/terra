@@ -8,11 +8,7 @@ def appendAxes(axlist,nplots,plotidx):
     nplots  - total number of plots
     plotidx - which plot are we on?
     """
-    
-    if plotidx is 0:
-        axlist.append( plt.subplot(nplots,1,plotidx+1) )
-    else:
-        axlist.append( plt.subplot(nplots,1,plotidx+1,sharex=axlist[0]) )
+    axlist.append( plt.subplot(nplots,1,plotidx+1) )
 
     return axlist
 
@@ -24,9 +20,12 @@ def mergeAxes(figure):
     axlist = figure.get_axes()
     nax = len(axlist)
 
+    lim = (0,0)
     for i in np.arange(nax):
-        # Special treatment for last axis
+        curlim = axlist[i].get_xlim()
+        lim = min(lim[0],curlim[0]),max(lim[1],curlim[1])
 
+        # Special treatment for last axis
         if i != nax-1 :
             axlist[i].set_xticklabels('',visible=False)
             yticks = axlist[i].get_yticks()[1:]
@@ -36,6 +35,9 @@ def mergeAxes(figure):
             # Don't plot duplicate y axes
             if axlist[i].get_ylabel() == axlist[nax-1].get_ylabel():
                 axlist[i].set_ylabel('')
+
+    for ax in axlist:
+        ax.set_xlim(lim)
 
     return figure
 
