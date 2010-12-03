@@ -5,7 +5,7 @@ import table,plotgen,postfit,getelnum
 
 def dump(file='Thesis/texcmd.tex'):
     """
-    Dumps the short hands used in the latex paper.
+    Dumps the shorthands used in the latex paper.
     """
 
     plotter = plotgen.Plotgen()

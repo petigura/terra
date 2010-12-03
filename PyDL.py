@@ -4,7 +4,7 @@ import numpy as np
 class idlobj:
     def __init__(self,savfile,var):
         """
-        Creates a python class from an IDL array of structures.
+        Creates a python object from an IDL array of structures.
 
         savfile - Path to the IDL .sav file.
         var     - string. IDL .sav files can store multiple variables.

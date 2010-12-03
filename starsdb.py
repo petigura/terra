@@ -1,5 +1,3 @@
-# convert the git diff lines into the readers
-
 import numpy as np
 import re
 import os
@@ -8,9 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy import MetaData, Column, Table, ForeignKey
 from sqlalchemy import Integer, String, Float
 
-import readstars,fxwid
-from fxwid import fxwd2rec
-from matchstars import res2id
+from PyDL import idlobj
+from fxwd import fxwd2rec
+from PySIMBAD import res2id
 
 #####################################
 ########## Reader Functions #########
@@ -232,7 +230,7 @@ def mkdb():
 
 
     #### Add in mydata ####
-    stars = readstars.ReadStars(os.environ['PYSTARS'])
+    stars = idlobj(os.environ['PYSTARS'],'stars')
     idxarr,oidarr = res2id('Comparison/myresults.sim')
     for i in range(len(stars.name)):        
         ins = Mystars.insert()

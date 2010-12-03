@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 def appendAxes(axlist,nplots,plotidx):
     """
-    Append axes to a list.  Share with the first axes.
+    Append axes to a list
     axlist  - list of axis objects
     nplots  - total number of plots
     plotidx - which plot are we on?
