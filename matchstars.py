@@ -4,7 +4,9 @@ from string import ascii_letters
 import re
 import os
 
-import starsdb,readstars,fxwid,postfit
+from fxwd import fxwd2rec
+import starsdb,postfit
+from PyDL import idlobj
 
 def simquery(code):
     """
@@ -27,7 +29,7 @@ def simquery(code):
         datfiles[i] = dir+datfiles[i]
 
     if code == 0:
-        stars = readstars.ReadStars(os.environ['PYSTARS'])
+        stars = PyDL.idlobj(os.environ['PYSTARS'],'stars')
         names = stars.name
         simline = names2sim(names,cat='HD')
     if code == 1:
@@ -50,15 +52,15 @@ def simquery(code):
         simline = names2sim(names,cat='HD')
 
     if code == 6:
-        names = (fxwid.rdfixwid(datfiles[code],[[0,6]],['|S10']))[0]
+        names = fxwd2rec(datfiles[code],[[0,6]],['|S10']) ['name']
         simline = names2sim(names,cat='HD')
 
     if code == 7:
-        names = (fxwid.rdfixwid(datfiles[code],[[17,23]],['|S10']))[0]
+        names = fxwd2rec( datfiles[code],[[17,23]],['|S10'] ))['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 8:
-        names = (fxwid.rdfixwid(datfiles[code],[[0,6]],['|S10']))[0]
+        names = fxwd2rec( datfiles[code],[[0,6]],['|S10'] )['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 9:
@@ -70,91 +72,3 @@ def simquery(code):
     f.writelines(simline)
     f.close()
 
-def names2sim(names,cat=''):
-    """
-    Creates a SIMBAD scripted query from from an of star names.
-
-    cat - SIMBAD must know what catalog the star is from. If names already
-          specify the catalog, we're done.  If not set cat to append the
-          catalog to the names file.
-          
-          HD  - Henry-Draper Catalog
-          HIP - Hiparcos Catalog
-
-    >>> names = np.array(['14412','4915'])
-    >>> sim = names2sim(names,cat='HD')
-
-    To use in a SIMBAD script, one must write to a file
-    --------------File Output--------------
-    result oid
-
-    echodata -n x0
-    query id  14412
-
-    echodata -n x1
-    query id  4915
-    ---------------------------------------
-
-    Future work:
-    Make unit tests.
-    """
-
-    query   = np.array([],dtype='|S50')
-
-    #Add whitespace between catalog and star name
-    if cat is not '':
-        cat += ' '
-
-    #First line of query - specifies we want oid output
-    query = np.append(query,'result oid\n')
-
-    for i in np.arange( len(names) ):
-        name = names[i]
-        name = cat+name
-
-        # Two lines of SIMBAD script per star.  The 'x' is a necessary
-        # placehold for subsequent parsing
-        queryline = 'echodata -n x%i\nquery id %s\n' % (i,name)
-        query = np.append(query,queryline) 
-
-    return query
-
-def res2id(file):
-    """
-    Parses SIMBAD query results into matched pairs of (idx,oid)
-
-    Query Results have this form:
-    
-    :: Header :::::::
-    script snipet
-    console
-    error messages
-
-    :: data :::::::::
-
-    x0#1: 1356191
-    x1#1: 1225912
-    x2#1: 759900
-    x3#1: 936604
-
-    res2id chops off the header and returns    
-    0, 1356191
-    1, 1225912
-    2, 759900
-    3, 936604
-
-    Future Work:
-    Create unit test.
-    """
-
-    idxarr,oidarr = np.array([]),np.array([])
-
-    f = open(file,'r')
-    lines = f.readlines()
-    for i in np.arange(len(lines)):
-        if re.search('#1',lines[i]) is not None:
-            idx,sep,oid = lines[i].partition('#1: ')
-            idxarr = np.append(idxarr,int(idx[idx.rfind('x')+1:]))
-            oidarr = np.append(oidarr,int(oid[:-1]))
-
-    return idxarr,oidarr
