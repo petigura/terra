@@ -1,6 +1,8 @@
-import numpy as np
+"""
+Functions to supplement numpy.
+"""
 
-# Erik Petigura's functions to suplement numpy.
+import numpy as np
 
 def binavg(x,y,bins):
     """
@@ -16,7 +18,7 @@ def binavg(x,y,bins):
     
     returns
     
-    array([2.,3.])
+    array([1.25,3.75]),array([2.,3.])
 
     Notes:
 

@@ -7,8 +7,6 @@ fxwd2rec - Converts fixed width data and returns record array.
 
 fxwd2tup - Same as above but returns tuple of arrays
 """
-
-
 import numpy as np
 
 def fxwd2rec(file,colist,typelist,empstr=None,skiprows=0):
@@ -20,8 +18,7 @@ def fxwd2rec(file,colist,typelist,empstr=None,skiprows=0):
     colist   - [ [<begin col>,<end col>], [<begin col>,<end col>], ... ]
     typelist - type format ala np.array
                [ ('name','|S10'), ('number',float)]
-    empstr   - string to interperate as None e.g. '---'
-              
+    empstr   - string to interperate as None e.g. '---'              
     """
     outlist =[]
     f = open(file,'r')

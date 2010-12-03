@@ -1,3 +1,34 @@
+"""
+Builds a sqlite3 database that holds the following information:
+   * Results from my spectroscopic analysis
+
+   * Comparision results from the literature.  My sample shares some stars
+     with previous studies.  Plotting literature abundances versus my own
+     is a good check that my analysis is working properly.
+
+   * Exoplanet information from exoplanets.org .  One of the goals of my
+     project is to investigate whether C or O affects planet occurance rate.
+
+I connect to the database using the amazing sqlalchemy module.  This module
+lets the user define pythonic objects and then maps the attribtues of these
+objects to a database.  This is a much cleaner solution than writing all the
+CREATE/INSERT/UPDATE solutions.  sqlalchemy also provides a pythonic way to
+*query* the database, which is much cleaner than writing out the sql commands
+as a string and porting them with the sqlite3 module.  However, I started
+using SQLAlchemy late in my development process, so I did not have time to
+incorporate the SQLAlchemy queries.
+
+
+Outline:
+   * Define a `stars` SQLAlchemy object which has attributes like: name,
+     teff, c_abund, o_abund, etc...
+
+   * Define short functions that specify how to read information in from
+     various tables.  Most are built upon my fxwd module.
+
+   * Insert data into SQLAlchemy object.  The database has been created.
+"""
+
 import numpy as np
 import re
 import os
@@ -9,10 +40,12 @@ from sqlalchemy import Integer, String, Float
 from PyDL import idlobj
 from fxwd import fxwd2rec
 from PySIMBAD import res2id
-
+from env import envset
 #####################################
 ########## Reader Functions #########
 #####################################
+
+envset(['PYSTARS','STARSDB'])
 
 def readluck06(file):
     rec = fxwd2rec(file,
@@ -58,34 +91,34 @@ def readred06(file):
     rec['o_abund'] += rec['feh']
     return rec
 
-
+compdir = os.environ['COMP']
 compdict = {'luck06':
                 {'reader':readluck06,
-                 'simfile':'Comparison/Luck06/luckresults.sim',
-                 'datfile':'Comparison/Luck06/Luck06py.txt',
+                 'simfile':compdir+'Luck06/luckresults.sim',
+                 'datfile':compdir+'Luck06/Luck06py.txt',
                  },
             'ben05':
                 {'reader':readben05,
-                 'simfile':'Comparison/Bensby05/bensby05results.sim',
-                 'datfile':'Comparison/Bensby05/table9.dat',
+                 'simfile':compdir+'Bensby05/bensby05results.sim',
+                 'datfile':compdir+'Bensby05/table9.dat',
                  },
             'ram07':
                 {'reader':readram07,
-                 'simfile':'Comparison/Ramirez07/ramirezresults.sim',
-                 'datfile':'Comparison/Ramirez07/ramirez.dat',
+                 'simfile':compdir+'Ramirez07/ramirezresults.sim',
+                 'datfile':compdir+'Ramirez07/ramirez.dat',
                  },
             'ben04':
                 {'reader':readben04,
-                 'simfile':'Comparison/Bensby04/bensby04results.sim',
-                 'datfile':'Comparison/Bensby04/bensby04.dat',
+                 'simfile':compdir+'Bensby04/bensby04results.sim',
+                 'datfile':compdir+'Bensby04/bensby04.dat',
                  },
 
             #This abundance has been "n-LTE corrected" meaning shifted
             #0.1 dex away from mine!
             'red06':
                 {'reader':readred06,
-                 'simfile':'Comparison/Reddy06/reddy06results.sim',
-                 'datfile':'Comparison/Reddy06/table45.dat',
+                 'simfile':compdir+'Reddy06/reddy06results.sim',
+                 'datfile':compdir+'Reddy06/table45.dat',
                  },
             }
 
@@ -231,7 +264,7 @@ def mkdb():
 
     #### Add in mydata ####
     stars = idlobj(os.environ['PYSTARS'],'stars')
-    idxarr,oidarr = res2id('Comparison/myresults.sim')
+    idxarr,oidarr = res2id(compdir+'myresults.sim')
     for i in range(len(stars.name)):        
         ins = Mystars.insert()
         oid = fmtoid(idxarr,oidarr,i)
@@ -282,8 +315,8 @@ def mkdb():
         conn.execute(star)
 
     #### Add in Exo Data ####
-    idxarr,oidarr = res2id('Comparison/exoresults.sim')
-    rec = csv2rec('Comparison/exoplanets-org.csv')
+    idxarr,oidarr = res2id(compdir+'exoresults.sim')
+    rec = csv2rec(compdir+'exoplanets-org.csv')
 
     for i in range(len(rec['star'])):        
         oid = fmtoid(idxarr,oidarr,i)

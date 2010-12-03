@@ -5,8 +5,10 @@ import re
 import os
 
 from fxwd import fxwd2rec
-import starsdb,postfit
+from PySIMBAD import names2sim
 from PyDL import idlobj
+from env import envset
+from starsdb import readluck06,readben05,readram07,readben04,readred06
 
 def simquery(code):
     """
@@ -16,6 +18,8 @@ def simquery(code):
     Future work:
     Automate the calls to SIMBAD.
     """
+
+    envset(['COMP','PYSTARS'])
 
     dir = os.environ['COMP']
 
@@ -33,38 +37,38 @@ def simquery(code):
         names = stars.name
         simline = names2sim(names,cat='HD')
     if code == 1:
-        names, c, o = postfit.readluck(datfiles[code])
+        names = readluck06(datfiles[code])['name']
         simline = names2sim(names,cat='')
     if code == 2:
         rec = mlab.csv2rec('smefiles/exoplanets-org.csv')
         names = rec['simbadname']
         simline = names2sim(names,cat='')
     if code == 3:
-        names,a,a,a = starsdb.readramirez(datfiles[code])
+        names = readram07(datfiles[code])['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 4:
-        names,o = starsdb.readbensby(datfiles[code])
+        names = readben04(datfiles[code])['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 5:
-        names,c = starsdb.readbensby06(datfiles[code])
+        names = readbensby06(datfiles[code])['name']
         simline = names2sim(names,cat='HD')
 
     if code == 6:
-        names = fxwd2rec(datfiles[code],[[0,6]],['|S10']) ['name']
+        names = readred03(datfiles[code])['name']
         simline = names2sim(names,cat='HD')
 
     if code == 7:
-        names = fxwd2rec( datfiles[code],[[17,23]],['|S10'] ))['name']
+        names = readred06( datfiles[code] )['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 8:
-        names = fxwd2rec( datfiles[code],[[0,6]],['|S10'] )['name']
+        names = readben05( datfiles[code] )['name']
         simline = names2sim(names,cat='HIP')
 
     if code == 9:
-        names,x,x = starsdb.readluck05(datfiles[code])
+        names = readluck05(datfiles[code])['name']
         simline = names2sim(names,cat='HD')
 
 

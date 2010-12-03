@@ -10,7 +10,9 @@ from uncertainties import unumpy
 import postfit,getelnum,flt2tex
 from plotplus import mergeAxes,errpt,appendAxes
 from numplus import binavg
+from env import envset
 
+envset(['STARSDB'])
 class Plotgen():
     def __init__(self):
     ###Pull up database.

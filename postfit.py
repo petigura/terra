@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sqlite3
 import os
+from env import  envset
+
+envset(['STARSDB'])
 
 def globcut(elstr,table='mystars'):    
     p = getelnum.Getelnum(elstr)

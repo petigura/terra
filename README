@@ -69,6 +69,45 @@ PyDL     - Lets the user interact with data stored in IDL .sav files.
 
 
 ####### Analysis-specific Modules ######
-starsdb
+
+starsdb - Builds a sqlite3 database that holds the following information:
+	   * Results from my spectroscopic analysis
+   
+	   * Comparision results from the literature.  My sample
+  	     shares some stars with previous studies.  Plotting
+	     literatue abundances versus my own is a good check that my 
+	     analysis is working properly.
+
+           * Exoplanet information from exoplanets.org .  One of the
+	     goals of my project is to investigate whether C or O 
+	     affects planet occurance rate.
+
+I connect to the database using the amazing sqlalchemy module.  This module
+lets the user define pythonic objects and then maps the attribtues of these
+objects to a database.  This is a much cleaner solution than writing all the
+CREATE/INSERT/UPDATE solutions.  sqlalchemy also provides a pythonic way to
+*query* the database, which is much cleaner than writing out the sql commands
+as a string and porting them with the sqlite3 module.  However, I started
+using SQLAlchemy late in my development process, so I did not have time to
+incorporate the SQLAlchemy queries.
+
+
+Outline:
+   * Define a `stars` SQLAlchemy object which has attributes like: name,
+     teff, c_abund, o_abund, etc...
+
+   * Define short functions that specify how to read information in from
+     various tables.  Most are built upon my fxwd module.
+
+   * Insert data into SQLAlchemy object.  The database has been created.
+
+
+
 plotgen
 getelnum
+
+######## Unit Tests ########
+
+python test_numplus.py
+python test_fxwd.py
+python test_PySIMBAD.py

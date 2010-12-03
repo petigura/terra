@@ -4,7 +4,9 @@ import sqlite3
 import os
 
 import getelnum,postfit
+from env import envset
 
+envset(['STARSDB'])
 def dump_stars(save=True,texcmd=False,ascii=False):
     conn = sqlite3.connect(os.environ['STARSDB'])
     cur = conn.cursor()
