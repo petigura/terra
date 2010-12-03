@@ -7,8 +7,9 @@ import os
 import sqlite3
 from uncertainties import unumpy
 
-import readstars,postfit,matchstars,starsdb,getelnum,flt2tex
+import postfit,getelnum,flt2tex
 from plotplus import mergeAxes,errpt,appendAxes
+from numplus import binavg
 
 class Plotgen():
     def __init__(self):
@@ -43,7 +44,7 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
 
         f = plt.figure( figsize=(6,6) )
 
-        ax = []
+        ax,errx,erry = [],[],[]
         for i in range(nel):
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
@@ -62,15 +63,21 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
             yerr = yerr.reshape((2,1))
 
-            ax[i] = errpt(ax[i],(0.9,0.9),xerr=p.tefferr,yerr=yerr)
-
             ax[i].set_ylabel('[%s/H]' % elstr)
-            ax[i].set_xlabel('$\mathbf{ T_{eff} }$')
+            ax[i].set_xlabel('$\mathbf{ T_{eff} }$')            
+
+            errx.append(p.tefferr)
+            erry.append(yerr)
 
         f  = mergeAxes(f)
+
+        for i in range(nel):
+            ax[i] = errpt(ax[i],(0.95,0.9),xerr=errx[i],yerr=erry[i])
+            ax[i].set_xlim(4500,6500)
+
         if save:
             plt.savefig('Thesis/pyplots/teff.ps')
-
+            plt.close()
 
     def feh(self,save=False,noratio=False):
         """
@@ -81,13 +88,11 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         #pull in fitted abundances from tfit
         flags  = ['dn','dk']
 
-        binmin,binwid,nbins = -0.5,0.1,11
+        bins = np.linspace(-0.5,0.5,11)
 
         qtype= [('abund',float),('feh',float),('staterrlo',float),
                 ('staterrhi',float),('pop_flag','|S10')]    
         
-        bins = np.linspace(binmin,binmin+binwid*nbins,nbins)
-
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
 
@@ -132,23 +137,8 @@ WHERE  %s AND pop_flag = "%s"
                 savename = 'xonfe'
 
             ### Compute Avg Thin disk in bins ###
-            binind = np.digitize(arrthin['feh'],bins)
-            binx,biny = [] , []
-            for j in np.arange(nbins-1)+1:
-                ind = (np.where(binind == j))[0]
-                midbin = binmin+binwid*(j-0.5)
-                binmean = np.mean(ythin[ind])
-                nbin = len(ythin[ind]) # numer of points in a bin
-
-                mederr = 0.5*(arrthin['staterrhi'][ind]-arrthin['staterrlo'][ind])
-                pull = (ythin[ind] - binmean)/mederr
-                binx.append(midbin)
-                biny.append(binmean)
-
-                print 'Bin %.2f: n = %i, stdpull =  %.2f ' % (midbin,nbin,np.std(pull))
-
-                
-            binx,biny = np.array(binx),np.array(biny)            
+            binx,biny = binavg(arrthin['feh'],ythin,bins)
+         
             ax[i].plot(arrthin['feh'],ythin,'bo')
             ax[i].plot(arrthick['feh'],ythick,'go')
             ax[i].plot(binx,biny,'rx-',lw=2,ms=5,mew=2)
@@ -160,14 +150,15 @@ WHERE  %s AND pop_flag = "%s"
             yerr = yerr.reshape((2,1))
 
             ax[i] = errpt(ax[i],(0.8,0.8),xerr=p.feherr,yerr=yerr)
-            ax[i].set_xlabel('[Fe/H]')                
+            ax[i].set_xlabel('[Fe/H]')
 
         leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
 
         f = mergeAxes(f)
+        return f
         if save:
             plt.savefig('Thesis/pyplots/%s.ps' % savename)
-
+            plt.close()
 
     def abundhist(self,save=False,texcmd=False,uplim=False):
         """
@@ -226,6 +217,7 @@ WHERE  %s AND pop_flag = "%s"
             plt.savefig('Thesis/pyplots/abundhist.ps')
             f = open('Thesis/tables/abundhist.tex','w')
             f.writelines(outex)
+            plt.close()
 
     def comp(self,save=False,texcmd=False):
         """
@@ -305,6 +297,7 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
 
         if save:
             plt.savefig('Thesis/pyplots/comp.ps')
+            plt.close()
 
     def exo(self,save=False,prob=True,texcmd=False):
         """
@@ -405,6 +398,7 @@ KS Test: D = %f  p = %f
             plt.savefig('Thesis/pyplots/exo.ps')
             f = open('Thesis/tables/exo.tex','w')
             f.writelines(outex)
+            plt.close()
 
         if texcmd:
             return statdict
@@ -460,6 +454,8 @@ KS Test: D = %f  p = %f
 
         if save:
             plt.savefig('Thesis/pyplots/cofe.ps')
+            plt.close()
+
         return ax
         
     def compmany(self,elstr='o'):
