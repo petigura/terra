@@ -1,5 +1,11 @@
+"""
+Module where all my plotting routines are found.  
+Since there is some functionality common to many plotting
+functions, I built a plotting class.
+"""
+
 from scipy import  stats
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq,curve_fit
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -7,18 +13,34 @@ import os
 import sqlite3
 from uncertainties import unumpy
 
-import postfit,getelnum,flt2tex
+import postfit,getelnum
+from TeX import flt2tex
 from plotplus import mergeAxes,errpt,appendAxes
 from numplus import binavg
 from env import envset
 
-envset(['STARSDB'])
+envset(['STARSDB','PYPLOTS'])
+plotdir = os.environ['PYPLOTS']
+tabdir =  os.environ['TABLES']
+colors = ['black','DeepSkyblue','red']
+size   = [2.5,8]
+
 class Plotgen():
-    def __init__(self):
-    ###Pull up database.
+    def __init__(self,plotdir=plotdir,figtype='.ps',man=False):
+
+        ### Pull up database.
         self.conn = sqlite3.connect(os.environ['STARSDB'])
         self.cur = self.conn.cursor()    
         self.params = getelnum.Getelnum('')
+        self.figtype = figtype
+        self.plotdir = plotdir
+
+        if man:
+            self.figtype = '.eps'
+            self.plotdir = 'ApJMS/'
+            self.tabdir =  'ApJMS/'
+
+        ### Load up single element statistics
         self.stats = {}
 
         for elstr in self.params.elements:
@@ -37,10 +59,12 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
    
     def tfit(self,save=False,fitres=False):
         """
-        A quick look at the fits to the temperature
+        Plot abundances versus temperature and overlay a cubic fit.
+
         save - saves the plot
         fitres - plots the residuals
         """
+        figname = 'teff'
         nel = self.params.nel
         lines = self.params.lines
 
@@ -58,9 +82,14 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
 
             tarr = np.linspace(t.min(),t.max(),100)        
 
+            p3 = np.polyfit(t,abund,3)
+
+
             ax[i].scatter(t,abund,color='black',s=10)
             ax[i].scatter(p.teff_sol,0.,color='red',s=30)
-            ax[i].plot(tarr,np.polyval(fitpar,tarr),lw=2,color='red')        
+
+            # Plotting the best fit cubic to the temperatures
+            ax[i].plot(tarr,np.polyval(p3,tarr),lw=2,color='red')        
 
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
             yerr = yerr.reshape((2,1))
@@ -74,23 +103,26 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         f  = mergeAxes(f)
 
         for i in range(nel):
-            ax[i] = errpt(ax[i],(0.95,0.9),xerr=errx[i],yerr=erry[i])
+            ax[i] = errpt(ax[i],(0.95,0.9),xerr=errx[i],yerr=erry[i],
+                          color = colors[2])
             ax[i].set_xlim(4500,6500)
 
         if save:
-            plt.savefig('Thesis/pyplots/teff.ps')
+            plt.savefig(self.plotdir+figname+self.figtype)
             plt.close()
 
-    def feh(self,save=False,noratio=False):
+    def feh(self,save=False,noratio=False,texcmd=False):
         """
-        Plot  [X/Fe] against [Fe/H]
+        Plot abundance trends against metalicty i.e. [X/Fe] against [Fe/H]
+
         save    - saves the file
         noratio - Plot [X/H] against [Fe/H]
         """
         #pull in fitted abundances from tfit
+        figname = 'feh'
         flags  = ['dn','dk']
 
-        bins = np.linspace(-0.5,0.5,11)
+        bins = np.linspace(-0.3,0.5,9)
 
         qtype= [('abund',float),('feh',float),('staterrlo',float),
                 ('staterrhi',float),('pop_flag','|S10')]    
@@ -98,7 +130,24 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
         subplot = ((1,2))
         f = plt.figure( figsize=(6,6) )
 
-        ax = []
+        ax,errx,erry = [],[],[]
+        disk = {'thick':
+                    {'code':'dk',
+                     'color':colors[1],
+                     'ms':size[1],
+                     'label':'Thick Disk',
+                     'lc':colors[1],
+                     },
+                'thin':
+                    {'code':'dn',
+                     'color':colors[0],
+                     'ms':size[0],
+                     'label':'Thin Disk',
+                     'lc':colors[2]
+                     },
+                }
+        fd = {} # fit dictionary
+
         nel = self.params.nel
         lines = self.params.lines
 
@@ -107,43 +156,66 @@ WHERE %s ''' % (elstr,elstr,elstr,postfit.globcut(elstr))
 
             p = getelnum.Getelnum(lines[i])           
             elstr = p.elstr
-            cmd = '''
+            fd[elstr] = {} # make a dictionary for each element
+
+            for d in ['thin','thick']:
+                cmd = '''
 SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag 
 FROM mystars
 WHERE %s  AND pop_flag = "%s" 
-''' % (elstr,elstr,elstr,postfit.globcut(elstr),'dn')
-            self.cur.execute(cmd)
-            arrthin = np.array(self.cur.fetchall(),dtype=qtype)
+''' % (elstr,elstr,elstr,postfit.globcut(elstr),disk[d]['code'])
+                self.cur.execute(cmd)
+                arr = np.array(self.cur.fetchall(),dtype=qtype)
             
-            arrthin['abund'] -= p.abnd_sol
+                arr['abund'] -= p.abnd_sol
+                
+                x = arr['feh']                
+                dy = arr['staterrlo']
+                if noratio:
+                    y = arr['abund']
+                    ytit = '[%s/H]' % elstr
+                    ax[i].set_ylabel(ytit)
+                    savename = 'xonh'
+                    mederrpt = (0.8,0.1)
+                    axloc = 'upper left'
+                else:
+                    y = arr['abund'] - arr['feh']
 
-            cmd = '''
-SELECT %s_abund,fe_abund,%s_staterrlo,%s_staterrhi,pop_flag 
-FROM mystars
-WHERE  %s AND pop_flag = "%s" 
-''' % (elstr,elstr,elstr,postfit.globcut(elstr),'dk')
-            self.cur.execute(cmd)
+                    ytit = '[%s/Fe]' % elstr
+                    ax[i].set_ylabel(ytit)
+                    savename = 'xonfe'
+                    mederrpt = (0.1,0.1)
+                    axloc = 'upper right'
 
-            arrthick = np.array(self.cur.fetchall(),dtype=qtype)
-            arrthick['abund'] -= p.abnd_sol
-                                
-            if noratio:
-                ythin = arrthin['abund']
-                ythick = arrthick['abund']
-                ax[i].set_ylabel('[%s/H]' % (elstr) )
-                savename = 'xonh'
-            else:
-                ythin = arrthin['abund'] -arrthin['feh']
-                ythick = arrthick['abund'] -arrthick['feh']
-                ax[i].set_ylabel('[%s/Fe]' % (elstr) )
-                savename = 'xonfe'
+                ax[i].plot(x,y,'o',color=disk[d]['color'],
+                           ms=disk[d]['ms'],label=disk[d]['label'])
 
-            ### Compute Avg Thin disk in bins ###
-            binx,biny = binavg(arrthin['feh'],ythin,bins)
-         
-            ax[i].plot(arrthin['feh'],ythin,'bo')
-            ax[i].plot(arrthick['feh'],ythick,'go')
-            ax[i].plot(binx,biny,'rx-',lw=2,ms=5,mew=2)
+
+                ### Calculate best fit and save parameters ###
+
+                # simple line to fit
+                model = lambda x,m,b: m*x+b
+                par,cov = curve_fit(model,x,y,p0=[1,1],sigma=dy)
+
+                s = x.argsort()
+                ax[i].plot(x[s],model(x[s],par[0],par[1]),
+                           lw=3,ls='--',color=disk[d]['lc'])
+                
+                fd[elstr][d] = {} # make a dictionary for each stellar pop
+                fitdict = fd[elstr][d]
+
+                fitdict['quant'] = ytit
+
+                fitdict['m'] = par[0]
+                fitdict['me'] = np.sqrt(cov.diagonal()[0])
+
+                fitdict['b'] = par[1]
+                fitdict['be'] = np.sqrt(cov.diagonal()[1])
+
+                resid = y - model(x,par[0],par[1])
+                fitdict['normresid'] = resid / dy
+                fitdict['chi2'] = np.sum((resid/dy)**2) / (len(x) - 2) #chi2
+                
 
             #plot typical errorbars
             yerr = np.array([s.std_dev() for s in self.stats[elstr]])
@@ -151,25 +223,54 @@ WHERE  %s AND pop_flag = "%s"
                 yerr = np.sqrt(yerr**2 + p.feherr**2)
             yerr = yerr.reshape((2,1))
 
-            ax[i] = errpt(ax[i],(0.8,0.8),xerr=p.feherr,yerr=yerr)
+            errx.append(p.feherr)
+            erry.append(yerr)
+
             ax[i].set_xlabel('[Fe/H]')
 
-        leg = ax[0].legend( ('Thin Disk','Thick Disk','Binned Thin Disk'), loc='best')
 
         f = mergeAxes(f)
-        return f
+        leg = ax[0].legend(loc=axloc)
+
+        for i in range(nel):
+            ax[i] = errpt(ax[i],mederrpt,xerr=errx[i],yerr=erry[i],
+                          color=colors[2])
+        plt.show()        
+
         if save:
-            plt.savefig('Thesis/pyplots/%s.ps' % savename)
+            plt.savefig(self.plotdir+savename+self.figtype)
             plt.close()
+            plt.close()
+
+
+            f = open(self.tabdir+'%s.tex' % savename,'w')
+            line = []
+            for el in fd.keys():
+                for pop in fd[el].keys():
+                    d = fd[el][pop]
+                    line.append(\
+r"""
+%s & %s & %.3f $\pm$ %.3f & %.3f $\pm$ %.3f & %.2f \\
+""" % (d['quant'],pop,d['m'],d['me'],d['b'],d['be'],np.sqrt(d['chi2'])) )
+
+            f.writelines(line)
+            f.close()
+
+        elif texcmd:
+            return fd
+        else:
+            return fd
 
     def abundhist(self,save=False,texcmd=False,uplim=False):
         """
-        Plot the distributions of abundances.  Possibly not needed with the exo 
-        plot.
+        Plot the abundance distributions.
+
         save - save the plot
         texcmd - returns what the tex command dumper wants
 
         """
+
+        figname = 'abundhist'
         ax,nstars,outex = [],[],[]
 
         lines = self.params.lines
@@ -191,6 +292,7 @@ WHERE  %s AND pop_flag = "%s"
             abund = np.array(out,dtype=float).flatten()-p.abnd_sol
 
             ax[i].set_ylabel('Number of Stars')
+            ax[i].set_xlabel('[X/H]')
             ax[i].hist(abund,range=(-1,1),bins=20,fc='gray')
 
             #Annotate to show which lable we're on
@@ -204,8 +306,8 @@ WHERE  %s AND pop_flag = "%s"
             nstars.append(N)
             if save:
             #output moments for tex write up
-                outex.append(r'$\text {%s}$& %i & %.2f & %.2f & %.2f & %.2f\\'
-                             % (antxt,N,m,s,min,max))
+                outex.append(r'$ {[}%s/H] $& %i & %.2f & %.2f & %.2f & %.2f\\'
+                             % (elstr,N,m,s,min,max))
             else:
                 print 'N, mean, std, min, max' + antxt
                 print '(%i,%f,%f,%f,%f)' % (N,m,s,min,max)
@@ -216,8 +318,8 @@ WHERE  %s AND pop_flag = "%s"
         if texcmd:
             return nstars
         if save:
-            plt.savefig('Thesis/pyplots/abundhist.ps')
-            f = open('Thesis/tables/abundhist.tex','w')
+            plt.savefig(self.plotdir+figname+self.figtype)
+            f = open(self.tabdir+'abundhist.tex','w')
             f.writelines(outex)
             plt.close()
 
@@ -226,6 +328,7 @@ WHERE  %s AND pop_flag = "%s"
         Plots my results as a function of literature
         save - saves the file
         """
+        figname  = 'comp'
         ax = []
         texdict = { 'nComp':{},'StdComp':{} }
 
@@ -282,10 +385,11 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
             # Plot the comparison
             ax.append(plt.subplot(nel,1,i+1))
             ax[i].errorbar(x,y,xerr=xerr,yerr=yerr.transpose(),
-                           marker='o',ls='None',capsize=0,markersize=5)
+                           marker='o',ls='None',capsize=0,markersize=5,
+                           color=colors[0])
 
             line = np.linspace(-3,3,10) # Plot 1:1 Correlation
-            ax[i].plot(line,line)
+            ax[i].plot(line,line,'k--')
 
             # Label and format plots
             ax[i].set_xlabel('[%s/H], %s' % (elstr,p.compref))
@@ -298,14 +402,16 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
             return texdict
 
         if save:
-            plt.savefig('Thesis/pyplots/comp.ps')
+            plt.savefig(self.plotdir+figname+self.figtype)
             plt.close()
 
     def exo(self,save=False,prob=True,texcmd=False):
         """
-        Show a histogram of Carbon and Oxygen for planet harboring stars, and
-        comparison stars.
+        Show the fraction of stars harboring planets for different C, O 
+        abundance bins
         """
+
+        figname = 'exo'
         f = plt.figure( figsize=(6,8) )
 
         elements = ['O','C','Fe']
@@ -358,12 +464,14 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
                 yerr = unumpy.std_devs(ratio)
                 x = bins[:-1]+0.5*binwid
 
-                ax[i].hist(x,bins=bins,weights=y)
-                ax[i].errorbar(x,y,yerr=yerr,marker='o',elinewidth=2,ls='None')
+                ax[i].hist(x,bins=bins,weights=y,color='gray')
+                ax[i].errorbar(x,y,yerr=yerr,marker='o',elinewidth=2,ls='None',
+                               color='black')
             else:
                 # Make histogram
-                ax[i].hist([arrcomp,arrhost], bins=nbins,range=rng, histtype='bar',
-                           label=['Comparison','Planet Hosts'])
+                ax[i].hist([arrcomp,arrhost], bins=nbins,range=rng, 
+                           histtype='bar',label=['Comparison','Planet Hosts'],
+                           color='gray')
                 ax[i].legend(loc='upper left')
 
             ax[i].set_xlabel('[X/H]')
@@ -381,8 +489,7 @@ mystars.oid = table.oid AND table.elstr_abund IS NOT NULL AND %s %s
 
             if save:
                 # element number mean std ncomp compmean compstd KS p
-                outex.append(r'$\text{[%s/H]}$ & %i & %.2f & %.2f & & %i & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,flt2tex.flt2tex(p,sigfig=1) ) )
-
+                outex.append(r'{[}%s/H] & %i & %.2f & %.2f & & %i & %.2f & %.2f & %s \\' % (elstr,nhost,mhost,shost,ncomp,mcomp,scomp,flt2tex(p,sigfig=1) ) )
             else:
                 print """
 %s in stars w/  planets: N = %i Mean = %f Std %f 
@@ -394,24 +501,27 @@ KS Test: D = %f  p = %f
                 statdict['comp'][elstr] = {'n':ncomp,'m':mcomp,'s':scomp}
 
         f = mergeAxes(f)
-
         plt.draw()
         if save:
-            plt.savefig('Thesis/pyplots/exo.ps')
-            f = open('Thesis/tables/exo.tex','w')
+            plt.savefig(self.plotdir+figname+self.figtype)
+            f = open(self.tabdir+'exo.tex','w')
             f.writelines(outex)
             plt.close()
 
         if texcmd:
             return statdict
+        return f
 
     def cofe(self,save=False,texcmd=False):
         """
-        Plots C/O as a function of Fe/H
+        Plots C/O as a function of [Fe/H]
+
         save - save the file
         """
-
-        p = getelnum.Getelnum('O')
+        figname = 'cofe'
+        o = getelnum.Getelnum('O')
+        c = getelnum.Getelnum('C')
+                
         cmd0 = 'SELECT distinct(mystars.oid),'+\
             ' mystars.o_abund,mystars.c_abund,mystars.fe_abund '+\
             ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
@@ -439,32 +549,38 @@ KS Test: D = %f  p = %f
 
         f = plt.figure( figsize=(6,4) )
         ax = plt.subplot(111)
-        ax.plot(arrcomp['feh'],c2ocomp,'bo')
-        ax.plot(arrhost['feh'],c2ohost,'go')
-        ax.legend(('Comparision','Hosts'),loc='best')
+        ax.plot(arrcomp['feh'],c2ocomp,'o',color=colors[0])
+        ax.plot(arrhost['feh'],c2ohost,'o',color=colors[1])
+        ax.legend(('Comparision','Hosts'),loc='upper left')
         ax.set_xlabel('[Fe/H]')
-        ax.set_ylabel('C/O')
+        ax.set_ylabel(r'$ \mathbf{N_C / N_O} $')
+
+
 
         c2o = 10**(self.stats['C']-self.stats['O'])
         yerr = np.array([s.std_dev() for s in c2o]).reshape((2,1))
 
-        ax = errpt(ax,(0.1,0.7),xerr=p.feherr,yerr=yerr)
+        ax = errpt(ax,(0.1,0.7),xerr=o.feherr,yerr=yerr,color=colors[2])
+
+        c2o_sol = 10**(c.abnd_sol-o.abnd_sol)
+        print c2o_sol
+        ax.plot([0],[c2o_sol],'o',color=colors[2],ms=size[1])
 
         ax.set_ybound(0,ax.get_ylim()[1])
-        ax.axhline(1.)
+        ax.axhline(1.,ls='--',color=colors[0])
         plt.show()
 
         if save:
-            plt.savefig('Thesis/pyplots/cofe.ps')
+            plt.savefig(self.plotdir+figname+self.figtype)
             plt.close()
 
-        return ax
+        return f
         
     def compmany(self,elstr='o'):
         if elstr == 'o':
             tables = ['mystars','luck06','ramstars']
         if elstr =='c':
-            tables = ['mystars','luck06','red06']
+            tables = ['mystars','luck06','gus99']
 
         ncomp = len(tables)
         for i in range(ncomp):
@@ -497,3 +613,58 @@ KS Test: D = %f  p = %f
 
         plt.draw()
         self.conn.close()
+
+
+    def cooh(self,save=False,texcmd=False):
+        """
+        Plots C/O as a function of [Fe/H]
+
+        save - save the file
+        """
+
+        p = getelnum.Getelnum('O')
+        cmd0 = 'SELECT distinct(mystars.oid),'+\
+            ' mystars.o_abund,mystars.c_abund,mystars.fe_abund,mystars.teff '+\
+            ' FROM mystars LEFT JOIN exo ON exo.oid = mystars.oid '+\
+            ' WHERE '+postfit.globcut('C')+' AND '+postfit.globcut('O')
+
+        qtype= [('oid','|S10'),('o_abund',float),('c_abund',float),('feh',float),('teff',float)]
+
+        #Thin disk
+        cmd = cmd0 +' AND mystars.pop_flag IS "dn"'
+        self.cur.execute(cmd)
+        #pull arrays and subtract solar offset
+        arrthin = np.array( self.cur.fetchall() ,dtype=qtype)
+
+
+        #Grab Thick
+        cmd = cmd0 +' AND mystars.pop_flag IS "dk"'
+        self.cur.execute(cmd)
+        #pull arrays and subtract solar offset
+        arrthick = np.array( self.cur.fetchall() ,dtype=qtype)
+
+        return arrthin,arrthick
+
+        f = plt.figure( figsize=(6,4) )
+        ax = plt.subplot(111)
+        ax.plot(arrcomp['feh'],c2ocomp,'bo')
+        ax.plot(arrhost['feh'],c2ohost,'go')
+        ax.legend(('Comparision','Hosts'),loc='best')
+        ax.set_xlabel('[Fe/H]')
+        ax.set_ylabel('C/O')
+
+        c2o = 10**(self.stats['C']-self.stats['O'])
+        yerr = np.array([s.std_dev() for s in c2o]).reshape((2,1))
+
+        ax = errpt(ax,(0.1,0.7),xerr=p.feherr,yerr=yerr,color=colors[2])
+
+        ax.set_ybound(0,ax.get_ylim()[1])
+        ax.axhline(1.)
+        plt.show()
+
+        if save:
+            plt.savefig(self.plotdir+figname+self.figtype)
+            plt.close()
+
+        return f
+
