@@ -8,6 +8,8 @@ catalogs. Using this module is a three-step process.
 
 (2) - Upload the script to SIMBAD script page.  Download the output as
       a file.
+      http://simbad.u-strasbg.fr/simbad/sim-fscript
+
 
 (3) - Parse the output file with `res2id` method.  The output will be two 
       tuples: the SIMBAD oid matched with the *index* of the star in the
@@ -73,6 +75,24 @@ def names2sim(names,cat=''):
 
     return query
 
+def names2plx(names):
+    query   = np.array([],dtype='|S50')
+
+    #First line of query - specifies we want oid output
+    query = np.append(query,'format object form1 "#1: %PLX(V [E])"\n')
+
+    for i in np.arange( len(names) ):
+        name = names[i]
+
+        # Two lines of SIMBAD script per star.  The 'x' is a necessary
+        # placehold for subsequent parsing
+        queryline = 'echodata -n x%i\nquery id %s\n' % (i,name)
+        query = np.append(query,queryline) 
+
+    return query
+    
+
+
 def res2id(file):
     """
     Parses SIMBAD query results into matched pairs of (idx,oid)
@@ -112,3 +132,38 @@ def res2id(file):
             oidarr = np.append(oidarr,int(oid[:-1]))
 
     return idxarr,oidarr
+
+def res2plx(file):
+
+    out = []
+    
+    f = open(file,'r')
+    lines = f.readlines()    
+    data = False
+    for i in np.arange(len(lines)):
+        line = lines[i]
+        if line.find('::data') != -1:
+            data = True
+
+        if re.search('#1',line) is None:
+            pass
+        elif line.find('~') != -1:
+            pass
+        elif data is False:
+            pass
+        else:
+            out.append(parseplx(line))
+
+    out = np.array(out,dtype=[('idx',int),('plx',float),('e_plx',float)])
+
+    return out
+
+def parseplx(line):
+    #remove brackets
+    line = line.replace('[','')
+    line = line.replace(']','')
+    
+    line = line.replace('#1:',' ')
+    line = line.split('  ')
+    line[0] = line[0][line[0].rfind('x')+1:]
+    return tuple(line)

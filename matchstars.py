@@ -23,9 +23,9 @@ def simquery(code):
 
     dir = os.environ['COMP']
 
-    datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat','Bensby05/table9.dat','Luck05/table7.dat']
+    datfiles = ['mystars.sim','Luck06/Luck06py.txt','exo.sim','Ramirez07/ramirez.dat','Bensby04/bensby04.dat','Bensby06/bensby06.dat','Reddy03/table1.dat','Reddy06/table45.dat','Bensby05/table9.dat','Luck05/table7.dat','Gustaffson99/Gustaffson99py.csv']
 
-    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim']
+    files = ['mystars.sim','Luck06/luckstars.sim','exo.sim','Ramirez07/ramirez.sim','Bensby04/bensby.sim','Bensby06/bensby06.sim','Reddy03/reddy03.sim','Reddy06/reddy06.sim','Bensby05/bensby05.sim','Luck05/luck05.sim','Gustaffson99/Gustaffson99py.sim']
 
 
     for i in range(len(files)):
@@ -70,6 +70,11 @@ def simquery(code):
     if code == 9:
         names = readluck05(datfiles[code])['name']
         simline = names2sim(names,cat='HD')
+
+    if code == 10:
+        rec = mlab.csv2rec(datfiles[code])
+        names = rec['name']
+        simline = names2sim(names,cat='')
 
 
     f = open(files[code],'w')

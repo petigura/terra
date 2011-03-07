@@ -45,7 +45,7 @@ from env import envset
 ########## Reader Functions #########
 #####################################
 
-envset(['PYSTARS','STARSDB'])
+envset(['PYSTARS','STARSDB','COMP'])
 
 def readluck06(file):
     rec = fxwd2rec(file,
@@ -91,6 +91,12 @@ def readred06(file):
     rec['o_abund'] += rec['feh']
     return rec
 
+
+def readgus99(file):
+    rec = csv2rec(file)
+    rec['name'].dtype = np.dtype('|S10')
+    return rec
+
 compdir = os.environ['COMP']
 compdict = {'luck06':
                 {'reader':readluck06,
@@ -119,6 +125,11 @@ compdict = {'luck06':
                 {'reader':readred06,
                  'simfile':compdir+'Reddy06/reddy06results.sim',
                  'datfile':compdir+'Reddy06/table45.dat',
+                 },
+            'gus99':
+                {'reader':readgus99,
+                 'simfile':compdir+'Gustaffson99/Gustaffson99pyresults.sim',
+                 'datfile':compdir+'Gustaffson99/Gustaffson99py.csv',
                  },
             }
 
@@ -224,19 +235,21 @@ def insrec(rec):
     cmd = cmd[:-2] #chop off the last ' ,'
     return cmd
     
-def mkdb():
-    engine = create_engine("sqlite:///"+os.environ['STARSDB'],echo=False)
+def mkdb(starsdb=None,pystars=None):
+    if starsdb is None:
+        starsdb = os.environ['STARSDB']
+        pystars = os.environ['PYSTARS'] 
+
+    engine = create_engine("sqlite:///"+starsdb,echo=False)
     metadata = MetaData(bind=engine)
 
     # if the file already exists destroy it
-    if os.path.exists(os.environ['STARSDB']):
-        os.system('rm '+os.environ['STARSDB'])
+    if os.path.exists(starsdb):
+        os.system('rm '+starsdb)
 
     # Declare tables.
     Mystars = star_table('mystars',metadata)
     Exo = star_table('exo',metadata)
-
-
 
     for key in compdict.keys():
         compdict[key]['tabob'] = star_table(key,metadata)
@@ -263,8 +276,10 @@ def mkdb():
 
 
     #### Add in mydata ####
-    stars = idlobj(os.environ['PYSTARS'],'stars')
+    stars = idlobj(pystars,'stars')
     idxarr,oidarr = res2id(compdir+'myresults.sim')
+
+
     for i in range(len(stars.name)):        
         ins = Mystars.insert()
         oid = fmtoid(idxarr,oidarr,i)

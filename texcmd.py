@@ -2,10 +2,17 @@ import numpy as np
 import os
 
 import table,plotgen,postfit,getelnum
+from env import envset
 
-def dump(file='Thesis/texcmd.tex'):
+envset(['PAPER'])
+
+def dump()
     """
     Dumps the shorthands used in the latex paper.
+
+    Any statistic derived from my analysis that I quote in my paper should
+    be generated automatically.  This function generates a set of TeX
+    shorthands for mean abundance, number of stars analyzed, etc.
     """
 
     plotter = plotgen.Plotgen()
@@ -100,8 +107,9 @@ AND
         else:
             line.append(r'\nc{\%s}{%.2f} %% '% (key,value))
 
+
+
     for l in line:        
         l = l.replace('\nc','\newcommand')
-        f.write(l+'\n')
 
     return line
