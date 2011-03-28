@@ -52,26 +52,3 @@ def binavg(x,y,bins):
 
     return binx,biny
 
-
-def binold(x,y,bins):
-    """
-    A slower version of binavg
-    """
-
-
-    binind = np.digitize(x,bins)
-    binx,biny = [] , []
-    binmin = min(bins)
-    nbins = len(bins)
-    binwid = (max(bins)-min(bins))/(nbins-1)
-
-    for j in np.arange(nbins-1)+1:
-        ind = (np.where(binind == j))[0]
-        midbin = binmin+binwid*(j-0.5)
-        binmean = np.mean(y[ind])
-        nbin = len(y[ind]) # numer of points in a 
-
-        binx.append(midbin)
-        biny.append(binmean)
-
-    return np.array(binx),np.array(biny)   
