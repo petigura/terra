@@ -1,3 +1,8 @@
+"""
+Functions that supplement matplotlib.
+"""
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -14,7 +19,8 @@ def appendAxes(axlist,nplots,plotidx):
 
 def mergeAxes(figure):
     """
-    A simple function which merges the x-axes of a figure.
+    A simple function which merges the x-axes of a figure.  Similar to
+    the ``MULTIPLOT`` function in IDL.
     """
     figure.subplots_adjust(hspace=0.0001)
     axlist = figure.get_axes()
@@ -25,11 +31,15 @@ def mergeAxes(figure):
         curlim = axlist[i].get_xlim()
         lim = min(lim[0],curlim[0]),max(lim[1],curlim[1])
 
+        ylim = axlist[i].get_ylim()
+        yticks = axlist[i].get_yticks() 
+        dtick = yticks[1] - yticks[0]
+        newyticks = np.linspace(ylim[0],ylim[1],(ylim[1]-ylim[0])/dtick+1)
+
         # Special treatment for last axis
         if i != nax-1 :
             axlist[i].set_xticklabels('',visible=False)
-            yticks = axlist[i].get_yticks()[1:]
-            axlist[i].set_yticks(yticks)
+            axlist[i].set_yticks(newyticks[1:])
             axlist[i].set_xlabel('')
 
             # Don't plot duplicate y axes
@@ -60,7 +70,7 @@ def mergeAxesTest():
 
     f = mergeAxes(f)
     plt.show()
-
+    return f
 
 def errpt(ax,coord,xerr=None,yerr=None,**kwargs):
     """
