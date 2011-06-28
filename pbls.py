@@ -4,6 +4,11 @@ A module containing python implimentations of BLS.
 
 import numpy as np
 from numpy import *
+
+import numpy as np
+from numplus import hbinavg
+from numpy import *
+
 def blscc(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
     Python BLS - a carbon copy of the fortran version
@@ -180,6 +185,105 @@ def blscc(t,x,nf,fmin,df,nb,qmi,qma,n):
             bper  =  p0
 
     return p,bper,bpow,depth,qtran,in1,in2
+
+
+
+def blsnp(t,x,nf,fmin,df,nb,qmi,qma,n):
+    """
+    Python BLS - Numpy-based version of bls
+    """
+
+    p = np.zeros(nf)
+    minbin = 5
+    nbmax = 2000
+
+
+    kmi = max(int(qmi*float(nb)),1)
+#   maximum number of binned points in transit
+    kma = int(qma*float(nb)) + 1
+
+#   minimum number of (unbinned) points in transit
+    kkmi = max(int(n*qmi),minbin)
+
+    t-=t[0] # subtract off start time
+    x-=np.mean(x) # subtract off the mean
+
+    farr = np.linspace(fmin,fmin+nf*df,nf) 
+    
+    bins = np.linspace(0,1,nb+1)
+    bpow = 0.
+
+    for pidx in range(nf):
+        f0 = farr[pidx]
+        ph = t*f0
+        ph = np.mod(ph,1.)
+        y = ( np.histogram(ph,bins=bins,weights=x) )[0]
+        ibi = ( np.histogram(ph,bins=bins) )[0]
+
+        power = 0.
+        
+        # Loop over the phase of transit. b0 - start bin
+        nph = kma*nb # num of bins times num of trial widths
+        sarr  = np.zeros(nph)
+        b0arr = np.zeros(nph)
+        b1arr = np.zeros(nph)
+        karr  = np.zeros(nph)
+        kkarr = np.zeros(nph)
+
+        i2 = 0 # counter for the inner two loops
+        for b0 in range(nb):
+            s  = 0.    # signal strength
+            k  = 0     # number of binned points
+            kk = 0     # number of unbinned points
+            b1 = min(b0+kma,nb) # b1 - end bin
+
+            j = b0
+
+            while j < b1-1:
+            # Loop over the duration of transit
+                k+=1
+                kk = kk+ibi[j]
+                s = s+y[j]
+
+                sarr[i2]  = s
+                b0arr[i2] = b0
+                b1arr[i2] = b1
+                karr[i2]  = k
+                kkarr[i2] = kk
+                i2+=1 # advance counter
+                j+=1
+                
+        gidx = ( np.where( (karr > kmi) & (kkarr > kkmi) ) )[0]
+
+        sarr  = sarr[gidx]
+        b0arr = b0arr[gidx]
+        b1arr = b1arr[gidx]
+        karr  = karr[gidx]
+        kkarr = kkarr[gidx]
+        
+        pow = sarr*sarr/(kkarr*(n-kkarr))
+        bidx = np.argmax(pow)
+
+        power = np.sqrt(pow[bidx])
+
+        p[pidx] = power
+
+        
+        if power > bpow:
+            rn3 = kkarr[bidx]
+            bpow  =  power
+            in1   =  b0arr[bidx]
+            in2   =  b1arr[bidx]
+            qtran =  rn3/n
+            depth =  -sarr[bidx]*n / ( rn3*(n-rn3) )
+            bper  =  1./f0
+
+    return p,bper,bpow,depth,qtran,in1,in2
+
+
+
+
+
 
 
 
