@@ -93,9 +93,6 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
 
     return p,bper,bpow,depth,qtran,in1,in2
 
-
-
-
 def blsw_loop2(y,ibi,kma,kmi,kkmi):
     """
     This is the inner two nested for loops in the BLS algorithm
@@ -124,88 +121,14 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
     nb = len(y)
     rn = float(np.sum(ibi))
 
-    code = """
-double s;
-double power = 0.0;
+    # TODO: opening the file inside the loop is inefficient
+    fid = open('ccode/blsw_loop2.c') 
+    code = fid.read()
+    fid.close()
 
-int k;
-int kk;
-int nb2;
-
-double rn1;
-double pow;
-double rn3;
-int jn1;
-int jn2;
-double s3;
-
-py::tuple res(5);
-
-for (int i=0;i<nb;i++)
-  {
-    s = 0.0;
-    k = 0;
-    kk = 0;
-    nb2 = i+kma;
-    
-    if (nb2 >= nb)
-      {
-	nb2 = nb-1;
-      }
-    
-    for (int j=i;j<=nb2;j++)
-      {
-	k = k+1;
-	kk = kk + ibi(j);
-	s = s + y(j);
-
-	if ( (k > kmi) && (kk > kkmi) )
-	  {
-	    rn1 = (double) kk;
-	    pow = s*s/( rn1*(rn-rn1) );
-
-	    if (pow > power)
-	      {
-		power = pow;
-		jn1   = i;
-		jn2   = j;
-		rn3   = rn1;
-		s3    = s;
-	      }
-	  }
-      }
-
-  }
-
-res[0] = power;
-res[1] = jn1;
-res[2] = jn2;
-res[3] = rn3;
-res[4] = s3;
-
-return_val = res;
-"""
     res = weave.inline(code,['y','ibi','kma','kmi','kkmi','rn','nb'],
                        type_converters=converters.blitz)
     return res
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
