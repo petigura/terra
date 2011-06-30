@@ -133,6 +133,159 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
 
 
 
+
+
+################################
+# OUTPUTTING PHASE INFORMATION #
+################################
+
+def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
+    """
+    Python BLS - a modular version of BLS
+
+    Fits five parameters:
+       - P_0 - Fundemental period
+       - q   - fractional time of period in transit
+       - L   - low value
+       - H   - high value
+       - t_0 - epoch of transit       
+
+    The output is called signal residue
+    """
+    minbin = 5
+    nbmax = 2000
+
+    y   = zeros(nbmax)
+    ibi = zeros(nbmax)
+    p   = zeros((nf,nb))
+
+    # Number of bins specified by the user cannot exceed hard-coded amount
+    if nb > nbmax:
+        print ' NB > NBMAX !!'
+        return None
+
+    # We require there be one dip.
+    # TODO: should this be 2/T?
+    tot = t[-1] - t[0]
+    if fmin < 1./tot:
+        print ' fmin < 1/T !!'
+        return None
+
+    rn = float(n)
+
+#   kmi is the minimum number of binned points in transit.
+#   kma is the maximum number of binned points in transit.
+#   kkmi is the minimum number of unbinned points in transit.
+
+    kmi = max(int(qmi*float(nb)),1)
+    kma = int(qma*float(nb)) + 1
+    kkmi = max(int(n*qmi),minbin)
+
+    bpow = 0.
+    x -= np.mean(x)
+
+    #=====================================#
+    # Triple-nested loop over   index     #
+    # 1. Period                 jf        #
+    # 2. Phase of transit       i (weave) # 
+    # 3. Transit Duration       j (weave) #
+    #=====================================#
+
+    farr = np.linspace(fmin,fmin+nf*df,nf) 
+    bins = np.linspace(0,1,nb+1)
+
+    for jf in range(nf):
+        f0 = farr[jf]
+
+#       Zero-out working arrays
+        y   = zeros(nbmax).astype(float)
+        ibi = zeros(nbmax).astype(int)
+
+#       Phase fold the data according to the trial period.
+        ph = t*f0
+        ph = np.mod(ph,1.)
+
+#       Put the data in bins.
+        y = ( np.histogram(ph,bins=bins,weights=x) )[0]
+        ibi = ( np.histogram(ph,bins=bins) )[0]
+
+#       Loop over phase and tdur.
+        p[jf,::] = blsw_loop2ph(y,ibi,kma,kmi,kkmi)
+
+    return p
+
+
+def blsw_loop2ph(y,ibi,kma,kmi,kkmi):
+    """
+    This is the inner two nested for loops in the BLS algorithm
+
+    Given: 
+    y - an array of binned values
+    ibi - an array of the number of points in each bin.
+    
+    Return:
+    power - maximum signal residue for that period
+    jn1   - index of optimal ingress
+    jn2   - index of optimal egress
+    rn3   - number of unbinned points in the optimal transit
+    s     - sum of the points in the window
+
+    Example:
+    y   = [0,0,0,1,2,0,0,0,0,0]
+    ibi = [1,1,1,1,2,1,1,1,1,1]
+    should return
+    jn1 = 3
+    jn2 = 4
+    s   = 3
+    pow = 0.375
+    """
+
+    nb = len(y)
+    rn = float(np.sum(ibi))
+    
+    # power is now an array.
+    power = np.zeros(nb) 
+
+    # TODO: opening the file inside the loop is inefficient
+    fid = open('ccode/blsw_loop2ph.c') 
+    code = fid.read()
+    fid.close()
+
+
+    weave.inline(code,
+                 ['y','ibi','kma','kmi','kkmi','rn','nb','power'],
+                 type_converters=converters.blitz)
+    return power
+
+
+def phasemov():
+    import matplotlib.pylab as plt
+    import keptoy
+    import pbls
+
+    ph=linspace(0,2*pi,30)
+    for i in range(len(ph)):
+        f,t = keptoy.lightcurve(s2n=1000,P=10.,phase=ph[i])
+
+        nf,fmin,df,nb,qmi,qma,n = pbls.blsinit(t,f,nf=1000)
+        p = blswph(t,f,nf,fmin,df,nb,qmi,qma,n)
+        f = plt.gcf()
+        f.clf()
+        ax = f.add_subplot(111)
+        ax.imshow(p,aspect='auto')
+
+        ax.set_xlabel('bin number of start of transit')
+        ax.set_ylabel('frequency')
+        ax.set_title('2D BLS spectrum - phase %.2f' % ph[i])
+        f.savefig('frames/ph%02d.png' % i)
+
+        plt.show()
+
+
+
+
+
+
 def blsmod(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
     Python BLS - a modular version of BLS
@@ -409,6 +562,16 @@ def f2i(x):
 return_val = (int) x;
 """
     return weave.inline(code,['x'],type_converters=converters.blitz)
+
+def test_sqrt(x):
+    """
+    turn a float to an integer
+    """
+    code = """
+return_val = sqrt(x);
+"""
+    return weave.inline(code,['x'],type_converters=converters.blitz)
+
 
 def i2f(x):
     """
