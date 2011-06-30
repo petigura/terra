@@ -78,6 +78,10 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
         y = ( np.histogram(ph,bins=bins,weights=x) )[0]
         ibi = ( np.histogram(ph,bins=bins) )[0]
 
+#       EEBLS extend y and ibi so they include kma more points
+        y   = np.append(y,y[0:kma])
+        ibi = np.append(ibi,ibi[0:kma])
+
 #       Loop over phase and tdur.
         power,jn1,jn2,rn3,s3 = blsw_loop2(y,ibi,kma,kmi,kkmi)
 
@@ -155,9 +159,6 @@ def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
     minbin = 5
     nbmax = 2000
 
-    y   = zeros(nbmax)
-    ibi = zeros(nbmax)
-    p   = zeros((nf,nb))
 
     # Number of bins specified by the user cannot exceed hard-coded amount
     if nb > nbmax:
@@ -180,6 +181,11 @@ def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
     kmi = max(int(qmi*float(nb)),1)
     kma = int(qma*float(nb)) + 1
     kkmi = max(int(n*qmi),minbin)
+
+
+    y   = zeros(nbmax)
+    ibi = zeros(nbmax)
+    p   = zeros((nf,nb+kma)) # Pad out for wrapped phase
 
     bpow = 0.
     x -= np.mean(x)
@@ -208,6 +214,10 @@ def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
 #       Put the data in bins.
         y = ( np.histogram(ph,bins=bins,weights=x) )[0]
         ibi = ( np.histogram(ph,bins=bins) )[0]
+
+#       EEBLS extend y and ibi so they include kma more points
+        y   = np.append(y,y[0:kma])
+        ibi = np.append(ibi,ibi[0:kma])
 
 #       Loop over phase and tdur.
         p[jf,::] = blsw_loop2ph(y,ibi,kma,kmi,kkmi)
