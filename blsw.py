@@ -222,7 +222,10 @@ def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
 #       Loop over phase and tdur.
         p[jf,::] = blsw_loop2ph(y,ibi,kma,kmi,kkmi)
 
-    return p
+
+    ph = bins[:-1]
+    ph = np.append(ph,ph[0:kma]+1)
+    return p,farr,ph
 
 
 def blsw_loop2ph(y,ibi,kma,kmi,kkmi):
