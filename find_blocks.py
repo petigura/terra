@@ -70,13 +70,7 @@ def pt(t,x,sig):
     best,last,val = array([]),array([]).astype(int),array([])
 
     for r in range(n):
-
-        cells = arange(r+1)
-
-        o = [ pt_bfit(x[c:r+1],sig[c:r+1]) for c in cells]
-        o = array(o) 
-        Lend,valend = o[::,0],o[::,1]
-
+        Lend,valend = pt_last2(x[:r+1],sig[:r+1])
         Ltot = append(0,best) + Lend - 10
 
         # r* the change point that maximizes fitness of partition
@@ -89,6 +83,19 @@ def pt(t,x,sig):
             print r
 
     return last,val
+
+def pt_last(x,sig,r):
+    """
+    Return the likelihood and mostlikely values for block ending at r
+    """
+
+    cells = arange(r+1)
+
+    o = [ pt_bfit(x[c:r+1],sig[c:r+1]) for c in cells]
+    o = array(o) 
+    Lend,valend = o[::,0],o[::,1]
+
+    return Lend,valend
 
 def pt_bfit(x,sig):
     """
@@ -106,3 +113,42 @@ def pt_bfit(x,sig):
 
     return maxl,maxval
     
+
+def pt_last2(x,sig):
+    """
+    Given a data block return it's maximum likelihood.
+
+    Try to get rid of redundant summing
+
+    a = 0.5*sum(1. / sig2)
+    b = -1.0*sum(x / sig2)
+    c = 0.5*sum(x**2/sig2)
+
+    """
+
+
+    sig2 = sig**2
+    x2 = x**2
+
+    a = b = c = 0.0 
+    n = len(x)
+    maxl = array([])
+    maxval = array([])
+    
+    for r in range(n-1,-1,-1):
+        a += 0.5 / sig2[r]
+        b -= x[r] / sig2[r]
+        c += 0.5 * x2[r] / sig2[r]
+
+        maxl   = append(maxl,   b**2 / (4*a) - c )
+        maxval = append(maxval, -b / (2*a) )
+
+    # Arrays are filled backward, so reverse them.
+    maxl   = maxl[::-1]
+    maxval = maxval[::-1]
+
+    return maxl,maxval
+    
+
+
+
