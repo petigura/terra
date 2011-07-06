@@ -7,6 +7,69 @@ from scipy import weave
 from scipy.weave import converters
 
 
+def pt(t,x,sig):
+    """
+    Bayesian blocks algorithm for point measurements.  
+
+    Use the maximum likelihold as a measure of block fitness.
+    """
+
+    # Ensure data are sequential in time.
+    sidx = argsort(t)
+    t   = t[sidx]
+    x   = x[sidx]
+    sig = sig[sidx]
+
+    n = len(t)
+
+    best,last,val = array([]),array([]).astype(int),array([])
+
+    # Compute the constant term in the ML sum.
+    C = n/2.*log(2*pi) + sum( log(sig) ) 
+
+    for r in range(n):
+        Lend,valend = pt_last(x[:r+1],sig[:r+1])
+        Ltot = append(0,best) + Lend + C
+
+        # r* the change point that maximizes fitness of partition
+        rstar = argmax( Ltot)
+        best  = append( best,Ltot[rstar] )
+        last  = append( last,rstar )
+        val   = append( val,valend[rstar] )
+
+    print Ltot
+    return last,val
+    
+def pt_last(xx,sig):
+    """
+    Given a data block return it's maximum likelihood.
+
+    Try to get rid of redundant summing
+
+    a = 0.5*sum(1. / sig2)
+    b = -1.0*sum(x / sig2)
+    c = 0.5*sum(x**2/sig2)
+
+    """
+
+    n = len(xx)
+    maxl = zeros(n).astype(float)
+    maxval = zeros(n).astype(float)
+    
+    # TODO: opening the file inside the loop is inefficient
+    fid = open('ccode/pt_loop.c') 
+    code = fid.read()
+    fid.close()
+
+    weave.inline(code,['xx','sig','n','maxl','maxval'],
+                 type_converters=converters.blitz)
+
+    return maxl,maxval
+
+
+########################
+
+
 def evt(tt):
     """
     Python implementation of Scargle's Bayesian blocks algorithm for
@@ -53,64 +116,4 @@ def evt(tt):
         best,last = append( best,lpart[rstar] ),append( last,rstar )
 
     return last
-
-
-def pt(t,x,sig):
-    """
-    Bayesian blocks algorithm for point measurements.  
-
-    Use the maximum likelihold as a measure of block fitness.
-    """
-
-    # Ensure data are sequential in time.
-    sidx = argsort(t)
-    t   = t[sidx]
-    x   = x[sidx]
-    sig = sig[sidx]
-
-    n = len(t)
-
-    best,last,val = array([]),array([]).astype(int),array([])
-
-    for r in range(n):
-        Lend,valend = pt_last(x[:r+1],sig[:r+1])
-        Ltot = append(0,best) + Lend - 10
-
-        # r* the change point that maximizes fitness of partition
-        rstar = argmax( Ltot)
-        best  = append( best,Ltot[rstar] )
-        last  = append( last,rstar )
-        val   = append( val,valend[rstar] )
-
-
-    return last,val
-    
-def pt_last(xx,sig):
-    """
-    Given a data block return it's maximum likelihood.
-
-    Try to get rid of redundant summing
-
-    a = 0.5*sum(1. / sig2)
-    b = -1.0*sum(x / sig2)
-    c = 0.5*sum(x**2/sig2)
-
-    """
-
-
-    n = len(xx)
-    maxl = zeros(n).astype(float)
-    maxval = zeros(n).astype(float)
-    
-    # TODO: opening the file inside the loop is inefficient
-    fid = open('ccode/pt_loop.c') 
-    code = fid.read()
-    fid.close()
-
-    weave.inline(code,['xx','sig','n','maxl','maxval'],
-                 type_converters=converters.blitz)
-
-    return maxl,maxval
-
-
 
