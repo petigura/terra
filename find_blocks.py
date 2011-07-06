@@ -73,7 +73,7 @@ def pt(t,x,sig):
     best,last,val = array([]),array([]).astype(int),array([])
 
     for r in range(n):
-        Lend,valend = pt_lastw(x[:r+1],sig[:r+1])
+        Lend,valend = pt_last(x[:r+1],sig[:r+1])
         Ltot = append(0,best) + Lend - 10
 
         # r* the change point that maximizes fitness of partition
@@ -84,43 +84,8 @@ def pt(t,x,sig):
 
 
     return last,val
-
-def pt_last2(x,sig):
-    """
-    Given a data block return it's maximum likelihood.
-
-    Try to get rid of redundant summing
-
-    a = 0.5*sum(1. / sig2)
-    b = -1.0*sum(x / sig2)
-    c = 0.5*sum(x**2/sig2)
-    """
-
-    sig2 = sig**2
-    x2 = x**2
-
-    a = b = c = 0.0 
-    n = len(x)
-    maxl = array([])
-    maxval = array([])
     
-    for r in range(n-1,-1,-1):
-        a += 0.5 / sig2[r]
-        b -= x[r] / sig2[r]
-        c += 0.5 * x2[r] / sig2[r]
-
-        l = b**2 / (4*a) - c
-        val =  -b / (2*a)
-        maxl   = append(maxl,  l   )
-        maxval = append(maxval,val )
-
-    # Arrays are filled backward, so reverse them.
-    maxl   = maxl[::-1]
-    maxval = maxval[::-1]
-
-    return maxl,maxval
-    
-def pt_lastw(xx,sig):
+def pt_last(xx,sig):
     """
     Given a data block return it's maximum likelihood.
 
