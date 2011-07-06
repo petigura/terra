@@ -87,22 +87,16 @@ def pt(t,x,sig):
     
 def pt_last(xx,sig):
     """
-    Given a data block return it's maximum likelihood.
+    Given a section of data, find the maximum likelihold and the most
+    probable value for every possible block that ends on the last element
 
-    Try to get rid of redundant summing
-
-    a = 0.5*sum(1. / sig2)
-    b = -1.0*sum(x / sig2)
-    c = 0.5*sum(x**2/sig2)
-
+    This implementation uses weave.  Looping in C gives a ~1000x speedup
     """
-
 
     n = len(xx)
     maxl = zeros(n).astype(float)
     maxval = zeros(n).astype(float)
     
-    # TODO: opening the file inside the loop is inefficient
     fid = open('ccode/pt_loop.c') 
     code = fid.read()
     fid.close()
