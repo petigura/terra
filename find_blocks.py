@@ -24,12 +24,9 @@ def pt(t,x,sig):
 
     best,last,val = array([]),array([]).astype(int),array([])
 
-    # Compute the constant term in the ML sum.
-    C = n/2.*log(2*pi) + sum( log(sig) ) 
-
     for r in range(n):
         Lend,valend = pt_last(x[:r+1],sig[:r+1])
-        Ltot = append(0,best) + Lend + C
+        Ltot = append(0,best) + Lend - 10
 
         # r* the change point that maximizes fitness of partition
         rstar = argmax( Ltot)
