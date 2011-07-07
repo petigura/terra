@@ -7,7 +7,7 @@ from scipy import weave
 from scipy.weave import converters
 
 
-def pt(t,x,sig):
+def pt(t,x,sig,ncp=10):
     """
     Bayesian blocks algorithm for point measurements.  
 
@@ -26,7 +26,7 @@ def pt(t,x,sig):
 
     for r in range(n):
         Lend,valend = pt_last(x[:r+1],sig[:r+1])
-        Ltot = append(0,best) + Lend - 10
+        Ltot = append(0,best) + Lend - ncp
 
         # r* the change point that maximizes fitness of partition
         rstar = argmax( Ltot)
@@ -34,7 +34,6 @@ def pt(t,x,sig):
         last  = append( last,rstar )
         val   = append( val,valend[rstar] )
 
-    print Ltot
     return last,val
     
 def pt_last(xx,sig):
@@ -62,7 +61,6 @@ def pt_last(xx,sig):
                  type_converters=converters.blitz)
 
     return maxl,maxval
-
 
 ########################
 
