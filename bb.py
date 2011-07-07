@@ -2,12 +2,17 @@
 Bayesian Blocks Transit Finder
 """
 
-def get_blocks(x,last,val):
+from numpy import *
+
+def get_blocks(x_inp,last,val):
     """
     Just return the blocks.
 
     If a timeseries only has one block, all elements will be equal.
     """
+
+    # Don't modify the input argument
+    x = copy(x_inp)
 
     cp = unique(last)
     ncp  = len(cp)
@@ -20,3 +25,5 @@ def get_blocks(x,last,val):
         x[ idxlo[i]:idxhi[i]+1 ] = val[ idxhi[i] ]
 
     return x
+
+
