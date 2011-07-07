@@ -6,6 +6,7 @@ from numpy import *
 import keptoy
 import pbls
 import blsw
+import find_blocks
 
 def p2d(p,farr,ph):
     """
@@ -54,9 +55,6 @@ def phasemov():
                bbox=dict(boxstyle="round", fc="w", ec="k"))
         f.savefig('frames/ph%02d.png' % i)
         
-
-
-
         plt.show()
 
 
@@ -65,13 +63,64 @@ def blocks(t,f,last,val):
     Plot lines for the Bayesian Blocks Algorithm
     """
 
-    plt.plot(t,f,'o',ms=1,alpha=0.5)
+    fig = plt.gcf()
+    fig.clf()
+    ax = fig.add_subplot(111)
+
+    ax.plot(t,f,'o',ms=1,alpha=0.5)
 
     cp = unique(last)
     n = len(t)
     idxlo = cp                    # index of left side of region
     idxhi = append(cp[1:],n)-1 # index of right side of region 
 
-    plt.hlines(val[idxhi],t[idxlo],t[idxhi],'red',lw=10)
+    ax.hlines(val[idxhi],t[idxlo],t[idxhi],'red',lw=5)
+    ax.set_xlabel('Time (days)')
+    ax.set_ylabel('Flux (normalized)')
 
     plt.show()
+
+
+def ncp(s2n):
+    """
+    Explore the output of BB as we change the prior on the number of
+    change points
+    """
+    
+    nncp = logspace(0.5,1.5,9)
+    
+    f,t = keptoy.lightcurve(s2n=s2n)
+    sig = zeros(len(t)) + std(f)
+
+    for i in range( len(nncp) ):
+        last,val = find_blocks.pt( t,f,sig,ncp=nncp[i] )
+        blocks(t,f,last,val)
+        
+        ax = plt.gca()
+        ax.set_title('s2n - %.1e, cpts prior - %.2e' % (s2n,nncp[i]) )
+        fig = plt.gcf()
+
+        fig.savefig('frames/s2n-%.1e_%02d.png' % (s2n,i) )
+        plt.show()
+
+
+
+def phasemov():
+    ph=linspace(0,2*pi,30)
+    for i in range(len(ph)):
+        f,t = keptoy.lightcurve(s2n=1000,P=10.,phase=ph[i])
+
+        nf,fmin,df,nb,qmi,qma,n = pbls.blsinit(t,f,nf=1000)
+        p = blswph(t,f,nf,fmin,df,nb,qmi,qma,n)
+        f = plt.gcf()
+        f.clf()
+        ax = f.add_subplot(111)
+        ax.imshow(p,aspect='auto')
+
+        ax.set_xlabel('bin number of start of transit')
+        ax.set_ylabel('frequency')
+        ax.set_title('2D BLS spectrum - phase %.2f' % ph[i])
+        f.savefig('frames/ph%02d.png' % i)
+
+        plt.show()
+
