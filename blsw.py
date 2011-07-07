@@ -271,33 +271,6 @@ def blsw_loop2ph(y,ibi,kma,kmi,kkmi):
     return power
 
 
-def phasemov():
-    import matplotlib.pylab as plt
-    import keptoy
-    import pbls
-
-    ph=linspace(0,2*pi,30)
-    for i in range(len(ph)):
-        f,t = keptoy.lightcurve(s2n=1000,P=10.,phase=ph[i])
-
-        nf,fmin,df,nb,qmi,qma,n = pbls.blsinit(t,f,nf=1000)
-        p = blswph(t,f,nf,fmin,df,nb,qmi,qma,n)
-        f = plt.gcf()
-        f.clf()
-        ax = f.add_subplot(111)
-        ax.imshow(p,aspect='auto')
-
-        ax.set_xlabel('bin number of start of transit')
-        ax.set_ylabel('frequency')
-        ax.set_title('2D BLS spectrum - phase %.2f' % ph[i])
-        f.savefig('frames/ph%02d.png' % i)
-
-        plt.show()
-
-
-
-
-
 
 def blsmod(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
