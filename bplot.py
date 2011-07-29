@@ -7,6 +7,7 @@ import keptoy
 import pbls
 import blsw
 import find_blocks
+import bb
 
 def p2d(p,farr,ph):
     """
@@ -124,3 +125,98 @@ def phasemov():
 
         plt.show()
 
+
+def blsbb():
+    """
+    Simulate a time series.  Compare two bls spectra.
+
+    1. Normal BLS
+    2. Blocks returned by BB
+
+    Also plot the timeseries.
+
+    """
+
+
+    s2n = logspace(0.5,2,8)
+
+    for i in range( len(s2n) ):
+
+        f,t = keptoy.lightcurve(s2n = s2n[i],tbase=600)
+
+        sig = zeros(len(t)) + std(f)
+        last,val =  find_blocks.pt(t,f,sig,ncp=5)
+        fb = bb.get_blocks(f,last,val)
+
+        o = pbls.blswrap(t,f,blsfunc=blsw.blsw,nf=1000)
+        ob = pbls.blswrap(t,fb,blsfunc=blsw.blsw,nf=1000)
+
+        fig = plt.gcf()
+        fig.clf()
+
+
+        ax = fig.add_subplot(211)
+
+
+        ax.plot(t,f+1,'o',ms=1,alpha=0.5)
+        
+        cp = unique(last)
+        n = len(t)
+        idxlo = cp                    # index of left side of region
+        idxhi = append(cp[1:],n)-1 # index of right side of region         
+        ax.hlines(val[idxhi],t[idxlo],t[idxhi],'red',lw=5)
+        ax.set_ylabel('Flux (normalized)')
+        ax.set_xlabel('Flux (normalized)')
+
+
+
+        ax = fig.add_subplot(212)
+        ax.plot(o['farr'],o['p']    ,label = 'BLS')
+        ax.plot(ob['farr'],ob['p']  ,label = 'BLS + BB')
+        ax.set_xlabel('Frequency days^-1')
+        ax.set_ylabel('SR')
+        ax.legend()
+
+        fig.text(0.9,0.9, "S/N - %.1e" % (s2n[i]) ,
+                 ha="center",fontsize=36,
+                 bbox=dict(boxstyle="round", fc="w", ec="k"))
+
+        fig.savefig('frames/blsbb%02d.png' % i)
+        plt.show()
+
+
+
+def bbfold(P):
+    
+
+    # Trial Data:
+    tbase = 90.
+    f,t = keptoy.lightcurve(tbase=tbase,s2n=5,P=10.1)
+    
+    o = pbls.blswrap(t,f,blsfunc=blsw.blsw)
+    farr = linspace(min(o['farr']),max(o['farr']),100)
+    sig = zeros(len(f)) + std(f)
+
+ #   for fq in farr:
+
+    tfold = mod(t,P) # Fold according to trial period.
+    sidx = argsort(tfold)
+    tfold = tfold[sidx]
+    ffold = f[sidx]
+
+    last,val = find_blocks.pt(tfold,ffold,sig,ncp=8)
+
+    fig = plt.gcf()
+    fig.clf()
+
+    ax = fig.add_subplot(111)
+    ax.plot(tfold,ffold,'o',ms=1,alpha=0.5)
+
+    cp = unique(last)
+    n = len(t)
+    idxlo = cp                    # index of left side of region
+    idxhi = append(cp[1:],n)-1 # index of right side of region         
+    ax.hlines(val[idxhi],tfold[idxlo],tfold[idxhi],'red',lw=5)
+    ax.set_ylabel('Flux (normalized)')
+
+    plt.show()

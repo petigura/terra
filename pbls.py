@@ -9,6 +9,79 @@ import numpy as np
 from numplus import hbinavg
 from numpy import *
 
+
+def blswrap(t,f,blsfunc=None,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1,
+            ver=False):
+    """
+    blswrap sets the input arrays for the BLS algorithm.
+
+    Description of the inputs:
+    t       : array
+              time
+    f       : array
+              data values
+    blsfunc : function
+              must have the following signature
+              blsfunc(t,f,nf,fmin,df,nb,qmi,qma,n)
+              See bls for description of each input
+    """
+
+    t,f,nf,fmin,df,nb,qmi,qma,n = blsinit(t,f,nf=nf,fmin=fmin,fmax=fmax,
+                                          nb=nb,qmi=qmi,qma=qma)
+
+    p,bper,bpow,depth,qtran,in1,in2 = blsfunc(t,f,nf,fmin,df,nb,qmi,qma,n)
+
+    farr = np.linspace(fmin,fmax,nf) 
+    parr = 1/farr
+
+
+    # Calculate phase of mid transit.
+    mdt = (1.*in1/nb+qtran/2.)*bper
+
+    if ver:
+        print """
+peak period     - %.4f
+peak power      - %.4f
+depth at p      - %.4f
+frac trans time - %.4f
+first bin       - %i
+last bin        - %i
+trans mid time  - %.2f
+""" % (bper,bpow,depth,qtran,in1,in2,mdt)
+
+    out = {'p'    :p   ,
+           'farr' :farr,
+           'bper' :bper,
+           'bpow' :bper,
+           'mdt'  :mdt ,
+           'depth':depth,
+           'qtran':qtran,
+
+           # Convience
+           'phase':2.*pi*in1/nb,
+           'tdur':qtran*bper
+           }
+
+    return out
+
+
+def blsinit(t,f,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1):
+    
+    n = len(t)
+    tbsln = t.max()-t.min()
+
+    # Check that f is in the right range.
+    if fmin == None:
+        # Twice the lowest fft freq
+        fmin = 2./tbsln
+
+    if fmin < 1./tbsln:
+        raise ValueError
+
+    df = (fmax-fmin)/nf
+
+    return t,f,nf,fmin,df,nb,qmi,qma,n
+
 def blscc(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
     Python BLS - a carbon copy of the fortran version
@@ -286,67 +359,3 @@ def blsnp(t,x,nf,fmin,df,nb,qmi,qma,n):
 
 
 
-
-def blswrap(t,f,blsfunc=None,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1,
-            ver=False):
-    """
-    blswrap sets the input arrays for the BLS algorithm.
-
-    Description of the inputs:
-    t       : array
-              time
-    f       : array
-              data values
-    blsfunc : function
-              must have the following signature
-              blsfunc(t,f,nf,fmin,df,nb,qmi,qma,n)
-              See bls for description of each input
-    """
-
-    n = len(t)
-    tbsln = t.max()-t.min()
-
-    # Check that f is in the right range.
-    if fmin == None:
-        # Twice the lowest fft freq
-        fmin = 2./tbsln
-
-    if fmin < 1./tbsln:
-        raise ValueError
-
-    df = (fmax-fmin)/nf
-
-    p,bper,bpow,depth,qtran,in1,in2 = blsfunc(t,f,nf,fmin,df,nb,qmi,qma,n)
-
-    farr = np.linspace(fmin,fmax,nf) 
-    parr = 1/farr
-
-
-    # Calculate phase of mid transit.
-    mdt = (1.*in1/nb+qtran/2.)*bper
-
-    if ver:
-        print """
-peak period     - %.4f
-peak power      - %.4f
-depth at p      - %.4f
-frac trans time - %.4f
-first bin       - %i
-last bin        - %i
-trans mid time  - %.2f
-""" % (bper,bpow,depth,qtran,in1,in2,mdt)
-
-    out = {'p'    :p   ,
-           'farr' :farr,
-           'bper' :bper,
-           'bpow' :bper,
-           'mdt'  :mdt ,
-           'depth':depth,
-           'qtran':qtran,
-
-           # Convience
-           'phase':2.*pi*in1/nb,
-           'tdur':qtran*bper
-           }
-
-    return out
