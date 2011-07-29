@@ -28,7 +28,7 @@ def pt(t,x,sig,ncp=10):
         Lend,valend = pt_last(x[:r+1],sig[:r+1])
         Ltot = append(0,best) + Lend - ncp
 
-        # r* the change point that maximizes fitness of partition
+        # rstar the change point that maximizes fitness of partition
         rstar = argmax( Ltot)
         best  = append( best,Ltot[rstar] )
         last  = append( last,rstar )
