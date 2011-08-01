@@ -31,9 +31,6 @@ def lightcurve(df=0.01,P=12.1,phase=pi,cad=30./60./24.,tdur=None,
 
     return f,t
 
-
-
-
 def a2tdur(a):
     """
     Calculate the duration of transit assuming:

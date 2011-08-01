@@ -7,6 +7,7 @@ from numpy import *
 from scipy import weave
 from scipy.weave import converters
 
+from keptoy import P2a,a2tdur
 
 def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
@@ -23,6 +24,12 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     """
     minbin = 5
     nbmax = 2000
+
+    # For a given period, there is an expected transit duration
+    # assuming solar type star and equatorial transit.  tmi and tma
+    # set how far from this ideal case we will search over.
+    tmi = 0.5
+    tma = 2.0
 
     y   = zeros(nbmax)
     ibi = zeros(nbmax)
@@ -42,13 +49,6 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
 
     rn = float(n)
 
-#   kmi is the minimum number of binned points in transit.
-#   kma is the maximum number of binned points in transit.
-#   kkmi is the minimum number of unbinned points in transit.
-
-    kmi = max(int(qmi*float(nb)),1)
-    kma = int(qma*float(nb)) + 1
-    kkmi = max(int(n*qmi),minbin)
 
     bpow = 0.
     x -= np.mean(x)
@@ -66,6 +66,19 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     for jf in range(nf):
         f0 = farr[jf]
 
+        P = 1.0/f0
+        tdur = a2tdur( P2a(P)  )
+        qmi = tmi * tdur / P
+        qma = tma * tdur / P
+
+        # kmi is the minimum number of binned points in transit.
+        # kma is the maximum number of binned points in transit.
+        # kkmi is the minimum number of unbinned points in transit.
+
+        kmi = max( int(qmi*float(nb) ),1 )
+        kma = int(qma*float(nb)) + 1
+        kkmi = max(int(n*qmi),minbin)
+
 #       Zero-out working arrays
         y   = zeros(nbmax).astype(float)
         ibi = zeros(nbmax).astype(int)
@@ -75,7 +88,7 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
         ph = np.mod(ph,1.)
 
 #       Put the data in bins.
-        y = ( np.histogram(ph,bins=bins,weights=x) )[0]
+        y =   ( np.histogram(ph,bins=bins,weights=x) )[0]
         ibi = ( np.histogram(ph,bins=bins) )[0]
 
 #       EEBLS extend y and ibi so they include kma more points
@@ -133,10 +146,6 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
     res = weave.inline(code,['y','ibi','kma','kmi','kkmi','rn','nb'],
                        type_converters=converters.blitz)
     return res
-
-
-
-
 
 
 ################################
