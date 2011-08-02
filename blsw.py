@@ -9,7 +9,7 @@ from scipy.weave import converters
 
 from keptoy import P2a,a2tdur
 
-def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
+def blsw(t,x,farr):
     """
     Python BLS - a modular version of BLS
 
@@ -23,7 +23,8 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     The output is called signal residue
     """
     minbin = 5
-    nbmax = 2000
+    n = len(t)
+    nf = len(farr)
 
     # For a given period, there is an expected transit duration
     # assuming solar type star and equatorial transit.  tmi and tma
@@ -37,24 +38,8 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
 
     ntbin = 10.
 
-    y   = zeros(nbmax)
-    ibi = zeros(nbmax)
-    p   = zeros(nf)
-
-    # Number of bins specified by the user cannot exceed hard-coded amount
-    if nb > nbmax:
-        print ' NB > NBMAX !!'
-        return None
-
-    # We require there be one dip.
-    # TODO: should this be 2/T?
-    tot = t[-1] - t[0]
-    if fmin < 1./tot:
-        print ' fmin < 1/T !!'
-        return None
-
+    p = zeros(nf)
     rn = float(n)
-
 
     bpow = 0.
     x -= np.mean(x)
@@ -65,8 +50,6 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     # 2. Phase of transit       i (weave) # 
     # 3. Transit Duration       j (weave) #
     #=====================================#
-
-    farr = np.linspace(fmin,fmin+nf*df,nf) 
 
     for jf in range(nf):
         f0 = farr[jf]
@@ -91,8 +74,8 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
         kkmi = max(int(n*qmi),minbin)
 
 #       Zero-out working arrays
-        y   = zeros(nbmax).astype(float)
-        ibi = zeros(nbmax).astype(int)
+        y   = zeros(nb).astype(float)
+        ibi = zeros(nb).astype(int)
 
 #       Phase fold the data according to the trial period.
         ph = t*f0
@@ -159,9 +142,7 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
     return res
 
 
-
-def blswrap(t,f,blsfunc=None,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1,
-            ver=False):
+def blswrap(t,f,nf=200,fmin=None,fmax=1.):
     """
     blswrap sets the input arrays for the BLS algorithm.
 
@@ -176,64 +157,35 @@ def blswrap(t,f,blsfunc=None,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1,
               See bls for description of each input
     """
 
-    t,f,nf,fmin,df,nb,qmi,qma,n = blsinit(t,f,nf=nf,fmin=fmin,fmax=fmax,
-                                          nb=nb,qmi=qmi,qma=qma)
+    tot = t[-1] - t[0]
 
-    p,bper,bpow,depth,qtran,in1,in2 = blsfunc(t,f,nf,fmin,df,nb,qmi,qma,n)
+    if fmin == None:
+        # Twice the lowest fft freq
+        fmin = 2./tot
 
-    farr = np.linspace(fmin,fmax,nf) 
+    # We require there be one dip.
+    # TODO: should this be 2/T?
+    if fmin < 1./tot:
+        print ' fmin < 1/T !!'
+        return None
+
+    farr = np.logspace( np.log10(fmin), np.log10(fmax), nf)
+    p,bper,bpow,depth,qtran,in1,in2 = blsw(t,f,farr)
+
     parr = 1/farr
-
-
-    # Calculate phase of mid transit.
-    mdt = (1.*in1/nb+qtran/2.)*bper
-
-    if ver:
-        print """
-peak period     - %.4f
-peak power      - %.4f
-depth at p      - %.4f
-frac trans time - %.4f
-first bin       - %i
-last bin        - %i
-trans mid time  - %.2f
-""" % (bper,bpow,depth,qtran,in1,in2,mdt)
 
     out = {'p'    :p   ,
            'farr' :farr,
+           'parr' :parr,
            'bper' :bper,
            'bpow' :bper,
-           'mdt'  :mdt ,
            'depth':depth,
            'qtran':qtran,
-
            # Convience
-           'phase':2.*pi*in1/nb,
            'tdur':qtran*bper
            }
 
     return out
-
-
-def blsinit(t,f,nf=200,fmin=None,fmax=1.,nb=1000,qmi=1e-4,qma=1e-1):
-    
-    n = len(t)
-    tbsln = t.max()-t.min()
-
-    # Check that f is in the right range.
-    if fmin == None:
-        # Twice the lowest fft freq
-        fmin = 2./tbsln
-
-    if fmin < 1./tbsln:
-        raise ValueError
-
-    df = (fmax-fmin)/nf
-
-    return t,f,nf,fmin,df,nb,qmi,qma,n
-
-
-
 
 ################################
 # OUTPUTTING PHASE INFORMATION #
