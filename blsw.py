@@ -31,6 +31,12 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     tmi = 0.5
     tma = 2.0
 
+    # For an assumed transit duration, set the number of bins in
+    # transit.  The number should be > 1, so that the intransit points
+    # aren't polluted by out of transit points.
+
+    ntbin = 10.
+
     y   = zeros(nbmax)
     ibi = zeros(nbmax)
     p   = zeros(nf)
@@ -61,15 +67,20 @@ def blsw(t,x,nf,fmin,df,nb,qmi,qma,n):
     #=====================================#
 
     farr = np.linspace(fmin,fmin+nf*df,nf) 
-    bins = np.linspace(0,1,nb+1)
 
     for jf in range(nf):
         f0 = farr[jf]
 
         P = 1.0/f0
-        tdur = a2tdur( P2a(P)  )
-        qmi = tmi * tdur / P
-        qma = tma * tdur / P
+        
+        ftdur = a2tdur( P2a(P)  ) / P # Expected fractional transit time
+
+        # Choose nb such that the transit will contain ntbin bins.
+        nb = ntbin / ftdur 
+        bins = np.linspace(0,1,nb+1)
+
+        qmi = tmi * ftdur
+        qma = tma * ftdur
 
         # kmi is the minimum number of binned points in transit.
         # kma is the maximum number of binned points in transit.
