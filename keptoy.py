@@ -9,7 +9,7 @@ M_sun = 2.0e33 # g
 
 
 def lightcurve(df=0.01,P=12.1,phase=pi,cad=30./60./24.,tdur=None,
-               s2n=10,tbase=90,a=None):
+               s2n=10,tbase=90,a=None,null=False):
     """
     generate sample lightcurve.
     """
@@ -21,9 +21,15 @@ def lightcurve(df=0.01,P=12.1,phase=pi,cad=30./60./24.,tdur=None,
     npts = tbase/cad
     t = np.linspace(0,tbase,npts) 
 
-    # Add in noise s2n = df * sqrt( number of pts in transit ) / noise level
+    # Noise is constant
+    noise = 1e-4
 
-    noise = df * np.sqrt( ntpts(P,tdur,tbase,cad) ) / s2n
+    if null:
+        df = 0.
+    else:
+    # Add in noise s2n = df * sqrt( number of pts in transit ) / noise level
+        df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+
     f = np.ones(npts) + noise*np.random.randn(npts)
 
     tidx = np.where( np.mod(t-phase*P/2/pi,P) < tdur)[0]
