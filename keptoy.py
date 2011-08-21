@@ -9,7 +9,7 @@ M_sun = 2.0e33 # g
 
 
 def lightcurve(df=0.01,P=12.1,phase=pi,cad=30./60./24.,tdur=None,
-               s2n=10,tbase=90,a=None,null=False):
+               s2n=10,tbase=90,a=None,null=False,seed=None):
     """
     generate sample lightcurve.
     """
@@ -27,8 +27,11 @@ def lightcurve(df=0.01,P=12.1,phase=pi,cad=30./60./24.,tdur=None,
     if null:
         df = 0.
     else:
-    # Add in noise s2n = df * sqrt( number of pts in transit ) / noise level
         df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+
+    # Add in a seed for deterministic noise
+    if seed != None:
+        np.random.seed(seed)
 
     f = np.ones(npts) + noise*np.random.randn(npts)
 
