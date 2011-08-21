@@ -1,12 +1,18 @@
 """
 My attempt at a python implementation of BLS.
 """
+
+import os
 import numpy as np
 from numpy import *
 
 from scipy import weave
 from scipy.weave import converters
 
+from scipy.ndimage import median_filter
+from scikits.statsmodels.tools.tools import ECDF
+
+from peakdetect import peakdet
 from keptoy import P2a,a2tdur
 
 def blsw(t,x,farr):
@@ -73,23 +79,23 @@ def blsw(t,x,farr):
         kma = int(qma*float(nb)) + 1
         kkmi = max(int(n*qmi),minbin)
 
-#       Zero-out working arrays
+        # Zero-out working arrays
         y   = zeros(nb).astype(float)
         ibi = zeros(nb).astype(int)
 
-#       Phase fold the data according to the trial period.
+        # Phase fold the data according to the trial period.
         ph = t*f0
         ph = np.mod(ph,1.)
 
-#       Put the data in bins.
+        # Put the data in bins.
         y =   ( np.histogram(ph,bins=bins,weights=x) )[0]
         ibi = ( np.histogram(ph,bins=bins) )[0]
 
-#       EEBLS extend y and ibi so they include kma more points
+        # EEBLS extend y and ibi so they include kma more points
         y   = np.append(y,y[0:kma])
         ibi = np.append(ibi,ibi[0:kma])
 
-#       Loop over phase and tdur.
+        # Loop over phase and tdur.
         power,jn1,jn2,rn3,s3 = blsw_loop2(y,ibi,kma,kmi,kkmi)
 
         p[jf] = sqrt(power)
@@ -133,14 +139,13 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
     rn = float(np.sum(ibi))
 
     # TODO: opening the file inside the loop is inefficient
-    fid = open('ccode/blsw_loop2.c') 
+    fid = open(os.environ['CCODE']+'blsw_loop2.c') 
     code = fid.read()
     fid.close()
 
     res = weave.inline(code,['y','ibi','kma','kmi','kkmi','rn','nb'],
                        type_converters=converters.blitz)
     return res
-
 
 def blswrap(t,f,nf=200,fmin=None,fmax=1.):
     """
@@ -181,11 +186,78 @@ def blswrap(t,f,nf=200,fmin=None,fmax=1.):
            'bpow' :bper,
            'depth':depth,
            'qtran':qtran,
+
            # Convience
-           'tdur':qtran*bper
+           'tdur':qtran*bper,
+           'f':f,
+           't':t,
            }
 
     return out
+
+def pfind(t,f):
+
+    nf   = 5000
+    fmax = 1/50. 
+    ntop = 100 # Look at the highest ntop peaks.
+    fhair = 3. # Max peak must be this much bigger than the hair.
+
+    o = blswrap(t,f,nf=nf,fmax=fmax)
+
+    # Subtract off the trend
+    o['p'] -= median_filter(o['p'],size=200)
+
+    # Find the highest peak.
+    mxid = argmax(o['p'])
+    mxpk = o['p'][mxid]
+
+    # Find all the peaks        
+    mxt,mnt = peakdet(o['p'],delta=1e-3*mxpk,x=o['parr'])
+    mxt = array(mxt)
+
+    # Look at the highest peaks
+    t1id = where( (mxt[::,1] > sort( mxt[::,1] )[-100]) )
+
+    # tpyical values of the highest peaks.
+    hair = median(mxt[t1id,1]) 
+
+    if mxpk > 3*hair:
+        return True ,o
+    else:
+        return False,o
+
+
+def null(t,f):
+
+    nf   = 5000
+    fmax = 1/50. 
+    ntop = 100 # Look at the highest ntop peaks.
+    fhair = 3. # Max peak must be this much bigger than the hair.
+
+    o = blswrap(t,f,nf=nf,fmax=fmax)
+
+    return True,o
+
+def fap(pspec,pspecn):
+    """
+    Take a BLS spectrum and compare it against identical spectra
+    computed with a null signal.  At each trial period ask how many
+    null signals produced a signal residue as high or higher.  This is
+    the False Alarm Probabilty.
+    """
+    
+    nf = len(pspec) # Number of trial frequencies.
+    fap = zeros(nf)
+
+    pn = pspecn.flatten() # An array of SR computed with a null signal
+    pncdf = ECDF(pn)
+
+    for i in range(nf):
+        p = pspec[i]
+        fap[i] = 1 - pncdf(p)
+
+    return fap
+
 
 ################################
 # OUTPUTTING PHASE INFORMATION #
@@ -308,7 +380,7 @@ def blsw_loop2ph(y,ibi,kma,kmi,kkmi):
     power = np.zeros(nb) 
 
     # TODO: opening the file inside the loop is inefficient
-    fid = open('ccode/blsw_loop2ph.c') 
+    fid = open(os.environ['CCODE']+'blsw_loop2ph.c') 
     code = fid.read()
     fid.close()
 
