@@ -9,6 +9,12 @@ import blsw
 import find_blocks
 import bb
 
+from scipy.ndimage import median_filter
+from scipy.stats import ks_2samp
+
+
+from peakdetect import peakdet
+
 def p2d(p,farr,ph):
     """
     Shows the power for the BLS 2D spectrum
@@ -220,3 +226,102 @@ def bbfold(P):
     ax.set_ylabel('Flux (normalized)')
 
     plt.show()
+
+
+def perfind():
+    """
+    Test how good the KS test is at descriminating a real planet from
+    a none.    
+    """
+
+    P = 200.
+    tbase = 1000.
+    nf = 500
+
+    s2n = logspace( log10(3),log10(15),5 )
+    print "S/N sig-noise noise-noise" 
+    for s in s2n:
+        # Generate a lightcurve.
+        f,t = keptoy.lightcurve(P=P,tbase=tbase,s2n=s)
+        o = blsw.blswrap(t,f,nf=nf,fmax=1/50.)
+
+        # Generate a null lightcurve
+        fn = std(f)*random.randn(len(f))
+        on = blsw.blswrap(t,fn,nf=nf,fmax=1/50.)
+
+        # Generate another null lightcurve
+        fn2 = std(f)*random.randn(len(f))
+        on2 = blsw.blswrap(t,fn2,nf=nf,fmax=1/50.)
+
+        o['p'] -= median_filter(o['p'],size=200)
+        on['p'] -= median_filter(on['p'],size=200)
+        on2['p'] -= median_filter(on2['p'],size=200)
+        
+        print "%.2f %.2e %.2e %.2f" % \
+            (s,(ks_2samp(o['p'],on['p']))[1],(ks_2samp(o['p'],on2['p']))[1],
+             o['parr'][argmax(o['p'])])
+        
+
+        fig = plt.gcf()
+        fig.clf()
+        ax = fig.add_subplot(111)
+        ax.plot(o['parr'],o['p'],label='Signal')
+        ax.plot(o['parr'],on['p'],label='Noise')        
+        ax.plot(o['parr'],on2['p'],label='Noise2')
+        ax.legend()
+        plt.show()
+
+
+def perfind2():
+    
+    P = 200.
+    tbase = 1000.
+    nf = 5000
+
+
+    s2n = logspace( log10(3),log10(15),5 )
+    print "S/N sig-noise noise-noise" 
+    for s in s2n:
+        # Generate a lightcurve.
+        f,t = keptoy.lightcurve(P=P,tbase=tbase,s2n=s)
+        o = blsw.blswrap(t,f,nf=nf,fmax=1/50.)
+
+        # Subtract off the trend
+        o['p'] -= median_filter(o['p'],size=200)
+
+        # Find the highest peak.
+        mxid = argmax(o['p'])
+        mxpk = o['p'][mxid]
+
+        # Find all the peaks        
+        mxt,mnt = peakdet(o['p'],delta=1e-3*mxpk,x=o['parr'])
+        mxt = array(mxt)
+
+        # Restrict attention to the highest 100 but leaving off top 10
+        t1id = where( (mxt[::,1] > sort( mxt[::,1] )[-100]) &
+                      (mxt[::,1] < sort( mxt[::,1] )[-10]) )
+
+
+
+        fig = plt.gcf()
+        fig.clf()
+        ax = fig.add_subplot(111)
+        ax.plot(o['parr'],o['p'],label='Signal')
+        ax.scatter( mxt[t1id,0],mxt[t1id,1],label='Tier 1' )
+        
+        # tpyical values of the highest 100 peaks.
+        hair = median(mxt[t1id,1]) 
+
+
+        left  = min(o['parr'])
+        right  = max(o['parr'])
+        ax.hlines(hair,left,right)
+
+        if mxpk > 3*hair:
+            print "Peroid is %.2f" % (o['parr'][mxid])
+        else:
+            print "No signal"
+        
+        ax.legend()
+        plt.show()
+
