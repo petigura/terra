@@ -195,69 +195,6 @@ def blswrap(t,f,nf=200,fmin=None,fmax=1.):
 
     return out
 
-def pfind(t,f):
-
-    nf   = 5000
-    fmax = 1/50. 
-    ntop = 100 # Look at the highest ntop peaks.
-    fhair = 3. # Max peak must be this much bigger than the hair.
-
-    o = blswrap(t,f,nf=nf,fmax=fmax)
-
-    # Subtract off the trend
-    o['p'] -= median_filter(o['p'],size=200)
-
-    # Find the highest peak.
-    mxid = argmax(o['p'])
-    mxpk = o['p'][mxid]
-
-    # Find all the peaks        
-    mxt,mnt = peakdet(o['p'],delta=1e-3*mxpk,x=o['parr'])
-    mxt = array(mxt)
-
-    # Look at the highest peaks
-    t1id = where( (mxt[::,1] > sort( mxt[::,1] )[-100]) )
-
-    # tpyical values of the highest peaks.
-    hair = median(mxt[t1id,1]) 
-
-    if mxpk > 3*hair:
-        return True ,o
-    else:
-        return False,o
-
-
-def null(t,f):
-
-    nf   = 5000
-    fmax = 1/50. 
-    ntop = 100 # Look at the highest ntop peaks.
-    fhair = 3. # Max peak must be this much bigger than the hair.
-
-    o = blswrap(t,f,nf=nf,fmax=fmax)
-
-    return True,o
-
-def fap(pspec,pspecn):
-    """
-    Take a BLS spectrum and compare it against identical spectra
-    computed with a null signal.  At each trial period ask how many
-    null signals produced a signal residue as high or higher.  This is
-    the False Alarm Probabilty.
-    """
-    
-    nf = len(pspec) # Number of trial frequencies.
-    fap = zeros(nf)
-
-    pn = pspecn.flatten() # An array of SR computed with a null signal
-    pncdf = ECDF(pn)
-
-    for i in range(nf):
-        p = pspec[i]
-        fap[i] = 1 - pncdf(p)
-
-    return fap
-
 
 ################################
 # OUTPUTTING PHASE INFORMATION #
