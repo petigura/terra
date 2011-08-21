@@ -53,8 +53,7 @@ def init(tbase=[30,600]   ,ntbase = 30,
     seed = 0
 
     for p in par:
-        for i in range(ntr):
-            
+        for i in range(ntr):            
             phase = wphase*random()
             dper   = wper*random()
             d = {'s2n':p[0],'tbase':p[1],'P':per+dper,'phase':phase,
@@ -78,8 +77,6 @@ def profile(darr,save=None,plotsave=None):
     `lightcurve`  These are the parameters for the fits. Must include:
      P     - period
      """
-
-
     f = open('null1000.pickle')
     n = pickle.load(f)
 
@@ -103,28 +100,24 @@ def profile(darr,save=None,plotsave=None):
                                   1e-6 : 5e-6 : 100j]
                 fapg = nullgrid(nper,npow,perg,pwg)
                 plotnull(perg,pwg,log10(fapg) )
-
-
                 ax = plt.gca()
                 ax.plot( o['parr'] , o['p'] )
                 ax.plot( [miper],[mapow],'or')
-
                 fig = plt.gcf()
-
-                figt = """
-FAP %.2e \n
-Seed %d 
-""" % (mifap,d['seed']) 
+                figt = 'FAP %.2e \n Seed %d' % (mifap,d['seed']) 
 
                 fig.text(0.9,0.8,figt, 
                          ha="center",
                          bbox = dict(boxstyle="round", fc="w", ec="k") )
+
                 fig.savefig('frames/%s_%03d.png' % (plotsave,d['seed']) )
 
             res.append( {'mifap':mifap,'miper':miper} )
             
-        except ValueError:
-            print "Value Error"
+        except:
+            pass
+        else:
+            print "else!"
             res.append( {'mifap':0,'miper':0} )
 
     if save != None:
@@ -303,15 +296,79 @@ def peakfap(nper,npow,per,pow):
 
     return miper,mifap
 
+def fap_s2n():
+    """
+    Show how the FAP changes as a function of s2n    
+    """
+    
+    s2n = [4,5,6,8,10,12,16]
+    ns2n = len(s2n)
 
-def eta(xarr,parr):
-    x = unique(xarr)
-    eta = zeros( len(x) ) 
+    fig = plt.gcf() 
 
-    for i in range( len(x) ) :
-        # How many runs where there at this value?
-        ntr = len ( where(xarr == x[i] ) [0] )
-        npass = len( where( (xarr == x[i]) & (parr == True) )[0] )
-        eta[i] = 1.*npass/ntr
+    for i in range(ns2n):
+        s = s2n[i]
 
-    return x,eta 
+        file = open('pickle/s2n-%d_1000.pickle' % s,'rb')
+        out = pickle.load(file)
+        res,darr = out['res'],out['darr']
+
+        fap = array([r['mifap'] for r in res])
+        oP = array([r['miper'] for r in res])
+        iP = array([r['P'] for r in darr])
+        
+
+        fail =  abs(oP-iP)/iP > 0.1
+        y = log10(fap)
+
+        ax = fig.add_subplot(ns2n,1,i+1)
+        bins = linspace(-20,3,48)
+        
+        ax.hist( y[where(~fail)] ,color='g',bins=bins,label='Good')
+        ax.hist( y[where(fail)] ,color='r',alpha=0.8,bins=bins,label='Fail')
+
+        plt.legend(title='S/N - %d' %  darr[0]['s2n'], loc='best')
+
+    ax.set_xlabel('log(FAP)')
+    plt.show()
+        
+def errors():
+    s2n = [4,5,6,8,10,12,16]
+    ns2n = len(s2n)
+
+    print """
+Null Hypothesis:  There is no planet with period P = oP.
+|--------------------------------------------|
+|                      P != oP      P = oP   |
+|                      -------      -------  |
+|Reject null           False Pos    True Pos |
+|Fail to reject null   True Neg     False Neg|
+|--------------------------------------------|
+
+S/N   False Pos  True Pos  True Neg  False Neg
+---   ---------  --------  --------  ---------""" 
+
+    for i in range(ns2n):
+        s = s2n[i]
+
+        file = open('pickle/s2n-%d_1000.pickle' % s,'rb')
+        out = pickle.load(file)
+        res,darr = out['res'],out['darr']
+
+        fap = array([r['mifap'] for r in res])
+        oP = array([r['miper'] for r in res])
+        iP = array([r['P'] for r in darr])
+        nsim = 1.0*len(fap)
+        
+        # Good fap
+        gfap = fap < 1e-2
+        
+        # Wrong period
+        wper = abs(oP-iP)/iP > 0.1
+
+        fp = len( where( gfap &  wper )[0] )  # False Positive
+        tp = len( where( gfap &  ~wper )[0] ) # True positive
+        tn = len( where( ~gfap & wper )[0] ) # True positive
+        fn = len( where( ~gfap & ~wper )[0] ) # True positive
+        print """ %02d   %.3f      %.3f     %.3f     %.3f """ %\
+            (s,fp/nsim,tp/nsim,tn/nsim,fn/nsim) 
