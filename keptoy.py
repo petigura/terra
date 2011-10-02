@@ -1,5 +1,5 @@
 import numpy as np
-from numpy import pi,sqrt
+from numpy import pi,sqrt,where,std
 
 ### Constants ###
 
@@ -85,4 +85,24 @@ def ntpts(P,tdur,tbase,cad):
 
     # number of points in transit
     return N * pptrans
+
+
+def at(f,t,P,phase,num,s2n):
+    """
+    Add a transit:
+
+    """
+
+    # Time of ingress
+    tI = P * (phase/(2*pi) + num)
+    tdur = a2tdur(P2a(P))
+    if (tI > t[-1]) | (tI < t[0]) :
+        print " outside of acceptable domain"
+
+    tid = where( (t > tI) & (t < tI+tdur) )[0]
+
+    f[tid] = f[tid] - s2n * std(f)/sqrt( ntpts(P,tdur,t[-1]-t[0],30./60./24.) ) 
+
+    return f
+
 
