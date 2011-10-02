@@ -36,6 +36,11 @@ from keptoy import lightcurve
 # Don't believe any faps that are below this value.  The extrapolation
 # of the CDF is surely breaking down.
 fapfloor = 1e-7
+pickdir = 'pickles/run3/'
+
+s2n = [4,5,6,8,10]
+files = [open('pickle/run3/tb-1000_s2n-%d_1000.pickle' % s,'rb') for s in s2n]
+ns2n = len(s2n)
 
 def init(tbase=[30,600]   ,ntbase = 30,
          s2n = [100.,100.], ns2n = 1,
@@ -95,6 +100,8 @@ def profile(darr,save=None,plotsave=None):
 
         try:
             o = blsw.blswrap(t,f,nf=5000,fmax = 1/50.)
+            o = peakfill(o)
+
             miper,mifap = peakfap( nper, npow, o['parr'], o['p'] )
             mapow = o['p'][ where( o['parr'] == miper ) ] 
             iP = d['P']
@@ -311,20 +318,47 @@ def peakfap(nper,npow,per,pow):
 
     return miper,mifap
 
+def peakfill(o):
+    upsmp = 10.
+    thresh = 3e-6
+    pkid = where(o['p'] > thresh)[0]
+    
+    sid = array([])
+    for p in pkid:
+        sid = append(sid,p-1)
+        sid = append(sid,p)
+        sid = append(sid,p+1)
+
+    sid = unique(sid)
+    
+    ffn = array([])
+    for i in range( 0, len(sid) -1 ):
+        fcrs = o['farr']
+        ffl = linspace(fcrs[ sid[i] ], fcrs[ sid[i+1] ], upsmp)
+        ffn  = append( ffn, ffl)
+
+    p,ph,qtran,df = blsw.blsw(o['t'],o['f'],ffn)
+
+    o['p']     = append(o['p']     ,p     )
+    o['farr']  = append(o['farr']  ,ffn   )
+    o['parr']  = append(o['parr']  ,1/ffn )
+    o['ph']    = append(o['ph']    ,ph    )
+    o['df']    = append(o['df']    ,df    )
+    o['qtran'] = append(o['qtran'] ,qtran )
+
+    return o
+
 def fap_s2n():
     """
     Show how the FAP changes as a function of s2n    
     """
     
-    s2n = [4,5,6,8,10,12]
-    ns2n = len(s2n)
-
     fig = plt.gcf() 
 
     for i in range(ns2n):
         s = s2n[i]
+        file = files[i]
 
-        file = open('pickle/run2/tb-1000_s2n-%d_1000.pickle' % s,'rb')
         out = pickle.load(file)
         res,darr = out['res'],out['darr']
 
@@ -337,7 +371,7 @@ def fap_s2n():
         y = log10(fap)
 
         ax = fig.add_subplot(ns2n,1,i+1)
-        bins = linspace(-20,3,48)
+        bins = linspace(-15,5,41)
         
         ax.hist( y[where(~fail)] ,color='g',bins=bins,label='Good')
         ax.hist( y[where(fail)] ,color='r',alpha=0.8,bins=bins,label='Fail')
@@ -348,8 +382,6 @@ def fap_s2n():
     plt.show()
         
 def errors():
-    s2n = [4,5,6,8,10,12]
-    ns2n = len(s2n)
 
     print """
 Null Hypothesis:  There is no planet with period P = oP.
@@ -366,7 +398,8 @@ S/N   False Pos  True Pos  True Neg  False Neg
     for i in range(ns2n):
         s = s2n[i]
 
-        file = open('pickle/run2/tb-1000_s2n-%d_1000.pickle' % s,'rb')
+        file = files[i]
+
         out = pickle.load(file)
         res,darr = out['res'],out['darr']
 
@@ -391,19 +424,14 @@ S/N   False Pos  True Pos  True Neg  False Neg
 def iPoP():
     """
     Plot input period versus output period.
-
-
     """
-
-    s2n = [4,5,6,8,10,12]
-    ns2n = len(s2n)
 
     fig = plt.gcf() 
 
     for i in range(ns2n):
         s = s2n[i]
+        file = files[i]
 
-        file = open('pickle/run2/tb-1000_s2n-%d_1000.pickle' % s,'rb')
         out = pickle.load(file)
         res,darr = out['res'],out['darr']
 
@@ -412,15 +440,18 @@ def iPoP():
         iP = array([r['P'] for r in darr])
         
         fail =  abs(oP-iP)/iP > 0.1
+        nfail = len(where(fail)[0])
         y = log10(fap)
 
-        ax = fig.add_subplot(ns2n/2.,2,i+1)
+        ax = fig.add_subplot(ns2n,1,i+1)
 
-
-        ax.plot( iP, oP, 'ok',ms=3)
-        ax.set_title('S/N - %d' % round(s) )        
+        ax.plot( iP, oP, '.b',ms=3)
         ax.set_xlabel('Input Period')
         ax.set_ylabel('Best Period')
+
+        tt = """
+S/N  - %d
+fail - %d""" % (round(s),nfail)
 
         harm = [1/2.,2.]
 
@@ -428,6 +459,14 @@ def iPoP():
             ax.plot( iP, h*iP, 'r',alpha=0.5)
 
         ax.plot( iP, iP, 'g',alpha=0.5)
+
+        left = ax.get_xlim()[0]
+        top = ax.get_ylim()[1]
+
+        ax.text(left,top,tt,bbox=dict(facecolor='white'),fontsize='large',va='top',ha='left')
+
+
+
 
 
     plt.show()
