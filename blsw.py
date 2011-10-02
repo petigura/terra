@@ -15,6 +15,11 @@ from scikits.statsmodels.tools.tools import ECDF
 from peakdetect import peakdet
 from keptoy import P2a,a2tdur
 
+# Opens file outside the loop
+fid = open(os.environ['CCODE']+'blsw_loop2.c') 
+code = fid.read()
+fid.close()
+
 def blsw(t,x,farr):
     """
     Python BLS - a modular version of BLS
@@ -45,6 +50,10 @@ def blsw(t,x,farr):
     ntbin = 10.
 
     p = zeros(nf)
+    ph = zeros(nf)    # Array for best phase ingress
+    qtran = zeros(nf)  # Array for best transit depth
+    df = zeros(nf)
+
     rn = float(n)
 
     bpow = 0.
@@ -84,12 +93,11 @@ def blsw(t,x,farr):
         ibi = zeros(nb).astype(int)
 
         # Phase fold the data according to the trial period.
-        ph = t*f0
-        ph = np.mod(ph,1.)
+        tf = np.mod(t*f0,1.)
 
         # Put the data in bins.
-        y =   ( np.histogram(ph,bins=bins,weights=x) )[0]
-        ibi = ( np.histogram(ph,bins=bins) )[0]
+        y   = ( np.histogram(tf,bins=bins,weights=x) )[0]
+        ibi = ( np.histogram(tf,bins=bins) )[0]
 
         # EEBLS extend y and ibi so they include kma more points
         y   = np.append(y,y[0:kma])
@@ -99,16 +107,11 @@ def blsw(t,x,farr):
         power,jn1,jn2,rn3,s3 = blsw_loop2(y,ibi,kma,kmi,kkmi)
 
         p[jf] = sqrt(power)
+        ph[jf] = float(jn1) / nb * 2*pi
+        qtran[jf] =  rn3/rn        
+        df[jf] = -s3*rn/(rn3*(rn-rn3))
 
-        if power > bpow:
-            bpow  =  power
-            in1   =  jn1
-            in2   =  jn2
-            qtran =  rn3/rn
-            depth = -s3*rn/(rn3*(rn-rn3))
-            bper  =  1./f0
-
-    return p,bper,bpow,depth,qtran,in1,in2
+    return p,ph,qtran,df
 
 def blsw_loop2(y,ibi,kma,kmi,kkmi):
     """
@@ -137,12 +140,6 @@ def blsw_loop2(y,ibi,kma,kmi,kkmi):
 
     nb = len(y)
     rn = float(np.sum(ibi))
-
-    # TODO: opening the file inside the loop is inefficient
-    fid = open(os.environ['CCODE']+'blsw_loop2.c') 
-    code = fid.read()
-    fid.close()
-
     res = weave.inline(code,['y','ibi','kma','kmi','kkmi','rn','nb'],
                        type_converters=converters.blitz)
     return res
@@ -175,20 +172,19 @@ def blswrap(t,f,nf=200,fmin=None,fmax=1.):
         return None
 
     farr = np.logspace( np.log10(fmin), np.log10(fmax), nf)
-    p,bper,bpow,depth,qtran,in1,in2 = blsw(t,f,farr)
+    p,ph,qtran,df = blsw(t,f,farr)
 
     parr = 1/farr
 
     out = {'p'    :p   ,
            'farr' :farr,
            'parr' :parr,
-           'bper' :bper,
-           'bpow' :bper,
-           'depth':depth,
+           'ph':ph,
+           'df':df,
            'qtran':qtran,
 
            # Convience
-           'tdur':qtran*bper,
+           'tdur':qtran*parr,
            'f':f,
            't':t,
            }
