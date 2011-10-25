@@ -40,6 +40,16 @@ from keptoy import *
 def init(tbase=[1000,1000] ,ntbase = 1,
          s2n = [10.,10.]   ,ns2n   = 1,
          ntr=20, null=False):
+    """
+    Initializes simulation parameters.
+
+    Period is dithered by wper
+    Phase is random.
+    
+    Random values are controlled by a seed value so that the run parameters
+    are reproducable.
+    """
+    
 
     per = 200.
     wphase = 2*pi      # randomize phase over entire cycle
@@ -58,6 +68,8 @@ def init(tbase=[1000,1000] ,ntbase = 1,
 
     for p in par:
         for i in range(ntr):            
+
+            np.random.seed(seed)
             phase = wphase*random()
             dper   = wper*random()
             d = {'s2n':p[0],'tbase':p[1],'P':per+dper,'phase':phase,
