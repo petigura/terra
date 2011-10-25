@@ -12,106 +12,89 @@ from scipy.weave import converters
 from scipy.ndimage import median_filter
 from scikits.statsmodels.tools.tools import ECDF
 
+import atpy
+
 from peakdetect import peakdet
 from keptoy import P2a,a2tdur
+import detrend
+import medfilt
 
 # Opens file outside the loop
-fid = open(os.environ['CCODE']+'blsw_loop2.c') 
+fid = open('pycode/phloop.c') 
 code = fid.read()
 fid.close()
 
-def blsw(t,x,farr):
-    """
-    Python BLS - a modular version of BLS
-
-    Fits five parameters:
-       - P_0 - Fundemental period
-       - q   - fractional time of period in transit
-       - L   - low value
-       - H   - high value
-       - t_0 - epoch of transit       
-
-    The output is called signal residue
-    """
-    minbin = 5
-    n = len(t)
-    nf = len(farr)
-
+def blsw(t,f,grid,g0,g1):
     # For a given period, there is an expected transit duration
     # assuming solar type star and equatorial transit.  tmi and tma
     # set how far from this ideal case we will search over.
-    tmi = 0.5
-    tma = 2.0
+    ftdur = array([0.5,1.25])
+    ng = len(g0)
 
     # For an assumed transit duration, set the number of bins in
     # transit.  The number should be > 1, so that the intransit points
     # aren't polluted by out of transit points.
 
-    ntbin = 10.
 
-    p = zeros(nf)
-    ph = zeros(nf)    # Array for best phase ingress
-    qtran = zeros(nf)  # Array for best transit depth
-    df = zeros(nf)
+    tstop = t[-1]
 
-    rn = float(n)
+    f -= np.mean(f)
 
-    bpow = 0.
-    x -= np.mean(x)
+    Puniq = unique(grid[0])
+    ngrid = len(grid[0])
+    s2ntot = zeros(ngrid).astype(float) - 1 
+    ovarrtot = zeros(ngrid).astype(float) - 1 
 
-    #=====================================#
-    # Triple-nested loop over   index     #
-    # 1. Period                 jf        #
-    # 2. Phase of transit       i (weave) # 
-    # 3. Transit Duration       j (weave) #
-    #=====================================#
 
-    for jf in range(nf):
-        f0 = farr[jf]
+    for P in Puniq:
+        idPuniq = where( P == grid[0] )[0]
+        pharr = grid[1][idPuniq]
+        nph = len(pharr)
 
-        P = 1.0/f0
-        
-        ftdur = a2tdur( P2a(P)  ) / P # Expected fractional transit time
 
-        # Choose nb such that the transit will contain ntbin bins.
-        nb = ntbin / ftdur 
-        bins = np.linspace(0,1,nb+1)
+        # Phase fold the data according to the trial period.        
+        phData = mod(t/P,1.)
 
-        qmi = tmi * ftdur
-        qma = tma * ftdur
+        # Sort the data according to increasing phase.
+        sData = argsort(phData)
+        fData = f[sData]
+        phData = phData[sData]
 
-        # kmi is the minimum number of binned points in transit.
-        # kma is the maximum number of binned points in transit.
-        # kkmi is the minimum number of unbinned points in transit.
 
-        kmi = max( int(qmi*float(nb) ),1 )
-        kma = int(qma*float(nb)) + 1
-        kkmi = max(int(n*qmi),minbin)
+
+        tdur = a2tdur( P2a(P)  ) # Expected transit time
+        phdur = ftdur*tdur / P # Allowed transit times in units of phase
+
 
         # Zero-out working arrays
-        y   = zeros(nb).astype(float)
-        ibi = zeros(nb).astype(int)
+        s2narr = zeros(nph).astype(float) - 1 
+        ovarr =  zeros(nph).astype(float) - 1 
 
-        # Phase fold the data according to the trial period.
-        tf = np.mod(t*f0,1.)
+        # EEBLS phase and flux arrays so we can wrap around.
+        # Padd out to the first phase point that is greater than the
+        # longest expected transit
 
-        # Put the data in bins.
-        y   = ( np.histogram(tf,bins=bins,weights=x) )[0]
-        ibi = ( np.histogram(tf,bins=bins) )[0]
+        idPad = where( phData > phdur[1] )[0][0]
 
-        # EEBLS extend y and ibi so they include kma more points
-        y   = np.append(y,y[0:kma])
-        ibi = np.append(ibi,ibi[0:kma])
+        phData = append(phData,phData[0:idPad])
+        fData  = append(fData,fData[0:idPad])
 
-        # Loop over phase and tdur.
-        power,jn1,jn2,rn3,s3 = blsw_loop2(y,ibi,kma,kmi,kkmi)
+        phData = phData.astype(float)
 
-        p[jf] = sqrt(power)
-        ph[jf] = float(jn1) / nb * 2*pi
-        qtran[jf] =  rn3/rn        
-        df[jf] = -s3*rn/(rn3*(rn-rn3))
+        tstop=float(tstop) # Weave barfs unless these are floats
+        P=float(P)
+        weave.inline(code,
+                     ['t','g0','g1','ng','tstop',
+                      'P','pharr','nph','phData','fData','phdur',
+                      'ovarr','s2narr'],
+                     type_converters=converters.blitz,
+                     verbose=2
+                     )
+        
+        s2ntot[idPuniq]   = s2narr
+        ovarrtot[idPuniq] = ovarr
 
-    return p,ph,qtran,df
+    return s2ntot,ovarrtot
 
 def blsw_loop2(y,ibi,kma,kmi,kkmi):
     """
@@ -190,138 +173,90 @@ def blswrap(t,f,nf=200,fmin=None,fmax=1.):
            }
 
     return out
+import sys
 
-
-################################
-# OUTPUTTING PHASE INFORMATION #
-################################
-
-def blswph(t,x,nf,fmin,df,nb,qmi,qma,n):
+def grid(tbase,ftdurmi,Pmin=100.,Pmax=None,phsmp=0.5,Psmp=0.5):
     """
-    Python BLS - a modular version of BLS
+    Make a grid in (P,ph) for BLS to search over.
 
-    Fits five parameters:
-       - P_0 - Fundemental period
-       - q   - fractional time of period in transit
-       - L   - low value
-       - H   - high value
-       - t_0 - epoch of transit       
+    ftdurmi - Minimum fraction of tdur that we'll look for.
 
-    The output is called signal residue
-    """
-    minbin = 5
-    nbmax = 2000
+    Pmin - minumum period in grid 
 
+    Pmax - Maximum period.  Defaults to tbase/2, the maximum period
+           that has a possibility of having 3 transits
 
-    # Number of bins specified by the user cannot exceed hard-coded amount
-    if nb > nbmax:
-        print ' NB > NBMAX !!'
-        return None
-
-    # We require there be one dip.
-    # TODO: should this be 2/T?
-    tot = t[-1] - t[0]
-    if fmin < 1./tot:
-        print ' fmin < 1/T !!'
-        return None
-
-    rn = float(n)
-
-#   kmi is the minimum number of binned points in transit.
-#   kma is the maximum number of binned points in transit.
-#   kkmi is the minimum number of unbinned points in transit.
-
-    kmi = max(int(qmi*float(nb)),1)
-    kma = int(qma*float(nb)) + 1
-    kkmi = max(int(n*qmi),minbin)
-
-
-    y   = zeros(nbmax)
-    ibi = zeros(nbmax)
-    p   = zeros((nf,nb+kma)) # Pad out for wrapped phase
-
-    bpow = 0.
-    x -= np.mean(x)
-
-    #=====================================#
-    # Triple-nested loop over   index     #
-    # 1. Period                 jf        #
-    # 2. Phase of transit       i (weave) # 
-    # 3. Transit Duration       j (weave) #
-    #=====================================#
-
-    farr = np.linspace(fmin,fmin+nf*df,nf) 
-    bins = np.linspace(0,1,nb+1)
-
-    for jf in range(nf):
-        f0 = farr[jf]
-
-#       Zero-out working arrays
-        y   = zeros(nbmax).astype(float)
-        ibi = zeros(nbmax).astype(int)
-
-#       Phase fold the data according to the trial period.
-        ph = t*f0
-        ph = np.mod(ph,1.)
-
-#       Put the data in bins.
-        y = ( np.histogram(ph,bins=bins,weights=x) )[0]
-        ibi = ( np.histogram(ph,bins=bins) )[0]
-
-#       EEBLS extend y and ibi so they include kma more points
-        y   = np.append(y,y[0:kma])
-        ibi = np.append(ibi,ibi[0:kma])
-
-#       Loop over phase and tdur.
-        p[jf,::] = blsw_loop2ph(y,ibi,kma,kmi,kkmi)
-
-
-    ph = bins[:-1]
-    ph = np.append(ph,ph[0:kma]+1)
-    return p,farr,ph
-
-
-def blsw_loop2ph(y,ibi,kma,kmi,kkmi):
-    """
-    This is the inner two nested for loops in the BLS algorithm
-
-    Given: 
-    y - an array of binned values
-    ibi - an array of the number of points in each bin.
+    phsmp - How finely to sample phase (in units of minimum tdur
+            allowed)
     
-    Return:
-    power - maximum signal residue for that period
-    jn1   - index of optimal ingress
-    jn2   - index of optimal egress
-    rn3   - number of unbinned points in the optimal transit
-    s     - sum of the points in the window
+    Psmp - How finely to sample period?  The last transit of the
+           latest trial period of neighboring periods must only be off by a
+           fraction of a transit duration.
 
-    Example:
-    y   = [0,0,0,1,2,0,0,0,0,0]
-    ibi = [1,1,1,1,2,1,1,1,1,1]
-    should return
-    jn1 = 3
-    jn2 = 4
-    s   = 3
-    pow = 0.375
+
+    Note:  Takes ~ 2 min to run with the default settings (tbase = 1000).
+           Could speed this up in C.
+
+           7 M entries.
     """
 
-    nb = len(y)
-    rn = float(np.sum(ibi))
-    
-    # power is now an array.
-    power = np.zeros(nb) 
+    if Pmax == None:
+        Pmax = tbase/2.
 
-    # TODO: opening the file inside the loop is inefficient
-    fid = open(os.environ['CCODE']+'blsw_loop2ph.c') 
-    code = fid.read()
-    fid.close()
+    P,ph = array([]),array([])
+
+    P0 = Pmin
+    while P0 < Pmax:
+        
+        tdur = a2tdur( P2a(P0)  ) # Expected transit time.
+        tdurmi = ftdurmi * tdur
+        dt = phsmp*tdurmi   # Time corresponding to phase step
+        nph = ceil(P0/dt)
+        
+        pharr = linspace(0,1,nph)
+        
+        P = append( P , zeros(nph)+P0 )
+        ph = append( ph , pharr )
 
 
-    weave.inline(code,
-                 ['y','ibi','kma','kmi','kkmi','rn','nb','power'],
-                 type_converters=converters.blitz)
-    return power
+        # Calculate new Period
+        # Maximum number of transit.  True for when ph = 0 
+        nt = floor(tbase/P0)
+
+        # Threshold is tighter because of accordian effect.
+        dP = Psmp * tdurmi #/ (nt -1)
+
+        P0 += dP
+        
+    return P,ph
 
 
 
+
+
+
+def plotspec(grid,s2n):
+
+    Puniq = unique(grid[0])
+    nPuniq = len(Puniq)
+    s = zeros(nPuniq) -1 
+    for i in range(nPuniq):
+        idPuniq = where( grid[0] == Puniq[i] )[0]
+        s[i] = max(s2n[idPuniq])
+
+
+    return Puniq,s
+
+def maskgap(t,f,g0,g1):
+    """
+
+    """
+    t = ma.masked_array(t,mask=False)
+    f = ma.masked_array(f,mask=False)
+    for i in range(len(g0)):
+        t = ma.masked_inside(t,g0[i],g1[i])
+
+    f.mask= t.mask
+    f = f.compressed()
+    t = t.compressed()
+    return t,f
