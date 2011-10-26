@@ -6,6 +6,7 @@ import sys
 import numpy as np
 from numpy import array
 import pdb
+from scipy import ndimage
 
 import matplotlib.pylab as plt
 from keptoy import P2a,a2tdur,ntrans
@@ -19,8 +20,13 @@ nptsMi =10
 # bpt - the number of bins in folded transit.
 bpt = 5.
 
-# Filling factor.  Require boxes have at least f of filling factor.
-flFact = 2./3
+# In order for a region to qualify as having a transit, it must have
+# fillFact of the expected points
+fillFact = .75
+
+# Minimum number of filled transits inorder for a point to be factored
+# into S/N
+ntMi = 3
 
 # blsw runs tries millions of P phase combinations.  We want to
 # compute the FAP by fitting the PDF and extrapolating to the high S/N
@@ -44,6 +50,7 @@ def blsw(t0,f0,PGrid,retph=False):
     ftdur = array([0.75,1.25])
     ng = len(PGrid)
     
+    t -= t[0]
     f -= np.mean(f)
     ff = f**2
     
@@ -62,9 +69,11 @@ def blsw(t0,f0,PGrid,retph=False):
     # calculate maximum eggress
     npad = ftdur[1] * a2tdur( P2a( max(PGrid) ) ) / cad
     npad *= 2 #
+#    import pdb;pdb.set_trace()
     for i in range(ng):
         # Phase fold the data according to the trial period.        
         P = PGrid[i]
+        ntmax = np.ceil(tbase/P) 
         ph = np.mod(t/P,1.)
 
         # For this particular period, this is the expected transit
@@ -72,28 +81,35 @@ def blsw(t0,f0,PGrid,retph=False):
         tdur = a2tdur( P2a(P)  )
         phdur = tdur / P
 
-        # We bin so there are bpt bins in a folded transit.
-        nb = np.ceil(1. / phdur * bpt)
+        # We bin so there are bpt bins per transit
+        # Force there to be an integer number of bins per period
         bwd = tdur / bpt
-        bins = np.linspace(0,1,nb+1)
+        nbP = np.ceil(P/bwd) 
+        bwd = P/nbP
+        bins = np.linspace(0,ntmax*P,nbP*ntmax+1)
+
+        # How many points do we expect in our transit?
+        fb = ntrans(tbase,P,.9)*(bwd/cad)
 
         # Calculate the following quantities in each bin.
         # 1. sum of f 
         # 2. sum of f**2 
         # 3. number of points in each bin.
-        sb,be = np.histogram(ph,weights=f,bins=bins)
-        ssb,be = np.histogram(ph,weights=ff,bins=bins)
-        cb,be = np.histogram(ph,bins=bins)
+        sb,be  = np.histogram(t,weights=f,bins=bins)
+        ssb,be = np.histogram(t,weights=ff,bins=bins)
+        cb,be  = np.histogram(t,bins=bins)
 
-        # How many points do we expect in our transit?
-        fb = ntrans(tbase,P,.9)*(bwd/cad)
+        # Reshape arrays.  This is the phase folding 
+        sb  = sb.reshape(ntmax, nbP).transpose()
+        ssb = ssb.reshape(ntmax,nbP).transpose()
+        cb  = cb.reshape(ntmax, nbP).transpose()
 
-        # Account for the edge effect.  Pad out arrays by atleast
-        # twice the max imum expected transit length
-        npad = np.ceil(bpt * 2 * ftdur[1])
-        sb  = np.append(sb ,sb[:npad])
-        ssb = np.append(ssb,ssb[:npad])
-        cb  = np.append(cb ,cb[:npad])
+        # We only need to retain transit information about the
+        # counts. So we can sum the sb, and ssb and perform 1 dim
+        # convolution
+
+        sb = sb.sum(axis=1)
+        ssb = ssb.sum(axis=1)
         
         # We compute the sums of sb, ssb, and cb over a trial transit
         # width using a convolution kernel.  We will let that kernel
@@ -104,42 +120,54 @@ def blsw(t0,f0,PGrid,retph=False):
         kwdMa = int( ftdur[1] * bpt ) + 1
         kwdArr = np.arange(kwdMi,kwdMa+1)        
         
-        ntdur = kwdMa-kwdMi+1
-        s2n = np.empty((nb + npad - kwdMa + 1,ntdur))
+        # The number of transit durations we'll try
+        ntdur = kwdMa-kwdMi+1 
+
+        s2n = np.empty((nbP,ntdur))
 
         for j in range(ntdur):
             # Construct kernel
-
             kwd = kwdArr[j]
-            kern = np.zeros(kwdMa)
-            kern[:kwd] = 1
+            kern = np.zeros((kwdMa,ntmax))
+            kern[:kwd,0] = 1
+
+            # We given the cadence and the box width, we expect a
+            # certain number of points in each box
+            nExp = kwd*bwd / cad
+
 
             # Sum the following quantities in transit
             # 1. f, data values
             # 2. ff, square of the data values
             # 3. n, number of data points.
-            st  = np.convolve(sb,kern,mode='valid')
-            sst = np.convolve(ssb,kern,mode='valid')
-            nt  = np.convolve(cb,kern,mode='valid')
+            st  = ndimage.convolve(sb ,kern[::,0] , mode='wrap')
+            sst = ndimage.convolve(ssb,kern[::,0] , mode='wrap')
 
-            # Designate a point as a gap if it has less than fill of
-            # the expected number of points
-            gapid = np.where(nt < flFact*fb*kwd)[0]
+            # Number of points in box of kwd*bwd
+            nBox  = ndimage.convolve(cb ,kern,mode='wrap')
+
+            # Number of points in box after folding
+            nfBox = nBox.sum(axis=1)
+
+            boolFill = (nBox > nExp * fillFact).astype(int) 
+            nTrans = boolFill.sum(axis=1)            
+            idGap = np.where(nTrans < ntMi)[0]
 
             # Average depth
-            df    = st / nt
+            df    = st / nfBox
 
             # Standard deviation of the points in tranist
-            sigma = np.sqrt( sst / nt - df**2 )
-            s2n[::,j] = -df / (sigma / np.sqrt(nt) ) 
-            s2n[gapid,j] = 0 
+            sigma = np.sqrt( sst / nfBox - df**2 )
+            s2n[::,j] = -df / (sigma / np.sqrt(nfBox) ) 
+            s2n[idGap,j] = 0 
+
 
         # Compute the maximum over trial phases
         s2nFlat = s2n.max(axis=1)
         idMa = np.nanargmax(s2nFlat)
 
         s2nGrid[i] = s2nFlat[idMa]
-        phGrid[i]  = idMa / nb
+        phGrid[i]  = idMa / nbP
 
         if retph:
             phGridl.append(np.linspace(0 , len(df)/nb , len(df) ))
