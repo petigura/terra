@@ -11,7 +11,7 @@ lc = 30./60./24.
 sc = 1./60./24.
 
 
-def lightcurve(df=0.01,P=12.1,phase=pi,cad=lc,tdur=None,
+def lightcurve(df=0.01,P=12.1,phase=0.5,cad=lc,tdur=None,
                s2n=10,tbase=90,a=None,null=False,seed=None,model=False):
     """
     generate sample lightcurve.
@@ -40,7 +40,7 @@ def lightcurve(df=0.01,P=12.1,phase=pi,cad=lc,tdur=None,
 
     f = np.ones(npts) + noise*np.random.randn(npts)
 
-    tidx = np.where( np.mod(t-phase*P/2/pi,P) < tdur)[0]
+    tidx = np.where( np.mod(t-phase*P,P) < tdur)[0]
     f[tidx] -= df
 
     return f,t
@@ -98,7 +98,7 @@ def at(f,t,P,phase,num,s2n):
 
     """
     # Time of ingress
-    tI = P * (phase/(2*pi) + num)
+    tI = P * (phase + num)
     tdur = a2tdur(P2a(P))
     if (tI > t[-1]) | (tI < t[0]) :
         print " outside of acceptable domain"
@@ -110,7 +110,7 @@ def at(f,t,P,phase,num,s2n):
     return f
 
 
-def inject(t0,f0,s2n=100,P=12.1,phase=pi,cad=lc):
+def inject(t0,f0,s2n=100,P=12.1,phase=0.5,cad=lc):
     """
     Inject a transit into an existing time series.
 
@@ -128,7 +128,7 @@ def inject(t0,f0,s2n=100,P=12.1,phase=pi,cad=lc):
 
     noise = ma.std(f)
     df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
-    tidx = np.where( np.mod(t-phase*P/2/pi,P) < tdur)[0]
+    tidx = np.where( np.mod(t-phase*P,P) < tdur)[0]
     f[tidx] -= df
     
     return f
