@@ -33,7 +33,7 @@ ntMi = 3
 # regime.  nhist is the number of s2n points to return.
 nS2nFAP = 1e6 
 
-def blsw(t0,f0,PGrid,retph=False):
+def blsw(t0,f0,PGrid,retph=False,retdict=False):
     """
     Compute BLS statistic for a the range of periods specified in PGrid.
 
@@ -54,8 +54,8 @@ def blsw(t0,f0,PGrid,retph=False):
     f -= np.mean(f)
     ff = f**2
     
-    s2nGrid= np.zeros(ng) - 1
-    phGrid= np.zeros(ng)
+    s2nGrid = np.zeros(ng) - 1
+    phGrid  = np.zeros(ng)
 
     if retph:
         phGridl = []
@@ -69,7 +69,7 @@ def blsw(t0,f0,PGrid,retph=False):
     # calculate maximum eggress
     npad = ftdur[1] * a2tdur( P2a( max(PGrid) ) ) / cad
     npad *= 2 #
-#    import pdb;pdb.set_trace()
+
     for i in range(ng):
         # Phase fold the data according to the trial period.        
         P = PGrid[i]
@@ -154,7 +154,7 @@ def blsw(t0,f0,PGrid,retph=False):
             idGap = np.where(nTrans < ntMi)[0]
 
             # Average depth
-            df    = st / nfBox
+            df = st / nfBox
 
             # Standard deviation of the points in tranist
             sigma = np.sqrt( sst / nfBox - df**2 )
@@ -176,7 +176,8 @@ def blsw(t0,f0,PGrid,retph=False):
     if retph:
         return phGridl,s2nGridl
     else:
-        return s2nGrid
+        d = {'phGrid':phGrid,'s2nGrid':s2nGrid,'PGrid':PGrid}
+        return d
 
 def grid(tbase,ftdurmi,Pmin=100.,Pmax=None,Psmp=0.5):
     """
@@ -220,10 +221,7 @@ def grid(tbase,ftdurmi,Pmin=100.,Pmax=None,Psmp=0.5):
 def fap(t0nl, f0nl):
     """
 
-    """
-
-
-    
+    """    
     nb = 20
     
     # Histogram the values between s2n 3 and 5
