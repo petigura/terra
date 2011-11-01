@@ -52,7 +52,7 @@ def init(tbase=[1000,1000] ,ntbase = 1,
     
 
     per = 200.
-    wphase = 2*pi      # randomize phase over entire cycle
+    wphase = 1.      # randomize phase over entire cycle
     wper   = per / 10. # dither period by 10%
 
     # Initialize test parameters    
@@ -113,62 +113,38 @@ def genEmpLC(darr,tdt,fdt):
         
     return tl,fl
 
-def profile(tl,fl,PGrid,darr,save=None):
+def profile(tl,fl,PGrid,par=False):
     """
     Will profile a transit search algorithm over a range of:
     - S/N
     - tbase
     
     Arguments
-    func - a function the finds the period.  Must only accept f,t
-    time series 
-    darr - an array of dictionary arguments that will be passed to
-    lightcurve`  These are the parameters for the fits. Must include:
-    P     - period
+    tl - List of time measurements
+    fl - List of flux measurements
     """
-    res = eblspro(tl,fl,PGrid)
-
-
-    if save != None:
-        f = open(save,'wb')
-        pickle.dump({'res':res,'darr':darr},f,protocol=2)
-        
-    return res
-
-def dpack(PGrid,args):
-    return {'PGrid':PGrid,'s2nGrid':s2nGrid}
-
-
-def eblspro(tl,fl,PGrid,i):
-    sys.stderr.write("%i" % i)
-    s2nGrid = ebls.blsw(tl,fl,PGrid)
-    out = {'PGrid':PGrid,'s2nGrid':s2nGrid}
-
-    return out
-
-def pprofile(tl,fl,PGrid,darr,save=None):
-
-    """
-    Multicore version of previous code
-    """
-    from IPython.parallel import Client
-    rc = Client()
-    lview = rc.load_balanced_view()
     nsim = len(tl)
     PGridList = [PGrid for i in range(nsim)]
     counter = range(nsim)
 
-    res = lview.map(eblspro,tl,fl,PGridList,counter,block=True)
-
-    if save != None:
-        f = open(save,'wb')
-        pickle.dump(
-            {'res':res,'darr':darr},
-            f,protocol=2)
-        f.close()
+    if par:
+        from IPython.parallel import Client
+        rc = Client()
+        lview = rc.load_balanced_view()
+        res = lview.map(eblspro,tl,fl,PGridList,counter,block=True)
+    else:
+        res = map(eblspro,tl,fl,PGridList,counter)        
 
     return res
+        
+def eblspro(tl,fl,PGrid,i):
+    sys.stderr.write("%i\n" % i)
+    return ebls.blsw(tl,fl,PGrid)
 
+def saverun(darr,res,path):
+    f = open(path,'wb')
+    pickle.dump({'res':res,'darr':darr},f,protocol=2)
+    f.close()
 
 def loadrun(path):
     """
@@ -197,9 +173,6 @@ def peakfap(res):
     per  - period array for lightcurve spectrum
     pow  - power array for lightcurve spectrum
     """
-
-    
-
     return miper,mifap
 
 def bper(PGrid,FAPGrid):
@@ -238,9 +211,7 @@ def fap_s2n(darr,res,failthresh=0.1):
     s2n = [ d['s2n'] for d in darr ]
     us2n = unique( s2n  )
     ns2n = len(us2n)
-
     iP = array([d['P'] for d in darr])
-
     oP  = array( [r['bP'] for r in res  ] )
     fap = array( [r['bFAP'] for r in res  ] )
     
