@@ -49,8 +49,6 @@ def init(tbase=[1000,1000] ,ntbase = 1,
     Random values are controlled by a seed value so that the run parameters
     are reproducable.
     """
-    
-
     per = 200.
     wphase = 1.      # randomize phase over entire cycle
     wper   = per / 10. # dither period by 10%
@@ -162,41 +160,28 @@ def s2n2fap(PGrid,s2nGrid):
     return log10(0.5*(erfc(s2nGrid/sqrt(2)) )*(PGrid/tdurGrid*5))
     
 
-
-
-
 fapfloor = 0.01;
-def peakfap(res):
-    """    
-    nper - period array for null run
-    npow - power array for null run
-    per  - period array for lightcurve spectrum
-    pow  - power array for lightcurve spectrum
+
+# If best fit period is off by more than this in a fractional sense,
+# label it a failure.
+
+failthresh = 0.01 
+def PP(darr,res):
     """
-    return miper,mifap
-
-def bper(PGrid,FAPGrid):
+    Post processing
     """
-    Return the best period and associated FAP
-    """
+    
+    for i in range(len(res)):
+        r = res[i]
+        d = darr[i]
 
-
-    idMi = FAPGrid.argmin()
-    bp = PGrid[idMi]
-    fap = FAPGrid[idMi]
-
-    return bp,fap
-
-def addFAPGrid(res):
-    for r in res:
         r['FAPGrid'] = s2n2fap(r['PGrid'],r['s2nGrid']) 
+        idMi = r['FAPGrid'].argmin()
+        r['bP']   = r['PGrid'][idMi]
+        r['bph']  = r['phGrid'][idMi]
+        r['bFAP'] = r['FAPGrid'][idMi]
+        r['fail'] = abs( r['bP'] - d['P'])/d['P'] 
     return res
-                     
-def addbper(res):
-    for r in res:
-        r['bP'],r['bFAP'] = bper(r['PGrid'],r['FAPGrid']) 
-    return res
-
 
 def fap_s2n(darr,res,failthresh=0.1):
     """
