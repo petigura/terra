@@ -29,6 +29,7 @@ from numpy import *
 from numpy.random import random
 import sys
 from scipy.special import erfc
+import atpy
 
 import ebls
 import detrend
@@ -66,7 +67,6 @@ def init(tbase=[1000,1000] ,ntbase = 1,
 
     for p in par:
         for i in range(ntr):            
-
             np.random.seed(seed)
             phase = wphase*random()
             dper   = wper*random()
@@ -77,7 +77,6 @@ def init(tbase=[1000,1000] ,ntbase = 1,
             seed += 1
         
     return darr
-
 
 def genSynLC(darr):
     """
@@ -95,6 +94,33 @@ def genSynLC(darr):
         
     return tl,fl
 
+def tab2dl(t):
+    """
+    Convert a table to a list of dictionaries
+    """
+    dl = []
+    columns = t.columns.keys
+    nrows = len(t.data[ columns[0] ] )
+    for i in range( nrows ):
+        d = {}
+        for k in columns:
+            d[k] = t[k][i]
+
+        dl.append(d)
+    return dl
+
+def dl2tab(dl):
+    """
+    Convert a list of dictionaries to an atpy table.
+    """
+    t = atpy.Table()
+    keys = dl[0].keys()
+    for k in keys:
+        data = array( [ d[k] for d in dl ] )
+        t.add_column(k,data)
+
+    return t
+        
 
 def genEmpLC(darr,tdt,fdt):
     """
@@ -104,7 +130,6 @@ def genEmpLC(darr,tdt,fdt):
     fl,tl = [],[]
     for d in darr:
         f = inject(tdt,fdt,s2n=d['s2n'],P=d['P'],phase=d['phase']) 
-    
         f = f.astype(float32)
         fl.append(f)
         tl.append(tdt)
@@ -144,13 +169,6 @@ def saverun(darr,res,path):
     pickle.dump({'res':res,'darr':darr},f,protocol=2)
     f.close()
 
-def loadrun(path):
-    """
-    Load the values from a Pickle file
-    """
-    out = pickle.load(open(path,'r'))
-    return out['darr'],out['res']
-
 
 def s2n2fap(PGrid,s2nGrid):
     """
@@ -166,22 +184,33 @@ fapfloor = 0.01;
 # label it a failure.
 
 failthresh = 0.01 
-def PP(darr,res):
+def PP(tset):
     """
     Post processing
-    """
-    
-    for i in range(len(res)):
-        r = res[i]
-        d = darr[i]
 
-        r['FAPGrid'] = s2n2fap(r['PGrid'],r['s2nGrid']) 
-        idMi = r['FAPGrid'].argmin()
-        r['bP']   = r['PGrid'][idMi]
-        r['bph']  = r['phGrid'][idMi]
-        r['bFAP'] = r['FAPGrid'][idMi]
-        r['fail'] = abs( r['bP'] - d['P'])/d['P'] 
-    return res
+    Change so we're dealing with tables.
+    """
+    tres = tset.RES
+    tpar = tset.PAR
+
+    nrows = len(tres)
+
+    idMa = tset.RES.s2nGrid.argmax(axis=1)
+
+    try:
+        tres.add_empty_column('bP',np.float)
+        tres.add_empty_column('bph',np.float)
+        tres.add_empty_column('fail',np.bool)
+    except:
+        pass
+
+    for i in range(nrows):
+        id = idMa[i]
+        tres.bP[i] = tres.PGrid[i][id]
+        tres.bph[i] = tres.phGrid[i][id]
+        tres.fail[i] = abs(tpar.P[i] - tres.bP[i])/tpar.P[i] > failthresh
+
+    return tset
 
 def fap_s2n(darr,res,failthresh=0.1):
     """
@@ -222,24 +251,10 @@ def fap_s2n(darr,res,failthresh=0.1):
     plt.show()
  
 
-def iPoP(darr,res):
+def iPoP(iP,oP):
     """
     Plot input period versus output period.
     """
-
-    fig = plt.gcf() 
-
-    s2n = [ d['s2n'] for d in darr ]
-    us2n = unique( s2n  )
-    ns2n = len(us2n)
-
-    iP = array([r['P'] for r in darr])
-
-    oP  = array( [r['bP'] for r in res  ] )
-    fap = array( [r['bFAP'] for r in res  ] )
-    
-
-
 
     for i in range(ns2n):
         s = us2n[i]
@@ -253,7 +268,6 @@ def iPoP(darr,res):
 
         tt = "S/N  - %.2f" % s
 
-
         left = ax.get_xlim()[0]
         top = ax.get_ylim()[1]
 
@@ -261,3 +275,12 @@ def iPoP(darr,res):
                 va='top',ha='left')
 
     plt.show()
+
+
+def loadrun(path):
+    """
+    Load the values from a Pickle file
+    """
+    out = pickle.load(open(path,'r'))
+    return out['darr'],out['res']
+
