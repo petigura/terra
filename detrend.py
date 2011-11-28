@@ -8,8 +8,8 @@ from scipy import weave
 from scipy.weave import converters
 import os
 from numpy.polynomial import Legendre
-
 from keptoy import * 
+import kepio
 
 # Load up multiquarter data.
 
@@ -17,19 +17,7 @@ cad = 30./60./24.
 dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
-
-# 8669806
-def mqload(keplerid):
-    g = glob.glob(os.environ['HOME']+'/Marcy/Kepler/kepdat/archive/data3/privkep/EX/Q*/*%09i*.fits' % keplerid)
-    tset = atpy.TableSet()
-    
-    for f in g:
-        hdu = pyfits.open(f)
-        t = atpy.Table(f,type='fits')
-        t.table_name = 'Q%i' % hdu[0].header['QUARTER']
-        tset.append(t)
-
-    return tset 
+kepdir = os.environ['KEPDIR']
 
 def tf(tset):
     time,flux = ma.masked_array([]),ma.masked_array([])
@@ -84,8 +72,6 @@ def gaps(tset):
     id = where(g1-g0 > gmi)[0]   
     g0,g1 = g0[id],g1[id]
     return g0,g1
-
-
 
 def overlap(t0,t1,g0,g1):
     """
@@ -426,8 +412,67 @@ def fModel(p,t,f,domain=[-1,1],order=3):
         
     return fM
 
+def cbvDT(KIC):
+    from pyraf import iraf
+    iraf.kepler(_doprint=0)
+
+    vectors = '1 2 3 4 5 6'
+    method = 'llsq'
+    fitpower= 2
+    tset = kepio.mqload(KIC)
+    quarters = tset.tables.keys
+    otset = atpy.TableSet()
+    for q in quarters:
+
+        cbvfile = glob.glob(kepdir+'kepdat/CBV/*q0%s*' % q[-1]) [0]
+        iraf.kepler.kepcotrend(infile=tset[q].keywords['PATH'],
+                               outfile='temp.fits',
+                               clobber=True,
+                               cbvfile=cbvfile,
+                               vectors=vectors,
+                               method=method,
+                               fitpower=fitpower,
+                               iterate=True,
+                               sigmaclip='2',
+                               maskfile='',
+                               scinterp='nearest',
+                               plot=True
+                               )
+
+        infostr=  """
+KIC     %i
+Quarter %s
+CBV %s
+fitpower %.2f
+method  %s 
+""" % (KIC,q[-1],vectors.split()[-1],fitpower,method)
 
 
+        fig = plt.gcf()
+        axL = fig.get_axes()
+        ax = axL[0]
+        ax.annotate(infostr, xy=(-10, 10),
+                    xycoords='axes points',
+                    horizontalalignment='right', verticalalignment='bottom',
+                    fontsize=14,bbox=dict(boxstyle="round",fc='white'))
+
+        plt.draw()
+        fig.savefig("sketch/%i_0%s.png" % (KIC,q[-1]) )
+        
+        t = atpy.Table('temp.fits',type='fits')
+        t.table_name = q
+
+        otset.append(t)
+    otset.write(kepdir+'kepdat/DT/%s.fits' % KIC,type='fits',overwrite=True)
+    
 
 
+def larr(iL):
+    oL = array([])
+    for l in iL:
+        oL = append(oL,l)
+        
+    return oL
 
+
+    
