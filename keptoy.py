@@ -110,7 +110,7 @@ def at(f,t,P,phase,num,s2n):
     return f
 
 
-def inject(t0,f0,s2n=100,P=12.1,phase=0.5,cad=lc):
+def inject(t0,f0,s2n=100,P=12.1,phase=0.5,cad=lc,df=None):
     """
     Inject a transit into an existing time series.
 
@@ -124,13 +124,14 @@ def inject(t0,f0,s2n=100,P=12.1,phase=0.5,cad=lc):
     a = P2a(P)
     tdur = a2tdur(a)
     tbase = ma.ptp(t)
-
+ 
 
     noise = ma.std(f)
-    df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+    if df == None:
+        df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+
     tidx = np.where( np.mod(t-phase*P,P) < tdur)[0]
     f[tidx] -= df
-    
     return f
 
 
