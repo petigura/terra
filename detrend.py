@@ -9,7 +9,9 @@ from scipy.weave import converters
 import os
 from numpy.polynomial import Legendre
 from keptoy import * 
-import kepio
+from scipy import ndimage as nd
+from matplotlib.mlab import csv2rec
+from scipy.interpolate import UnivariateSpline
 
 # Load up multiquarter data.
 
@@ -201,11 +203,10 @@ def dtrunmed(timel,fluxl):
     return tdt,fdt,fint
 
 
-def stitch(fl,tl):
+def stitch(fl,tl,swd = 0.5):
     """
     Stitch together the boundaries of the quarters.
     """
-    
     swd =  0.5 # How long a timeseries on either end to use days 
     nQ = len(fl)
 
@@ -412,14 +413,17 @@ def fModel(p,t,f,domain=[-1,1],order=3):
         
     return fM
 
+
 def cbvDT(KIC):
     from pyraf import iraf
     iraf.kepler(_doprint=0)
 
-    vectors = '1 2 3 4 5 6'
+    vectors = '1 2 3 4 5 6 7 8 9 10'
     method = 'llsq'
-    fitpower= 2
-    tset = kepio.mqload(KIC)
+    fitpower = 2
+    infiles = KICPath(KIC,'tempfits/clip/')
+
+    tset = mqload(infiles)
     quarters = tset.tables.keys
     otset = atpy.TableSet()
     for q in quarters:
@@ -434,7 +438,7 @@ def cbvDT(KIC):
                                fitpower=fitpower,
                                iterate=True,
                                sigmaclip='2',
-                               maskfile='',
+                               maskfile='ranges/cut_bjd.txt',
                                scinterp='nearest',
                                plot=True
                                )
@@ -474,5 +478,171 @@ def larr(iL):
         
     return oL
 
+def mqclipPK(infiles):
+    """
+    Wrapper around the PyKE routines.
+    """
+    rfile= os.path.join(kepdir,'ranges/cut_bjd.txt')
+
+    from pyraf import iraf
+    iraf.kepler(_doprint=0)
+    for f in infiles:
+        bname = os.path.basename(f)
+        outf = os.path.join(kepdir,'tempfits/clip/',bname)        
+        
+        iraf.kepler.kepclip(infile=f,outfile=outf,ranges='@'+rfile,
+                            clobber=True,plot=False,verbose=False,plotcol='SAP_FLUX')
+
+
+
+
+def mqclip(t,f):
+    rfile= os.path.join(kepdir,'ranges/cut_time.txt')
+    t = ma.masked_array(t)
+    f = ma.masked_array(f)
+
+    rec = csv2rec(rfile)
+    for r in rec:
+        tt = ma.masked_inside( t,r['start'],r['stop'] )
+        f.mask = f.mask | tt.mask
+        
+    f.fill_value = nan
+    return f.filled()
+
+
+def nanIntrp(x0,y0):
+    """
+    Use linear interpolation to fill in the nan-points.
+    """
+
+    x,y = x0.copy(),y0.copy()
+
+    y = ma.masked_invalid(y)
+    x = ma.masked_array(x,mask=y.mask)
+    x,y = x.compressed(),y.compressed()
+
+    sp = UnivariateSpline(x,y,k=1,s=0)
+    return x0,sp(x0)
 
     
+def mfltr(y,twid,fcwid=1):
+    """
+    Matched filter.
+
+    Convolving the signal with a kernal of the form.
+
+    [1 1 1 1 1 , -1 -1 -1 -1 -1 ,  1 1 1 1 1]
+
+    Will give the diffence between the average depth of transit and
+    the nominal conintuum depth irrespective of a overall linear term.
+    
+    twid - length of the transit (in units of cadence length)
+    """
+    assert len(where(isnan(y))[0]) == 0,"Convolution does not like nan"
+
+    cwid = twid * fcwid
+    kern = ones(twid+2*cwid) / (2*cwid)
+    kern[cwid:-cwid] = -1. / twid
+    
+    fltr = nd.convolve1d(y,kern,mode='wrap')
+    return fltr
+
+
+def sQ(tset,swd = 0.5):
+    """
+    Stitch together the boundaries of the quarters.
+    """
+    swd =  0.5 # How long a timeseries on either end to use days 
+    Ql = [t.keywords['QUARTER'] for t in tset]
+    
+    assert (sort(Ql) == Ql).all(), "Quarters are not in order" 
+    nQ = len(Ql)
+
+    for i in range(nQ-1):
+        qleft,qright = tset[i],tset[i+1]
+
+        fleft = qleft.SAP_FLUX
+        tleft = qleft.TIME
+
+        fright = qright.SAP_FLUX
+        tright = qright.TIME
+
+        # Mask out points away from the edge.
+
+        tleft = ma.masked_less(tleft,tleft[-1] - swd) 
+        tright = ma.masked_greater(tright,tright[0] + swd) 
+
+        # Mask out nan points
+
+        fleft = ma.masked_invalid(fleft)
+        fright = ma.masked_invalid(fright)
+
+        mleft = fleft.mask | tleft.mask
+        mright = fright.mask | tright.mask
+        fleft.mask = mleft
+        fright.mask = mright
+
+        assert (fleft.count() > 10) & (fright.count() > 10) , "not enought points to fit a line"
+
+        offset = ma.median(fright) - ma.median(fleft)
+        tset[i+1].SAP_FLUX -= offset
+
+
+    return tset
+
+def taylorDT(bM,aM,f,cad,cad0,twd,cwd):
+    """
+    Perform a local detrending at a particular cadence.
+
+    Arguments:
+    bM   - The mean of the continuum before the transit.
+    tM   - The mean of the continuum after the transit.
+    f    - Array of flux values.
+    cad  - Array of cadence identifers.
+    cad0 - Specific cadence that we want to taylor expand about    
+    cwd  - Width of the continuum region.
+    twd  - Width of the transit region.    
+    """
+
+    n = cad.size
+    assert bM.size == aM.size == f.size == n, "Arrays unequal sizes."
+    i0 = where(cad==cad0)[0]    # Index of the reference cadance
+
+    assert i0.size == 1, "Cadence must be unique"
+    i0 = i0[0]
+
+    i  = arange(n)
+    DfDcad = (aM-bM)/(cwd+twd) # This is the slope flux on cadence.
+    f0     = 0.5 * (aM + bM)    # The mean value of f mid transit.
+    trend  = DfDcad[i0]*(i - i0) + f0[i0]
+
+    return f - trend
+
+def kernel(twd,fcwd=1):
+    """
+    Generate convolution kernels.  Recall that
+
+    conv(f,g) will flip g
+
+    twid  - length of the transit (in units of cadence length)
+    fcwid - Each side of the continuum is fcwd * twid
+    """
+    cwd = twd * fcwd
+    kSize = 2*cwd + twd  # Size of the kernel
+    kTemp = zeros(kSize) # Template kernal of appropriate length.
+
+    bK = kTemp.copy()
+    bK[-cwd:] = ones(1) / cwd # Before transit kernel
+
+    tK = kTemp.copy()
+    tK[cwd:-cwd] = ones(1) / twd # transit kernel
+
+    aK = kTemp.copy()
+    aK[:cwd] = ones(1) / cwd # After transit kernel
+
+    dK = kTemp.copy() 
+    dK = 0.5*(bK+aK) - tK # Depth kernel
+
+    return bK,tK,aK,dK
+
+
