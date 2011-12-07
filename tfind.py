@@ -4,7 +4,7 @@ Transit finder: A new approach to finding low signal to noise transits.
 
 from scipy import ndimage as nd
 import numpy as np
-
+from numpy import ma
 
 def LDMF(f,dK):
     """
@@ -236,7 +236,7 @@ def Chi2(data,model,sig):
 
     return chi2
 
-def taylorDT(f,bM,aM,cad,twd,cwd):
+def taylorDT(fs,ts,t0,DfDt,f0):
     """
     Taylor series detrending.
     
@@ -244,30 +244,58 @@ def taylorDT(f,bM,aM,cad,twd,cwd):
 
     Arguments
     ---------
-    f    : Array of flux values.  For the detrending to be sucessful, it
-           should be relatively small
-    bM   : The mean of the continuum before the transit.
-    tM   : The mean of the continuum after the transit.
-    cad  : Array of cadence identifers.
-    cwd  : Width of the continuum region.
-    twd  : Width of the transit region.    
+    fs   : Flux segment.
+    ts   : Time segment.
+    t0   : Time we're expanding about.
+    DfDt : Local slope of lightcurve (determined from continuum).
+    f0   : Local flux level of continuum.
 
     Returns
     -------
     trend : Fluxes corresponding to the detrended light curve.
 
     """
-    n = cad.size
-    assert f.size == cad.size, "Flux and cadence must be of equal length"
+    nptsMi = 10.
+    assert fs.size == ts.size, "ts and fs must have equal sizes"
+    assert fs.size > nptsMi, "Not enough points"
 
-    DfDcad = (aM-bM)/(cwd+twd) # This is the slope flux on cadence.
-
-    # Cadance of mid-transit (can be fractional).
-    cad0 = cad.min() + cad.ptp()/2 
-    
-    f0     = 0.5 * (aM + bM)    # The mean value of f mid transit.
-    trend  = DfDcad*( cad - cad0 ) + f0
+    trend =  DfDt*(ts - t0) + f0
 
     return trend
 
 
+def seg(time,P,ph,wid):
+    """
+    Segment 
+
+    Return a list of slices corresponding to P,ph and have width = wid
+
+    Arguments
+    ---------
+    time : numpy array (not masked).
+    P    : Period to fold about (days)
+    ph   : phase (offset from t = 0)/P
+    wid  : Width (days)
+
+    Returns
+    -------
+    List of slices corresponding to the segment.
+
+    Notes 
+    ----- 
+    Will not return segments that are shorter than the specified
+    width.  If there is missing data, interpolate over it or lose it.
+    
+    """
+    tph = ph*P # time phase.
+
+    tfold = np.mod(time,P)
+    tfold = ma.masked_invalid(tfold)
+    tfold = ma.masked_outside(tfold,tph-wid/2.,tph+wid/2.)
+    sL = ma.notmasked_contiguous(tfold)
+    ssL = []
+    for s in sL:
+        if time[s].ptp() >= wid/2.:
+            ssL.append(s)
+
+    return ssL
