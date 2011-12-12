@@ -30,53 +30,71 @@ from numpy.random import random
 import sys
 from scipy.special import erfc
 import atpy
+import copy
 
 import ebls
 import detrend
 from keptoy import *
 
-# Don't believe any faps that are below this value.  The extrapolation
-# of the CDF is surely breaking down.
-
-def init(tbase=[1000,1000] ,ntbase = 1,
-         s2n = [10.,10.]   ,ns2n   = 1,
-         ntr=20, null=False):
+def init(**kwargs):
     """
     Initializes simulation parameters.
 
     Period is dithered by wper
     Phase is random.
     
-    Random values are controlled by a seed value so that the run parameters
-    are reproducable.
+    *kwargs - key word arguments to pass to inject.
+
+    Usage
+    -----
+    init(P=200,s2n=([10,20],5),tbase=500).  
+
+    - List of dictionaries specifying 5 runs centered around P = 200,
+      5 values of s2n ranging from 10 to 20, and tbase=500.
+    
+
     """
-    per = 200.
+    keys=kwargs.keys()
+    assert keys.count('P') == 1, "Must specify period"
+
+    P = kwargs['P']
     wphase = 1.      # randomize phase over entire cycle
-    wper   = per / 10. # dither period by 10%
+    wP   = P / 10.   # dither period by 10%
+    arrL = []
 
-    # Initialize test parameters    
-    s2n   = log10( array(s2n) )
-    tbase = log10( array(tbase))
+    keys.remove('P')
 
-    s2n = logspace(s2n[0],s2n[1],ns2n)
-    tbase = logspace(tbase[0],tbase[1],ntbase)
-    par = itertools.product(*[s2n,tbase])
+    for k in keys:
+        arg = kwargs[k]
+        if type(arg) is not tuple:
+            arg = (arg,1)
 
+        n     = arg[1]
+        if type(arg[0]) is list:
+            range = arg[0]
+            arr   = logspace( log10(range[0]) , log10(range[1]) , n)
+        else:
+            arr    = empty(n)
+            arr[:] = arg[0]
+
+        arrL.append(arr)
+
+    par = itertools.product(*arrL)
     darr = []
     seed = 0
-
-    for p in par:
-        for i in range(ntr):            
-            np.random.seed(seed)
-            phase = wphase*random()
-            dper   = wper*random()
-            d = {'s2n':p[0],'tbase':p[1],'P':per+dper,'phase':phase,
-                 'null':null,'seed':seed}
-
-            darr.append(d) 
-            seed += 1
+    for p in par:        
+        np.random.seed(seed)
+        phase = wphase*random()
+        dP   = wP*random()
+        d = {'P':P+dP,'phase':phase,'seed':seed}
+        for k,v in zip(keys,p):
+            d[k] = v
         
+        darr.append(d) 
+        seed += 1
+
     return darr
+
 
 def genSynLC(darr):
     """
@@ -120,31 +138,42 @@ def dl2tab(dl):
         t.add_column(k,data)
 
     return t
-        
 
-def genEmpLC(darr,tdt,fdt):
+def genEmpLC(darr0,tdt,fdt):
     """
     Generate synthetic lightcurves with transits parameters specified
     by darr
     """
+    darr = copy.deepcopy(darr0)
+
     fl,tl = [],[]
     for d in darr:
-        f = inject(tdt,fdt,s2n=d['s2n'],P=d['P'],phase=d['phase']) 
+        d.pop('seed')
+        d.pop('tbase')
+
+        f = inject(tdt,fdt,**d)
         f = f.astype(float32)
         fl.append(f)
         tl.append(tdt)
         
     return tl,fl
 
-def profile(tl,fl,PGrid,par=False):
+def profile(tl,fl,PGrid,func,par=False):
     """
     Will profile a transit search algorithm over a range of:
     - S/N
     - tbase
     
-    Arguments
-    tl - List of time measurements
-    fl - List of flux measurements
+    Parameters
+    ----------
+    tl : List of time measurements
+    fl : List of flux measurements
+    PGrid : List trial periods
+
+    func : Function that is being profiled. Must have the following
+           signature:
+           func(t,f,PGrid,counter)
+
     """
     nsim = len(tl)
     PGridList = [PGrid for i in range(nsim)]
@@ -154,15 +183,11 @@ def profile(tl,fl,PGrid,par=False):
         from IPython.parallel import Client
         rc = Client()
         lview = rc.load_balanced_view()
-        res = lview.map(eblspro,tl,fl,PGridList,counter,block=True)
+        res = lview.map(func,tl,fl,PGridList,counter,block=True)
     else:
-        res = map(eblspro,tl,fl,PGridList,counter)        
+        res = map(func,tl,fl,PGridList,counter)        
 
     return res
-        
-def eblspro(tl,fl,PGrid,i):
-    sys.stderr.write("%i\n" % i)
-    return ebls.blsw(tl,fl,PGrid)
 
 def saverun(darr,res,path):
     f = open(path,'wb')
@@ -174,9 +199,7 @@ def s2n2fap(PGrid,s2nGrid):
     """
     """
     tdurGrid = a2tdur(P2a(PGrid))
-
     return log10(0.5*(erfc(s2nGrid/sqrt(2)) )*(PGrid/tdurGrid*5))
-    
 
 fapfloor = 0.01;
 
