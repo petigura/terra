@@ -240,3 +240,9 @@ def fap(t0nl, f0nl):
     s2nfit = 10**s2nfit
 
     return s2nfit
+
+        
+def eblspro(tl,fl,PGrid,i):
+    sys.stderr.write("%i\n" % i)
+    return ebls.blsw(tl,fl,PGrid)
+
