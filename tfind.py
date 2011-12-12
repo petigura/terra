@@ -5,13 +5,14 @@ from scipy import ndimage as nd
 from scipy.interpolate import interp1d
 import matplotlib.pylab as plt
 import scipy
-
+import sys
 import numpy as np
 from numpy import ma,nan
 
 import ebls
+from keptoy import *
+from keptoy import lc 
 
-lc = 0.0204343960431288
 
 def LDMF(f,dK):
     """
@@ -63,7 +64,6 @@ def GenK(twd,fcwd=1):
 
     bK = kTemp.copy()
     bK[-cwd:] = np.ones(1) / cwd # Before transit kernel
-
 
     boxK = kTemp.copy()
     boxK[cwd:-cwd] = np.ones(1) # Box shaped kernel
@@ -441,76 +441,128 @@ def pep(time,fsig,twd,cwd):
     return ee,PP,s2n
 
 
+def P2Pcad(PG0):
+    """
+    Period Grid (cadences)
 
-def pep2(dM,PGrid0,twd,cwd):
+    """
+    PG = []
+    PcadG = []
+
+    for P0 in PG0:
+        Pcad = int(round(P0/lc)) # the period in units of cadence
+        PcadG.append(Pcad)
+        PG.append( Pcad *lc  )
+
+    return PcadG,PG
+
+
+def tdpep2(fsig,PG0):
+    """
+    Transit-duration - Period - Epoch
+
+    Parameters
+    ----------
+    fsig - Flux time series.  It is assumed that elements of fsig are
+           evenly spaced in time.
+
+    PG0  - Initial period grid.
+
+    Returns
+    -------
+
+    eee - epoch of maximum depth for a paticular (twd,P)
+    ddd - depth of maximum depth for a paticular (twd,P)
+    sss - typical scatter for a paticular (twd,P)
+    ccc - number of filled data for particular (twd,P)
+    """
+
+    # Determine the grid of periods that corresponds to integer
+    # multiples of cadence values
+    PcadG,PG = P2Pcad(PG0)
+       
+    # Initialize tdur grid.  
+    twdMi = a2tdur( P2a( PG[0 ] ) ) /lc
+    twdMa = a2tdur( P2a( PG[-1] ) ) /lc
+
+    twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
+
+    eee = []
+    ddd = []
+    sss = []
+    ccc = []
+
+    for twd in twdG:
+        bK,boxK,tK,aK,dK = GenK( twd )
+        dM = nd.convolve1d(fsig,dK)
+
+        # Discard cadences that are too high.
+        dM = ma.masked_outside(dM,-1e-3,1e-3)
+        fsig = ma.masked_array(fsig,mask=dM.mask,fill_value = np.nan)
+        fsig = fsig.filled()
+        dM = nd.convolve1d(fsig,dK)
+
+        dd,ee, cc, ss =  pep2(dM,PcadG)
+
+        eee.append(ee)
+        ddd.append(dd)
+        sss.append(ss)
+        ccc.append(cc)
+
+    eee = np.vstack( [np.array(ee) for ee in eee] )
+    ddd = np.vstack( [np.array(dd) for dd in ddd] )
+    sss = np.vstack( [np.array(ss) for ss in sss] )
+    ccc = np.vstack( [np.array(cc) for cc in ccc] )
+
+    return eee,ddd,sss,ccc
+
+
+def pep2(dM,PcadG):
     """
     Period-epoch search
     
     Parameters
     ----------
-    time - time series
-    fsig - flux
-    twd - transit width (in days)
-    cwd - continuum width (each side, days)
+    dM    - mean depth
+    PcadG - Grid of trial periods (in units of cadences). 
+
+    Returns
+    -------
+    dd    - Average depth of folded transit.
+    ee    - Epoch of maximum signal strength
+    cc    - Number of transits in peak signal.
+    ss    - Robust scatter for a particular peroid.
+
     """
 
-    # The values of period that we sample are different from the input PGrid
+    ee = []
+    dd = []
+    ss = []
+    cc = []
+    for Pcad in PcadG:
 
-#    PGrid = [] 
-#    ee = []
-#    dd = []
-#    for P0 in PGrid0:
-#        Pcad = int(round(P0/lc)) # the period in units of cadence
-#        PGrid.append( Pcad * lc )
-#
-#        dMW = XWrap(dM,P0cad,fill_value=np.nan)
-#        dMW = ma.masked_invalid(dMW)
-#
-#        ne,nt = dMW.shape
-#        
-#
-#        epoch = np.arange(
-#
-#        count = (~dMW.mask).astype(int).sum(axis=0)
-#        bcount = count >= 3
-    
+        dMW = XWrap(dM,Pcad,fill_value=np.nan)
+        dMW = ma.masked_invalid(dMW)
+        nt,ne = dMW.shape
 
+        epoch = np.arange(ne,dtype=float)/ne * Pcad *lc 
+        count = (~dMW.mask).astype(int).sum(axis=0)
+        bcount = count >= 3
 
-    # Discard cadences that are too high.
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    fsig = ma.masked_array(fsig,mask=dM.mask,fill_value = nan)
-    fsig = fsig.filled()
+        d = bcount*dMW.mean(axis=0)
 
-    tCand = dThresh(dM,dMi=100)
-    
-    # Generate a grid of plausable periods (days)
-    PGrid = ebls.grid( np.nanmax(time) - np.nanmin(time) , 0.5, Pmin=50, 
-                       Psmp=0.5 )
+        mad = ma.abs(d)
+        mad = ma.masked_less(d,1e-6)
+        mad = ma.median(mad)
 
-    eCandGrid = []
-    PCandGrid = []
+        iMax = d.argmax()
 
-    for P in PGrid:
-        eCand = pCheck(time,tCand,P,1000)
-        eCandGrid.append( eCand )
-        PCand = np.empty( len(eCand) )
-        PCand[:] = P
-        PCandGrid.append( PCand )
+        ee.append( epoch[iMax] )
+        dd.append( d[iMax]     )
+        ss.append( mad         )
+        cc.append( count[iMax] )
 
-
-    ee = reduce(np.append,eCandGrid)
-    PP = reduce(np.append,PCandGrid)
-    print "%i (P,epoch)" % len(ee)
-
-    s2n = np.zeros(len(ee))
-    for i in range(len(ee)):
-        ep = ee[i]
-        P  = PP[i]
-        s2n[i] = FOM(time,fsig,DfDt,f0,P,ep,twd=.3,wid=.9)
-
-    return ee,PP,s2n
-
-
+    return  dd,ee, cc, ss
 
 def tdpep(time,fsig):
     """
@@ -563,3 +615,34 @@ def cadFill(cad0):
     iFill = np.where(count == 1)[0]
     
     return cad,iFill
+
+
+def tfindpro(t,f,PG,i):
+    """
+    Transit Finder Profiler
+
+    Parameters
+    ----------
+    t  - Time series
+    f  - Flux
+    PG - Period grid
+    i  - The trial number
+    
+    Returns
+    -------
+    res : Dictionary of results for subsequent interpretation.
+    
+    """
+    sys.stderr.write("%i\n" % i)
+    eee,ddd,sss,ccc = tdpep2(f,PG)
+    iMaTwd = np.argmax(ddd/sss,axis=0)
+    x      = np.arange(PG.size) 
+
+    eee = eee[iMaTwd,x]
+    ddd = ddd[iMaTwd,x]
+    sss = sss[iMaTwd,x]
+    ccc = ccc[iMaTwd,x]
+
+    res = {'eee':eee,'ddd':ddd,'sss':sss,'ccc':ccc}
+
+    return res
