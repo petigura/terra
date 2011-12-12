@@ -7,9 +7,7 @@ G = 6.67e-8 # cgs
 R_sun = 6.9e10 # cm
 M_sun = 2.0e33 # g
 
-lc = 30./60./24.
-sc = 1./60./24.
-
+lc = 0.0204343960431288
 
 def lightcurve(df=0.01,P=12.1,phase=0.5,cad=lc,tdur=None,
                s2n=10,tbase=90,a=None,null=False,seed=None,model=False):
