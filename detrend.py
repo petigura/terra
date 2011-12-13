@@ -510,21 +510,62 @@ def mqclip(t,f):
     return f.filled()
 
 
-def nanIntrp(x0,y0):
+def nanIntrp(x0,y0,nContig=3):
     """
     Use linear interpolation to fill in the nan-points.
+
+    nContig - Don't fill in nan values if there are more than a
+    certain number of contiguous ones.
     """
 
     x,y = x0.copy(),y0.copy()
 
     y = ma.masked_invalid(y)
     x = ma.masked_array(x,mask=y.mask)
-    x,y = x.compressed(),y.compressed()
+    xc,yc = x.compressed(),y.compressed()
 
-    sp = UnivariateSpline(x,y,k=1,s=0)
-    return x0,sp(x0)
+    sp = UnivariateSpline(xc,yc,k=1,s=0)
 
     
+    x.mask = ~x.mask
+    sL = ma.notmasked_contiguous(x)
+    for s in sL:
+        if s.stop - s.start <= nContig:
+           y[s] = sp(x[s])
+
+    return x.data,y.data
+
+
+def cadFill(x,cad):
+    """
+
+    Cadence Fill
+    
+    There is missing data in the Kepler light curve.  Fill in the
+    missing values with nans.
+
+    """
+
+    cadNew = arange(cad[0],cad[-1])
+    nNew = len(cadNew)
+
+    xNew = empty(nNew)
+    xNew[::] = nan
+    
+    for i in range(nNew):
+        if ~len(where(cad == cadNew)[0]) == 0:
+            xNew[i] = x
+
+
+    
+    
+
+
+
+
+
+
+
 def mfltr(y,twid,fcwid=1):
     """
     Matched filter.
@@ -590,59 +631,5 @@ def sQ(tset,swd = 0.5):
 
     return tset
 
-def taylorDT(bM,aM,f,cad,cad0,twd,cwd):
-    """
-    Perform a local detrending at a particular cadence.
-
-    Arguments:
-    bM   - The mean of the continuum before the transit.
-    tM   - The mean of the continuum after the transit.
-    f    - Array of flux values.
-    cad  - Array of cadence identifers.
-    cad0 - Specific cadence that we want to taylor expand about    
-    cwd  - Width of the continuum region.
-    twd  - Width of the transit region.    
-    """
-
-    n = cad.size
-    assert bM.size == aM.size == f.size == n, "Arrays unequal sizes."
-    i0 = where(cad==cad0)[0]    # Index of the reference cadance
-
-    assert i0.size == 1, "Cadence must be unique"
-    i0 = i0[0]
-
-    i  = arange(n)
-    DfDcad = (aM-bM)/(cwd+twd) # This is the slope flux on cadence.
-    f0     = 0.5 * (aM + bM)    # The mean value of f mid transit.
-    trend  = DfDcad[i0]*(i - i0) + f0[i0]
-
-    return f - trend
-
-def kernel(twd,fcwd=1):
-    """
-    Generate convolution kernels.  Recall that
-
-    conv(f,g) will flip g
-
-    twid  - length of the transit (in units of cadence length)
-    fcwid - Each side of the continuum is fcwd * twid
-    """
-    cwd = twd * fcwd
-    kSize = 2*cwd + twd  # Size of the kernel
-    kTemp = zeros(kSize) # Template kernal of appropriate length.
-
-    bK = kTemp.copy()
-    bK[-cwd:] = ones(1) / cwd # Before transit kernel
-
-    tK = kTemp.copy()
-    tK[cwd:-cwd] = ones(1) / twd # transit kernel
-
-    aK = kTemp.copy()
-    aK[:cwd] = ones(1) / cwd # After transit kernel
-
-    dK = kTemp.copy() 
-    dK = 0.5*(bK+aK) - tK # Depth kernel
-
-    return bK,tK,aK,dK
 
 
