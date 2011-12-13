@@ -107,31 +107,62 @@ def at(f,t,P,phase,num,s2n):
 
     return f
 
-
-def inject(t0,f0,s2n=100,P=12.1,phase=0.5,cad=lc,df=None):
+def inject(t0,f0,**kw):
     """
     Inject a transit into an existing time series.
 
-    Returns
-    f - the modified time series.
-    """
+    Parameters
+    ----------
+    t0    : time series (required).
+    f0    : flux series (required).
+    
+    phase : Phase of ingress (phase * P = time of ingress) or:
+    epoch : Epoch of mid transit.
 
+    df    : Depth of transit
+    s2n   : Signal to noise (noise computed in a naive way).
+
+    tdur : Transit duration (units of days).  If not given, compute
+           assuming Keplerian orbit
+
+    Returns
+    -------
+    f     : the modified time series.
+    """
     t = t0.copy()
     f = f0.copy()
 
-    a = P2a(P)
-    tdur = a2tdur(a)
+    assert kw.has_key('epoch') ^ kw.has_key('phase') ,\
+        "Must specify epoch xor phase"
+
+    assert kw.has_key('s2n') ^ kw.has_key('df') ,\
+        "Must specify s2n xor df"
+
+    assert kw.has_key('P') , "Must specify Period"
+
+    P = kw['P']
+    
+    if kw.has_key('tdur'):
+        tdur = kw['tdur']
+    else:
+        tdur = a2tdur( P2a(P) )
+
     tbase = ma.ptp(t)
+    tfold = np.mod(t,P)
  
-
-    noise = ma.std(f)
-    if df == None:
+    if kw.has_key('s2n'):
+        noise = ma.std(f)
         df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+    else:
+        df = kw['df']
 
-    tidx = np.where( np.mod(t-phase*P,P) < tdur)[0]
+    if kw.has_key('epoch'):
+        tidx = np.where( abs(tfold - kw['epoch']) < tdur / 2.)
+    else:
+        tidx = np.where( np.mod(t-kw['phase']*P,P) < tdur)[0]
+
     f[tidx] -= df
     return f
-
 
 def ntrans(tbase,P,phase):
     """
