@@ -152,16 +152,26 @@ def inject(t0,f0,**kw):
  
     if kw.has_key('s2n'):
         noise = ma.std(f)
-        df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
+        df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,lc) )
     else:
         df = kw['df']
 
     if kw.has_key('epoch'):
-        tidx = np.where( abs(tfold - kw['epoch']) < tdur / 2.)
+        epoch = kw['epoch']
     else:
-        tidx = np.where( np.mod(t-kw['phase']*P,P) < tdur)[0]
+        epoch = kw['phase']*P
 
-    f[tidx] -= df
+    tm = abs( tfold - epoch ) # Time before (or after) midtransit.
+    ie = 0.5*(tdur - lc)
+    oe = 0.5*(tdur + lc)
+
+    frac = ( tm - ie ) / lc 
+
+    idlo = np.where(tm < ie )
+    idfr = np.where( (tm > ie ) & (tm < oe) )
+    f[idlo] -= df
+    f[idfr] -= df*(1-frac[idfr])
+
     return f
 
 def ntrans(tbase,P,phase):
