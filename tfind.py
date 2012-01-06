@@ -310,36 +310,7 @@ def seg(time,P,ph,wid):
 
     return ssL
 
-def LDT(time,fsig,DfDt,f0,wd):
-    """
-    Local Detrending
 
-    Detrend according to the local values of the continuum
-
-    Parameters
-    ----------
-    time : Folded time series with all but the tranist region masked out.
-    fsig : Flux time series.
-    
-    Returns
-    -------
-    fdt   : Detrended flux segments
-    trend : The trend I subtracted from them.
-    """
-    assert type(time) is ma.core.MaskedArray, \
-        "time must be masked array of transit segments"
-
-    # Detrend the lightcurve.
-    sLDT = ma.notmasked_contiguous(time)
-    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
-
-    trend = ma.masked_array(fsig,copy=True,mask=True)
-
-    for s in sLDT:
-        ms = s.start + wd /lc/2
-        trend[s] = taylorDT(fsig[s],time[s],time[ms],DfDt[ms],f0[ms])
-
-    return trend
 
 def getT(time,P,epoch,wd):
     """
@@ -422,6 +393,7 @@ def FOM(time,fsig,DfDt,f0,P,epoch,wd=2,twd=.3,plot=False):
 
 def pep(time,fsig,twd,cwd):
     """
+
     Period-epoch search
     
     Parameters
@@ -430,6 +402,7 @@ def pep(time,fsig,twd,cwd):
     fsig - flux
     twd - transit width (in days)
     cwd - continuum width (each side, days)
+
     """
 
     twd = int(twd/lc) # length of transit in units of cadence
@@ -544,7 +517,6 @@ def tdpep2(fsig,PG0):
 
     return eee,ddd,sss,ccc,PG
 
-
 def pep2(dM,PcadG):
     """
     Period-epoch search
@@ -617,9 +589,6 @@ def tdpep(time,fsig):
 
     return tt,PP,ee,s2n
 
-
-
-
 def cadFill(cad0):
     """
     Cadence Fill
@@ -674,104 +643,3 @@ def tfindpro(t,f,PG0,i):
     res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n}
 
     return res
-
-
-def NLDT(t,f,epoch,f0,DfDt):
-    """
-    Non-linear detrend.
-
-    Fit a single transit as a combination of a conintuum described by
-    a Legendre polynomial and a box-shaped transit.
-
-    Parameters
-    ----------
-    t    : time array (only the segment to be fit)
-    f    : flux array (same)
-    f0   : Guess for constant term
-    DfDt : Guess for slope
-    
-    Returns
-    -------
-    
-    """
-    assert ( type(t) is np.ndarray ) & ( type(f) is np.ndarray ) \
-        , "Time must be array"
-
-    # Guess for model parameters.  3rd order Legendre poly
-    p0 = [epoch, 0., 0.5, f0, DfDt ,0,0 ]
-
-    p1, fopt ,iter ,funcalls, warnflag = \
-        optimize.fmin(err,p0,args=(t,f),maxiter=1000,maxfun=1000,full_output=True)
-
-    assert warnflag == 0, "Optimization failed "
-
-    return p1
-
-
-def tmodel(p,t):
-    """
-    Transit Model
-
-    Parameters
-    ----------
-    p : parameters.  [ epoch, df, tdur, Legendre coeff ... ] 
-    t : time
-
-    Returns
-    -------
-    fmod : flux model
-    
-    """
-    P     = p[0]
-    epoch = p[1]
-    df    = p[2]
-    tdur  = p[3]
-
-    domain = [t.min(),t.max()]
-#    import pdb;pdb.set_trace()
-
-    # The rest of the parameters go the continuum fit
-    cont = Legendre( p[4:],domain=domain )(t)
-    fmod = inject(t,cont,P=P,epoch=epoch,df=df,tdur=tdur)
-
-    return fmod
-
-def err(p,t,f):
-    fmod = tmodel(p,t)
-    return ((fmod - f)**2).sum()
-#    return np.median(np.abs(fmod-f))
-
-
-
-def NLDTWrap(time,fsig,DfDt,f0,wd):
-    """
-    Local Detrending
-
-    Detrend according to the local values of the continuum
-
-    Parameters
-    ----------
-    time : Folded time series with all but the tranist region masked out.
-    fsig : Flux time series.
-    DfDt : Derivative array (Guess value for the slope)
-    f0   : f0 (guess for conintuum level)
-
-    Returns
-    -------
-    fdt   : Detrended flux segments
-    trend : The trend I subtracted from them.
-    """
-
-    assert type( ma.core.MaskedArray ) , "time should be masked array"
-
-    sLDT = ma.notmasked_contiguous(time)
-    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
-
-    trend = ma.masked_array(fsig,copy=True,mask=True)
-
-    for s in sLDT:
-        ms = s.start + wd /lc/2
-        p1 = NLDT(time.data[s],fsig[s],time.data[ms],f0[ms],DfDt[ms])
-        trend[s] = Legendre(p1[3:],domain=domain)(time[s])
-
-    return trend
