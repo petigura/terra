@@ -1,13 +1,14 @@
 import numpy as np
 from numpy import pi,sqrt,where,std,ma,array
+from numpy import ma,tanh,sin,cos,pi
+from numpy.polynomial import Legendre
 
 ### Constants ###
-
 G = 6.67e-8 # cgs
 R_sun = 6.9e10 # cm
 M_sun = 2.0e33 # g
-
 lc = 0.0204343960431288
+c = 100   # Parameter that controls how sharp P05 edge is.
 
 def lightcurve(df=0.01,P=12.1,phase=0.5,cad=lc,tdur=None,
                s2n=10,tbase=90,a=None,null=False,seed=None,model=False):
@@ -183,3 +184,115 @@ def ntrans(tbase,P,phase):
     tbase = float(tbase)
     P = float(P)
     return np.floor(tbase/P) + (phase <  np.mod(tbase,P) / P ).astype(np.int)
+
+
+def box(p,t):
+    P     = p[0]
+    epoch = p[1]
+    df    = p[2]
+    tdur  = p[3]
+
+    fmod = inject(t,np.zeros(t.size),P=p[0],epoch=p[1],df=p[2], tdur=p[3] )
+    return fmod
+
+
+def P05(p,t):
+    """
+    Analytic model of Protopapas 2005.
+    """
+    P     = p[0]
+    epoch = p[1]
+    df    = p[2]
+    tdur  = p[3]
+
+    tp = tprime(P,epoch,tdur,t)
+
+    return df * ( 0.5*( 2. - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) ) - 1.)
+
+def tprime(P,epoch,tdur,t):
+    """
+    t' in Protopapas
+    """
+    return  ( P*sin( pi*(t - epoch) / P ) ) / (pi*tdur)
+
+def dP05(p,t):
+    """
+    Analytic evalutation of the Jacobian.  
+
+    Note 
+    ----
+
+    This function has not been properly tested.  I wrote it to see if
+    it made the LM fitter any more robust or speedy.  I could not LM
+    to work even numerically.
+    """
+
+    P     = p[0]
+    epoch = p[1]
+    df    = p[2]
+    tdur  = p[3]
+
+    # Argument to the sin function in tprime.
+    sa = pi*(t - epoch) / P 
+    tp = tprime(P,epoch,tdur,t)
+
+    # Compute partial derivatives with respecto to tprime:
+    dtp_dP     = sin( sa ) / pi / epoch + P * cos( sa ) / pi / epoch
+    dtp_depoch = - tp / epoch
+    dtp_dtdur  = - cos( sa ) / epoch
+
+    # partial(P05)/partial(tprime)
+    dP05_dtp = 0.5 * df * ( (tanh( c*(tp + 0.5) ) )**2 - \
+                                 (tanh( c*(tp - 0.5) ) )**2)
+
+    # Compute the partial derivatives
+    dP05_dP     = dP05_dtp * dtp_dP
+
+    # dP05_dP     = np.zeros(len(t))
+    dP05_depoch = dP05_dtp * dtp_depoch
+    dP05_ddf    = 0.5 * ( - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) )
+    dP05_dtdur  = dP05_dtp * dtp_dtdur
+    
+    # The Jacobian
+    J = np.array([dP05_dP,  dP05_depoch , dP05_ddf, dP05_dtdur])
+
+    return J
+
+def trend(p,t):
+    """
+    Fit the local transit shape with the following function.
+
+    """
+    domain = [t.min(),t.max()]
+    return Legendre(p,domain=domain)(t)
+    
+def P051T(p,t,P):
+    """
+    Protopapas single transit
+
+    Single transit + trend
+
+    Parameters
+    ----------
+
+    p : List of parameters.
+        p[0]   epoch
+        p[1]   df
+        p[2]   tdur 
+        p[3:]  passed to trend
+
+    P : period
+
+    Period is held fixed since for a single transit, it doesnot make
+    sense to specify period and epoch
+
+    """
+    
+    pP05 = [P , p[0] , p[1] , p[2] ]
+    sig = P05(pP05,t)
+
+    ptrend = p[3:]
+    tr     = trend(ptrend,t)
+
+    return sig + tr
+
