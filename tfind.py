@@ -8,43 +8,21 @@ import scipy
 import sys
 import numpy as np
 from numpy import ma,nan
+from numpy.polynomial import Legendre
+from scipy import optimize
 
 import ebls
 from keptoy import *
 from keptoy import lc 
 
-
-def LDMF(f,dK):
-    """
-    Locally-detrended Matched Filter.
-
-    Finds box-shaped signals irrespective of a local continuum slope.
-
-
-    Parameters
-    ----------
-    f : flux time series
-    dK: Depth kernel.
-
-
-    Returns
-    -------
-    dM : Mean depth of transit.
-
-    """
-    dM = nd.convolve1d(f,dK,mode='wrap')
-    
-    return dM
-
-
-def GenK(twd,fcwd=1):
+def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
     
     Parameters
     ----------
-    twid  : length of the transit (in units of cadence length)
-    fcwid : Each side of the continuum is fcwd * twid (default is 1)
+    twidcad : length of the transit (cadences)
+    fcwid   : Each side of the continuum is fcwd * twid (default is 1)
 
     Returns
     -------
@@ -58,8 +36,8 @@ def GenK(twd,fcwd=1):
     Recall that conv(f,g) will flip g.
 
     """
-    cwd = twd * fcwd
-    kSize = 2*cwd + twd  # Size of the kernel
+    cwd = twdcad * fcwd
+    kSize = 2*cwd + twdcad  # Size of the kernel
     kTemp = np.zeros(kSize) # Template kernal of appropriate length.
 
     bK = kTemp.copy()
@@ -69,7 +47,7 @@ def GenK(twd,fcwd=1):
     boxK[cwd:-cwd] = np.ones(1) # Box shaped kernel
 
     tK = boxK.copy()
-    tK[cwd:-cwd] /= twd # transit kernel
+    tK[cwd:-cwd] /= twdcad # transit kernel
 
     aK = kTemp.copy()
     aK[:cwd] = np.ones(1) / cwd # After transit kernel
@@ -79,6 +57,23 @@ def GenK(twd,fcwd=1):
 
     return bK,boxK,tK,aK,dK
 
+
+def MF(fsig,twd,fcwd=1):
+    """
+    Matched filter.
+
+    """
+    cwd = fcwd*twd
+
+    bK,boxK,tK,aK,dK = GenK(twd,fcwd=fcwd)
+
+    dM     = nd.convolve1d(fsig,dK)
+    bM     = nd.convolve1d(fsig,bK)
+    aM     = nd.convolve1d(fsig,aK)
+    DfDt   = (aM-bM)/(cwd+twd)/lc
+    f0     = 0.5 * (aM + bM)    # Continuum value of fsig (mid transit)
+
+    return dM,bM,aM,DfDt,f0
 
 def dThresh(dM,dMi=50,dMa=1000):
     """
@@ -163,7 +158,6 @@ def XWrap(x,ifold,fill_value=0):
 
     """
 
-    assert type(ifold) is int, "ifold must be an int."
     ncad = x.size # Number of cadences
     nrow = int(np.floor(ncad/ifold) + 1)
     nExtend = nrow * ifold - ncad # Pad out remainder of array with 0s.
@@ -316,29 +310,67 @@ def seg(time,P,ph,wid):
 
     return ssL
 
-def FOM(time,fsig,DfDt,f0,P,ep,wid=2,twd=.3,plot=False):
-    tfold = np.mod(time,P)
+def LDT(time,fsig,DfDt,f0,wd):
+    """
+    Local Detrending
+
+    Detrend according to the local values of the continuum
+
+    Parameters
+    ----------
+    time : Folded time series with all but the tranist region masked out.
+    fsig : Flux time series.
+    
+    Returns
+    -------
+    fdt   : Detrended flux segments
+    trend : The trend I subtracted from them.
+    """
+    assert type(time) is ma.core.MaskedArray, \
+        "time must be masked array of transit segments"
 
     # Detrend the lightcurve.
-    tfold = ma.masked_outside(tfold,ep - wid/2,ep + wid/2)
-    tfold = ma.masked_invalid(tfold)
+    sLDT = ma.notmasked_contiguous(time)
+    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
 
-    sLDT = ma.notmasked_contiguous(tfold)
-    sLDT = [s for s in sLDT if s.stop-s.start > wid / lc /2]
-
-    fdt = ma.masked_array(fsig,copy=True,mask=True)
     trend = ma.masked_array(fsig,copy=True,mask=True)
 
     for s in sLDT:
-        ms = s.start + wid /lc/2
+        ms = s.start + wd /lc/2
         trend[s] = taylorDT(fsig[s],time[s],time[ms],DfDt[ms],f0[ms])
-        fdt[s] = fsig[s] - trend[s]
- 
-    # Calculate figure of merit.
-    # Detrend the lightcurve.
-    tfold.mask = False
-    tfold = ma.masked_outside(tfold,ep - twd/2,ep + twd/2)
+
+    return trend
+
+def getT(time,P,epoch,wd):
+    """
+    Get Transits
+
+    time : Time series
+    P    : Period
+    epoch: epoch
+    wd   : How much data to return for each slice.
+
+    Returns
+    -------
+    Time series phase folded with everything but the transits masked out.
+
+    """
+    tfold = np.mod(time,P)
+    tfold = ma.masked_outside(tfold,epoch - wd/2,epoch + wd/2)
     tfold = ma.masked_invalid(tfold)
+    return tfold
+
+def FOM(time,fsig,DfDt,f0,P,epoch,wd=2,twd=.3,plot=False):
+    tfold = getT(time,P,epoch,wd)
+    time = ma.masked_array(time,mask=tfold.mask)
+
+    sLDT = ma.notmasked_contiguous(time)
+    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
+    fdt,trend = LDT(time,fsig,DfDt,f0,wd)
+
+    # Calculate figure of merit.
+    tfold = getT(time,P,epoch,twd)
+    time = ma.masked_array(time,mask=tfold.mask)
     
     fdt.mask = True
     fdt.mask = tfold.mask
@@ -356,27 +388,32 @@ def FOM(time,fsig,DfDt,f0,P,ep,wid=2,twd=.3,plot=False):
         fig.clf()
         ax = plt.gca()
 
-        sDT = sLDT[-1]
-        sFOM = sLFOM[-1]
+        nT = len(sLDT)
 
-#        ax.plot(time[sDT],fsig[sDT],'.')
-#        ax.plot(time[sFOM],fsig[sFOM],'o')
-#
-#        ax.plot(time[sDT],bM[sDT])
-#        ax.plot(time[sDT],aM[sDT])
-#        ax.plot(time[sDT],f0[sDT])
-#        ax.plot(time[sDT],trend[sDT])
 
-        [ax.plot(tfold.data[s],fsig[s],',k') for s in sLDT] 
-        [ax.plot(tfold.data[s],fsig[s],'or',ms=2) for s in sLFOM] 
-        [ax.plot(tfold.data[s],trend[s]) for s in sLDT] 
-        [ax.axvline(tfold.data[s.start + wid/lc/2]) for s in sLDT] 
+        x = tfold.data
+        ofst = 1e-3*np.arange(1,nT+1)
 
-        [ax.plot(tfold.data[s],fdt.data[s],'o',alpha=.3) for s in sLDT] 
-        [ax.plot(tfold.data[s],fdt.data[s],'o') for s in sLFOM] 
+        for i in range(nT):
+            o = ofst[i]
+            sDT = sLDT[i]
+            sFOM = sLFOM[i]
+            mT = np.mean(trend[sDT])
 
-        ax.set_title("epoch = %f" % ep)
-        ax.annotate("s2n = %f" % s2n,(.8,.8),xycoords='figure fraction' ,bbox=dict(boxstyle="round", fc="0.8"))
+
+            ax.plot(x[ sDT  ] ,fsig[sDT]  + o -mT,',k') 
+            ax.plot(x[ sFOM ] ,fsig[sFOM] + o -mT,'or',ms=2)
+            ax.plot(x[ sDT  ] ,trend[sDT] + o -mT) 
+
+            ax.axvline(x[s.start + wd/lc/2])
+
+            ax.plot(x[sDT],fdt.data[sDT],'o',alpha=.3)
+            ax.plot(x[sDT],fdt.data[sDT],'o') 
+
+        ax.set_title("epoch = %f" % epoch)
+        ax.annotate("s2n = %f" % s2n,(.8,.8),
+                    xycoords='figure fraction',
+                    bbox=dict(boxstyle="round", fc="0.8"))
 
         fig.savefig("test.png" )
 
@@ -397,14 +434,7 @@ def pep(time,fsig,twd,cwd):
 
     twd = int(twd/lc) # length of transit in units of cadence
     bK,boxK,tK,aK,dK = GenK( twd ) 
-    dM     = nd.convolve1d(fsig,dK)
-    bM     = nd.convolve1d(fsig,bK)
-    aM     = nd.convolve1d(fsig,aK)
-    DfDt   = (aM-bM)/(cwd+twd)/lc
-    f0     = 0.5 * (aM + bM)    # Continuum value of fsig (mid transit)
-
-
-
+    dM , bM   , aM   , DfDt , f0 = MF(fsig,twd)
 
     # Discard cadences that are too high.
     dM = ma.masked_outside(dM,-1e-3,1e-3)
@@ -440,19 +470,15 @@ def pep(time,fsig,twd,cwd):
 
     return ee,PP,s2n
 
-
 def P2Pcad(PG0):
     """
     Period Grid (cadences)
 
     """
-    PG = []
-    PcadG = []
+    assert type(PG0) is np.ndarray, "Period Grid must be an array"
 
-    for P0 in PG0:
-        Pcad = int(round(P0/lc)) # the period in units of cadence
-        PcadG.append(Pcad)
-        PG.append( Pcad *lc  )
+    PcadG = (np.round(PG0/lc)).astype(int)
+    PG = PcadG * lc
 
     return PcadG,PG
 
@@ -486,6 +512,8 @@ def tdpep2(fsig,PG0):
     twdMa = a2tdur( P2a( PG[-1] ) ) /lc
 
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
+    print twdG
+
 
     eee = []
     ddd = []
@@ -514,7 +542,7 @@ def tdpep2(fsig,PG0):
     sss = np.vstack( [np.array(ss) for ss in sss] )
     ccc = np.vstack( [np.array(cc) for cc in ccc] )
 
-    return eee,ddd,sss,ccc
+    return eee,ddd,sss,ccc,PG
 
 
 def pep2(dM,PcadG):
@@ -601,12 +629,12 @@ def cadFill(cad0):
 
     Parameters
     ----------
-    cad - Array of cadence identifiers.
+    cad : Array of cadence identifiers.
     
     Returns
     -------
-    cad   - New array of cadences (without gaps).
-    iFill - Indecies that were not missing.
+    cad   : New array of cadences (without gaps).
+    iFill : Indecies that were not missing.
 
     """
     
@@ -616,17 +644,16 @@ def cadFill(cad0):
     
     return cad,iFill
 
-
-def tfindpro(t,f,PG,i):
+def tfindpro(t,f,PG0,i):
     """
     Transit Finder Profiler
 
     Parameters
     ----------
-    t  - Time series
-    f  - Flux
-    PG - Period grid
-    i  - The trial number
+    t   : Time series
+    f   : Flux
+    PG0 : Initial Period Grid (actual periods are integer multiples of lc)
+    i   : The trial number
     
     Returns
     -------
@@ -634,15 +661,117 @@ def tfindpro(t,f,PG,i):
     
     """
     sys.stderr.write("%i\n" % i)
-    eee,ddd,sss,ccc = tdpep2(f,PG)
-    iMaTwd = np.argmax(ddd/sss,axis=0)
-    x      = np.arange(PG.size) 
+    epoch,df,noise,nT,PG = tdpep2(f,PG0)
+    iMaTwd = np.argmax(df/noise,axis=0)
+    x      = np.arange(PG0.size)
 
-    eee = eee[iMaTwd,x]
-    ddd = ddd[iMaTwd,x]
-    sss = sss[iMaTwd,x]
-    ccc = ccc[iMaTwd,x]
+    epoch = epoch[iMaTwd,x]
+    df = df[iMaTwd,x]
+    noise = noise[iMaTwd,x]
+    nT = nT[iMaTwd,x]
+    s2n = df/noise
 
-    res = {'eee':eee,'ddd':ddd,'sss':sss,'ccc':ccc}
+    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n}
 
     return res
+
+
+def NLDT(t,f,epoch,f0,DfDt):
+    """
+    Non-linear detrend.
+
+    Fit a single transit as a combination of a conintuum described by
+    a Legendre polynomial and a box-shaped transit.
+
+    Parameters
+    ----------
+    t    : time array (only the segment to be fit)
+    f    : flux array (same)
+    f0   : Guess for constant term
+    DfDt : Guess for slope
+    
+    Returns
+    -------
+    
+    """
+    assert ( type(t) is np.ndarray ) & ( type(f) is np.ndarray ) \
+        , "Time must be array"
+
+    # Guess for model parameters.  3rd order Legendre poly
+    p0 = [epoch, 0., 0.5, f0, DfDt ,0,0 ]
+
+    p1, fopt ,iter ,funcalls, warnflag = \
+        optimize.fmin(err,p0,args=(t,f),maxiter=1000,maxfun=1000,full_output=True)
+
+    assert warnflag == 0, "Optimization failed "
+
+    return p1
+
+
+def tmodel(p,t):
+    """
+    Transit Model
+
+    Parameters
+    ----------
+    p : parameters.  [ epoch, df, tdur, Legendre coeff ... ] 
+    t : time
+
+    Returns
+    -------
+    fmod : flux model
+    
+    """
+    P     = p[0]
+    epoch = p[1]
+    df    = p[2]
+    tdur  = p[3]
+
+    domain = [t.min(),t.max()]
+#    import pdb;pdb.set_trace()
+
+    # The rest of the parameters go the continuum fit
+    cont = Legendre( p[4:],domain=domain )(t)
+    fmod = inject(t,cont,P=P,epoch=epoch,df=df,tdur=tdur)
+
+    return fmod
+
+def err(p,t,f):
+    fmod = tmodel(p,t)
+    return ((fmod - f)**2).sum()
+#    return np.median(np.abs(fmod-f))
+
+
+
+def NLDTWrap(time,fsig,DfDt,f0,wd):
+    """
+    Local Detrending
+
+    Detrend according to the local values of the continuum
+
+    Parameters
+    ----------
+    time : Folded time series with all but the tranist region masked out.
+    fsig : Flux time series.
+    DfDt : Derivative array (Guess value for the slope)
+    f0   : f0 (guess for conintuum level)
+
+    Returns
+    -------
+    fdt   : Detrended flux segments
+    trend : The trend I subtracted from them.
+    """
+
+    assert type( ma.core.MaskedArray ) , "time should be masked array"
+
+    sLDT = ma.notmasked_contiguous(time)
+    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
+
+    trend = ma.masked_array(fsig,copy=True,mask=True)
+
+    for s in sLDT:
+        ms = s.start + wd /lc/2
+        p1 = NLDT(time.data[s],fsig[s],time.data[ms],f0[ms],DfDt[ms])
+        trend[s] = Legendre(p1[3:],domain=domain)(time[s])
+
+    return trend
