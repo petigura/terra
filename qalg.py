@@ -58,7 +58,6 @@ def init(**kwargs):
     assert keys.count('P') == 1, "Must specify period"
 
     P = kwargs['P']
-    wphase = 1.      # randomize phase over entire cycle
     wP   = P / 10.   # dither period by 10%
     arrL = []
 
@@ -84,9 +83,9 @@ def init(**kwargs):
     seed = 0
     for p in par:        
         np.random.seed(seed)
-        phase = wphase*random()
+        epoch = P*random()
         dP   = wP*random()
-        d = {'P':P+dP,'phase':phase,'seed':seed}
+        d = {'P':P+dP,'epoch':epoch,'seed':seed}
         for k,v in zip(keys,p):
             d[k] = v
         
@@ -95,11 +94,19 @@ def init(**kwargs):
 
     return darr
 
-
 def genSynLC(darr):
     """
-    Generate synthetic lightcurves with transits parametersspecified
-    by darr
+    Generate Synthetic Lightcurves
+
+    Parameters
+    ----------
+    darr : List of dictionaries specifying the LC parameters.
+
+    Returns
+    -------
+    tl   : List of time arrays
+    fl   : List of flux arrays
+    
     """
     fl,tl = [],[]
     for d in darr:
@@ -141,9 +148,22 @@ def dl2tab(dl):
 
 def genEmpLC(darr0,tdt,fdt):
     """
-    Generate synthetic lightcurves with transits parameters specified
-    by darr
+    Generate Synthetic Lightcurves
+
+    Parameters
+    ----------
+    darr : List of dictionaries specifying the LC parameters.
+    tdt  :
+    fdt  :
+
+
+    Returns
+    -------
+    tl   : List of time arrays
+    fl   : List of flux arrays
+    
     """
+
     darr = copy.deepcopy(darr0)
 
     fl,tl = [],[]
