@@ -5,146 +5,41 @@ After the brute force period search yeilds candidate periods, functions in this 
 
 """
 import numpy as np
-from numpy import ma,tanh,sin,cos,pi
-from numpy.polynomial import Legendre
+from numpy import ma
+
 from scipy import optimize
 import scipy.ndimage as nd
 import detrend
 import sys
 
 import atpy
-
 import qalg
-from keptoy import lc,a2tdur,P2a,inject
+import keptoy
+from keptoy import lc
 import tfind
 
-c = 100   # Parameter that controls how sharp the transit edge is.
+import matplotlib.pylab as plt
 
+def objMT(p,time,fdt):
+    """
+    Multitransit Objective Function
 
-def pd2arr(p):
-    return np.array([ p['P'],p['epoch'],p['df'],p['tdur'] ])
-
-
-def model(p,t):
-    P     = p[0]
-    epoch = p[1]
-    df    = p[2]
-    tdur  = p[3]
-
-    fmod = inject(t,np.zeros(t.size),P=p[0],epoch=p[1],df=p[2], tdur=p[3] )
-    return fmod
-
-def err(p,time,fdt):
-    fmod = model(p,time)
-    return (((fmod - fdt)/1e-4)**2).sum()
-
-def objP05(p,time,fdt):
-    fmod = P05(p,time)
-    return (((fmod - fdt)/1e-4)**2).sum()
-
-def model1T(p,t,P):
-    pP05 = [P , p[0] , p[1] , p[2] ]
-    pLeg = p[3:]
-    domain = [t.min(),t.max()]
-
-    signal = P05(pP05,t)
-    trend  = Legendre(pLeg,domain=domain)  ( t )
-    return signal + trend
+    """
+    fmod = keptoy.P05(p,time)
+    resid = (fmod - fdt)/1e-4
+    return (resid**2).sum()
 
 def obj1T(p,t,f,P):
     """
-    Objective for 1 Transit.
-    
-    Objective function for fitting a single transit.
-
-    p - List of parameters.
-    epoch = p[0]
-    df    = p[1]
-    tdur  = p[2]
-    Legendre coeff: p[3:]
-    P - period
-
-    Period is held fixed since for a single transit, it doesnot make
-    sense to specify period and epoch
+    Single Transit Objective Function
     """
-    model = model1T(p,t,P)
+    model = keptoy.P051T(p,t,P)
     resid  = (model - f)/1e-4
     return (resid**2).sum()
-
-def myfunct(p, fjac=None, x=None, y=None, err=None):
-    # Parameter values are passed in "p"
-    # If fjac==None then partial derivatives should not be
-    # computed.  It will always be None if MPFIT is called with default
-    # flag.
-    status = 0
-    return ([0, (y - P05(p,x) )/err])
-
-def P05(p,t):
-    """
-    Analytic model of Protopapas 2005.
-    """
-    P     = p[0]
-    epoch = p[1]
-    df    = p[2]
-    tdur  = p[3]
-
-    tp = tprime(P,epoch,tdur,t)
-
-    return df * ( 0.5*( 2. - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) ) - 1.)
-
-def tprime(P,epoch,tdur,t):
-    """
-    t' in Protopapas
-    """
-    return  ( P*sin( pi*(t - epoch) / P ) ) / (pi*tdur)
-
-def dP05(p,t):
-    """
-    Analytic evalutation of the Jacobian.  
-
-    Note 
-    ----
-
-    This function has not been properly tested.  I wrote it to see if
-    it made the LM fitter any more robust or speedy.  I could not LM
-    to work even numerically.
-    """
-
-    P     = p[0]
-    epoch = p[1]
-    df    = p[2]
-    tdur  = p[3]
-
-    # Argument to the sin function in tprime.
-    sa = pi*(t - epoch) / P 
-    tp = tprime(P,epoch,tdur,t)
-
-    # Compute partial derivatives with respecto to tprime:
-    dtp_dP     = sin( sa ) / pi / epoch + P * cos( sa ) / pi / epoch
-    dtp_depoch = - tp / epoch
-    dtp_dtdur  = - cos( sa ) / epoch
-
-    # partial(P05)/partial(tprime)
-    dP05_dtp = 0.5 * df * ( (tanh( c*(tp + 0.5) ) )**2 - \
-                                 (tanh( c*(tp - 0.5) ) )**2)
-
-    # Compute the partial derivatives
-    dP05_dP     = dP05_dtp * dtp_dP
-
-    # dP05_dP     = np.zeros(len(t))
-    dP05_depoch = dP05_dtp * dtp_depoch
-    dP05_ddf    = 0.5 * ( - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) )
-    dP05_dtdur  = dP05_dtp * dtp_dtdur
-    
-    # The Jacobian
-    J = np.array([dP05_dP,  dP05_depoch , dP05_ddf, dP05_dtdur])
-
-    return J
 
 def LDT(t,f,p,wd=2.):
     """
     Local detrending.  
-
     At each putative transit, fit a model transit and continuum lightcurve.
 
     Parameters
@@ -204,7 +99,6 @@ def LDT(t,f,p,wd=2.):
         x = x.compressed()
         y = y.compressed()
 
-
         df0 = dMW.flatten()[m] # Guess for transit depth
         
         p0 = [epoch, df0, tdur, f0[m], DfDt[m] , 0 ,0]
@@ -213,8 +107,7 @@ def LDT(t,f,p,wd=2.):
             optimize.fmin(obj1T,p0,args=(x,y,P),maxiter=10000,maxfun=10000,
                           full_output=True,disp=False)
 
-        domain = [x.min(),x.max()]
-        trend[s] = Legendre(p1[3:],domain=domain)  ( t[s] )
+        trend[s] = keptoy.trend(p1[3:], t[s])
         
         trend.mask[s] = False # Unmask the transit segments
         tdt.mask[s]   = False
@@ -223,16 +116,13 @@ def LDT(t,f,p,wd=2.):
         fdt[s] = f[s] - trend[s]    
         p1L.append(p1)
 
-
     fdt = ma.masked_invalid(fdt)
     tdt.mask = fdt.mask
 
     return tdt,fdt,p1L
 
-
 def fitcand(t,f,p0,disp=True):
     """
-
     Fit Candidate Transits
 
     Starting from the promising (P,epoch,tdur) combinations returned by the
@@ -260,9 +150,7 @@ def fitcand(t,f,p0,disp=True):
         print sys.exc_info()
         nT = 0 
         dtpass = False
-        
-        
-#    import pdb;pdb.set_trace()
+                
     p0 = np.array([P,epoch,0.e-4,tdur])
     fitpass = False
     if (nT >= 3) and dtpass :
@@ -270,7 +158,7 @@ def fitcand(t,f,p0,disp=True):
             tfit = tdt.compressed() # Time series to fit 
             ffit = fdt.compressed() # Flux series to fit.
 
-            p1 = optimize.fmin(objP05,p0,args=(tfit,ffit),disp=False)
+            p1 = optimize.fmin(objMT,p0,args=(tfit,ffit),disp=False)
             tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
             fdt2 = ma.masked_array(fdt,mask=tfold.mask)
             print fdt2.count()
@@ -291,8 +179,6 @@ def fitcand(t,f,p0,disp=True):
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0 )
 
-
-
 def fitcandW(t,f,dL,par=False):
     """
     """
@@ -307,8 +193,6 @@ def fitcandW(t,f,dL,par=False):
         resL = map(fitcand , n*[t] , n*[f] , dL)
  
     return resL
-
-
 
 def parGuess(s2n,PG,epoch,nCheck=50):
     """
@@ -346,13 +230,9 @@ def parGuess(s2n,PG,epoch,nCheck=50):
 
     return dL
 
-
-import matplotlib.pylab as plt
-
 def iPoP(tset,tabval):
     """
     """
-    
     nsim = len(tset.PAR.P)
     print "sim, iP    ,   oP   ,  eP , iepoch,oepoch,eepoch, s2n"
 
@@ -369,32 +249,12 @@ def iPoP(tset,tabval):
         iepoch = tset.PAR.epoch[isim]
         oepoch = tabval[isim].epoch[iMax]
 
-#        fig,axL = plt.subplots(2,1)
-#
-#        ip = dict(P=iP,epoch=iepoch,tdur=2/lc)
-#        op = dict(P=oP,epoch=oepoch,tdur=2/lc)
-#
-#        tdt,ifdt,p1L = LDT(tl[isim],fl[isim],ip)
-#        fig.add_subplot
-#        axL[0].plot(ifdt)
-#
-#        tdt,ofdt,p1L = LDT(tl[isim],fl[isim],op)
-#        axL[1].plot(ofdt)
-#
-#        p0 = [oP,oepoch,0,0.3]
-#        p1 = optimize.fmin(err,p0,args=(tdt,ofdt),disp=False)
-#        axL[1].plot(model(p1,tdt))
-#
-#        fig.savefig('sketch/iPoP%03i.png' % isim)
-
         if s2n > 5:
             print "%03i %.2f  %.2f  %+.2f  %.2f  %.2f  %+.2f  %.2f" % \
                 (isim,iP,oP,100*(iP-oP)/iP, iepoch,oepoch,iepoch-oepoch ,s2n)
         else:
             print "%03i ------  ------  -----  -----  -----  -----  %.2f" % \
                 (isim,s2n)
-
-
 
 def tabval(file,par=False):
     """
@@ -426,26 +286,3 @@ def tabval(file,par=False):
 
     fileL = file.split('.')
     tabval.write(fileL[0]+'_val'+'.fits',overwrite=True)
-
-
-def nlfit(t,f,tres,isim):
-    """
-
-    """
-
-    print isim
-    resL = []
-    for d in dL:
-        p1,s2n = tval.fitcand(t,f,d)
-        resL.append( dict(P=p1[0],epoch=p1[1],tdur=p1[3],s2n=s2n) )
-
-
-    tab.table_name = 'sim%02i' % isim
-    return tab
-
-
-
-
-
-
-
