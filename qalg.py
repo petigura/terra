@@ -43,7 +43,11 @@ def init(**kwargs):
     Period is dithered by wper
     Phase is random.
     
-    *kwargs - key word arguments to pass to inject.
+    **kwargs - key word arguments to pass to inject.
+    Choose from:
+    - df or s2n
+    - epoch or phase
+    - P
 
     Usage
     -----
@@ -61,7 +65,9 @@ def init(**kwargs):
     wP   = P / 10.   # dither period by 10%
     arrL = []
 
+    mult = kwargs['n']
     keys.remove('P')
+    keys.remove('n')
 
     for k in keys:
         arg = kwargs[k]
@@ -70,8 +76,8 @@ def init(**kwargs):
 
         n     = arg[1]
         if type(arg[0]) is list:
-            range = arg[0]
-            arr   = logspace( log10(range[0]) , log10(range[1]) , n)
+            rng = arg[0]
+            arr   = logspace( log10(rng[0]) , log10(rng[1]) , n)
         else:
             arr    = empty(n)
             arr[:] = arg[0]
@@ -82,15 +88,16 @@ def init(**kwargs):
     darr = []
     seed = 0
     for p in par:        
-        np.random.seed(seed)
-        epoch = P*random()
-        dP   = wP*random()
-        d = {'P':P+dP,'epoch':epoch,'seed':seed}
-        for k,v in zip(keys,p):
-            d[k] = v
-        
-        darr.append(d) 
-        seed += 1
+        for i in range(mult):
+            np.random.seed(seed)
+            epoch = P*random()
+            dP   = wP*random()
+            d = {'P':P+dP,'epoch':epoch,'seed':seed}
+            for k,v in zip(keys,p):
+                d[k] = v
+
+            darr.append(d) 
+            seed += 1
 
     return darr
 
@@ -208,122 +215,3 @@ def profile(tl,fl,PGrid,func,par=False):
         res = map(func,tl,fl,PGridList,counter)        
 
     return res
-
-def saverun(darr,res,path):
-    f = open(path,'wb')
-    pickle.dump({'res':res,'darr':darr},f,protocol=2)
-    f.close()
-
-
-def s2n2fap(PGrid,s2nGrid):
-    """
-    """
-    tdurGrid = a2tdur(P2a(PGrid))
-    return log10(0.5*(erfc(s2nGrid/sqrt(2)) )*(PGrid/tdurGrid*5))
-
-fapfloor = 0.01;
-
-# If best fit period is off by more than this in a fractional sense,
-# label it a failure.
-
-failthresh = 0.01 
-def PP(tset):
-    """
-    Post processing
-
-    Change so we're dealing with tables.
-    """
-    tres = tset.RES
-    tpar = tset.PAR
-
-    nrows = len(tres)
-
-    idMa = tset.RES.s2nGrid.argmax(axis=1)
-
-    try:
-        tres.add_empty_column('bP',np.float)
-        tres.add_empty_column('bph',np.float)
-        tres.add_empty_column('fail',np.bool)
-    except:
-        pass
-
-    for i in range(nrows):
-        id = idMa[i]
-        tres.bP[i] = tres.PGrid[i][id]
-        tres.bph[i] = tres.phGrid[i][id]
-        tres.fail[i] = abs(tpar.P[i] - tres.bP[i])/tpar.P[i] > failthresh
-
-    return tset
-
-def fap_s2n(darr,res,failthresh=0.1):
-    """
-    Show how the FAP changes as a function of s2n    
-    
-    in order to claim that we've found the right period, it must be
-    within failthresh of the input value.
-
-    """
-    fig = plt.gcf() 
-
-    s2n = [ d['s2n'] for d in darr ]
-    us2n = unique( s2n  )
-    ns2n = len(us2n)
-    iP = array([d['P'] for d in darr])
-    oP  = array( [r['bP'] for r in res  ] )
-    fap = array( [r['bFAP'] for r in res  ] )
-    
-    for i in range(ns2n):
-        s = us2n[i]
-        bools2n  = (s2n == s)
-        boolfail = abs(oP-iP)/iP > failthresh
-
-
-        x = fap
-
-        ax = fig.add_subplot(ns2n,1,i+1)
-        bins = linspace(-40,0,21)
-        
-        ax.hist( x[where(~boolfail & bools2n)] ,color='g',bins=bins,
-                 label='Good')
-        ax.hist( x[where(boolfail & bools2n)] ,color='r',alpha=0.8,
-                 bins=bins,label='Fail')
-
-        plt.legend(title='S/N - %0.2f' %  s , loc='best')
-
-    ax.set_xlabel('log(FAP)')
-    plt.show()
- 
-
-def iPoP(iP,oP):
-    """
-    Plot input period versus output period.
-    """
-
-    for i in range(ns2n):
-        s = us2n[i]
-        bools2n  = (s2n == s)
-
-        ax = fig.add_subplot(ns2n,1,i+1)
-
-        ax.plot( iP[ where(bools2n) ]  , oP[ where(bools2n) ], '.b',ms=3)
-        ax.set_xlabel('Input Period')
-        ax.set_ylabel('Best Period')
-
-        tt = "S/N  - %.2f" % s
-
-        left = ax.get_xlim()[0]
-        top = ax.get_ylim()[1]
-
-        ax.text(left,top,tt,bbox=dict(facecolor='white'),fontsize='large',
-                va='top',ha='left')
-
-    plt.show()
-
-
-def loadrun(path):
-    """
-    Load the values from a Pickle file
-    """
-    out = pickle.load(open(path,'r'))
-    return out['darr'],out['res']
-
