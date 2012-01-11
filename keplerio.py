@@ -1,15 +1,18 @@
 """
 Functions for facilitating the reading and writing of Kepler files.
 """
+import numpy as np
+from numpy import ma
+from scipy.interpolate import UnivariateSpline
+from matplotlib import mlab
+
 import atpy
 import os
 import glob
 import pyfits
+
 import detrend
 import tfind
-from scipy.interpolate import UnivariateSpline
-from matplotlib import mlab
-import numpy as np
 
 
 kepdir = os.environ['KEPDIR']
@@ -73,7 +76,7 @@ def prepLC(tLC0):
     t    = detrend.larr(t)
 
     # Figure out which cadences are missing and fill them in.
-    cad,iFill = tfind.cadFill(cad)
+    cad,iFill = cadFill(cad)
     nFill = cad.size
 
     fNew = np.empty(nFill)
@@ -122,3 +125,28 @@ def prepLC(tLC0):
     tLC.add_column('t',t)
 
     return tLC
+
+
+def cadFill(cad0):
+    """
+    Cadence Fill
+
+    We want the elements of the arrays to be evenly sampled so that
+    phase folding is equivalent to array reshaping.
+
+    Parameters
+    ----------
+    cad : Array of cadence identifiers.
+    
+    Returns
+    -------
+    cad   : New array of cadences (without gaps).
+    iFill : Indecies that were not missing.
+
+    """
+    
+    bins = np.arange(cad0[0],cad0[-1]+2)
+    count,cad = np.histogram(cad0,bins=bins)
+    iFill = np.where(count == 1)[0]
+    
+    return cad,iFill
