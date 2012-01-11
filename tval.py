@@ -11,6 +11,8 @@ from scipy import optimize
 import scipy.ndimage as nd
 import detrend
 import sys
+import copy
+import glob
 
 import atpy
 import qalg
@@ -20,22 +22,35 @@ import tfind
 
 import matplotlib.pylab as plt
 
-def objMT(p,time,fdt):
+def trsh(P,tbase):
+    ftdurmi = 0.5
+    tdur = keptoy.a2tdur( keptoy.P2a(P) ) 
+    tdurmi = ftdurmi*tdur 
+    dP     = tdurmi * P / tbase
+    depoch = tdurmi
+
+    return dict(dP=dP,depoch=depoch)
+
+def objMT(p,time,fdt,p0,dp0):
     """
     Multitransit Objective Function
+
+    With a prior on P and epoch
 
     """
     fmod = keptoy.P05(p,time)
     resid = (fmod - fdt)/1e-4
-    return (resid**2).sum()
+    obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
+    return obj
 
-def obj1T(p,t,f,P):
+def obj1T(p,t,f,P,p0,dp0):
     """
     Single Transit Objective Function
     """
     model = keptoy.P051T(p,t,P)
     resid  = (model - f)/1e-4
-    return (resid**2).sum()
+    obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
+    return obj
 
 def LDT(t,f,p,wd=2.):
     """
@@ -89,6 +104,7 @@ def LDT(t,f,p,wd=2.):
     tdt = ma.masked_array(t,mask=True)
     fdt = ma.masked_array(f,copy=True,mask=True)
     trend = ma.masked_array(f,copy=True,mask=True)
+    ffit = ma.masked_array(f,copy=True,mask=True)
 
     p1L = []
     # Fit each segment individually and store best fit parameters.
@@ -103,23 +119,30 @@ def LDT(t,f,p,wd=2.):
         
         p0 = [epoch, df0, tdur, f0[m], DfDt[m] , 0 ,0]
 
+        tbase = t.ptp()
+        dp0 =  trsh(P,tbase)
+        dp0 = [dp0['dP'],dp0['depoch']]
+
         p1, fopt ,iter ,funcalls, warnflag = \
-            optimize.fmin(obj1T,p0,args=(x,y,P),maxiter=10000,maxfun=10000,
+            optimize.fmin(obj1T,p0,args=(x,y,P,p0,dp0),maxiter=10000,maxfun=10000,
                           full_output=True,disp=False)
 
         trend[s] = keptoy.trend(p1[3:], t[s])
+        ffit[s] =  keptoy.P051T(p1, t[s],P)
         
-        trend.mask[s] = False # Unmask the transit segments
-        tdt.mask[s]   = False
-        fdt.mask[s]   = False
+        trend.mask[s]  = False # Unmask the transit segments
+        tdt.mask[s]    = False
+        fdt.mask[s]    = False
+        ffit.mask[s]   = False
 
         fdt[s] = f[s] - trend[s]    
         p1L.append(p1)
 
     fdt = ma.masked_invalid(fdt)
     tdt.mask = fdt.mask
-
-    return tdt,fdt,p1L
+    
+    ret = dict(tdt=tdt,fdt=fdt,trend=trend,ffit=ffit,p1L=p1L)
+    return ret
 
 def fitcand(t,f,p0,disp=True):
     """
@@ -141,9 +164,9 @@ def fitcand(t,f,p0,disp=True):
     epoch = p0['epoch']
     tdur = p0['tdur']
 
-
     try:
-        tdt,fdt,p1L = LDT(t,f,p0)
+        dLDT = LDT(t,f,p0)
+        tdt,fdt,p1L = dLDT['tdt'],dLDT['fdt'],dLDT['p1L']
         nT = len(p1L)
         dtpass = True
     except:
@@ -158,11 +181,12 @@ def fitcand(t,f,p0,disp=True):
             tfit = tdt.compressed() # Time series to fit 
             ffit = fdt.compressed() # Flux series to fit.
 
-            p1 = optimize.fmin(objMT,p0,args=(tfit,ffit),disp=False)
+            tbase = t.ptp()
+            dp0 =  trsh(P,tbase)
+            dp0 = [dp0['dP'],dp0['depoch']]
+            p1 = optimize.fmin(objMT,p0,args=(tfit,ffit,p0,dp0) ,disp=False)
             tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
             fdt2 = ma.masked_array(fdt,mask=tfold.mask)
-            print fdt2.count()
-            print p1
             if fdt2.count() > 20:
                 s2n = - ma.mean(fdt2)/ma.std(fdt2)*np.sqrt( fdt2.count() )
                 fitpass = True
@@ -179,20 +203,47 @@ def fitcand(t,f,p0,disp=True):
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0 )
 
-def fitcandW(t,f,dL,par=False):
+def fitcandW(t,f,dL,view=None):
     """
     """
-
     n = len(dL)
-    if par:
-        from IPython.parallel import Client
-        rc = Client()
-        lview = rc.load_balanced_view()
-        resL = lview.map(fitcand , n*[t] , n*[f] , dL, n*[False] ,block=True)
+    if view != None:
+        resL = view.map(fitcand , n*[t] , n*[f] , dL, n*[False] ,block=True)
     else:
         resL = map(fitcand , n*[t] , n*[f] , dL)
  
     return resL
+
+def tabval(file,view=None):
+    """
+    
+    """
+    tset = atpy.TableSet(file)
+    nsim = len(tset.PAR.P)
+    tres = tset.RES
+    
+    # Check the 50 highest s/n peaks in the MF spectrum
+    tabval = atpy.TableSet()
+    tl,fl = qalg.genEmpLC(qalg.tab2dl(tset.PAR),tset.LC.t,tset.LC.f)
+    for isim in range(nsim):
+        s2n   = tres.s2n[isim]
+        P     = tres.PG[isim]
+        epoch = tres.epoch[isim]
+        dL = parGuess(s2n,P,epoch,nCheck=50)
+        resL = fitcandW(tl[isim],fl[isim],dL,view=view)
+
+        print 21*"-" + " %d" % (isim)
+        print "   iP      oP      s2n    "
+        for d,r in zip(dL,resL):
+            print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
+
+        tab = qalg.dl2tab(resL)
+        tab.table_name = 'SIM%03d' % (isim)
+        tabval.append(tab)
+
+    fileL = file.split('.')
+    tabval.write(fileL[0]+'_val'+'.fits',overwrite=True)
+    return tabval
 
 def parGuess(s2n,PG,epoch,nCheck=50):
     """
@@ -230,18 +281,29 @@ def parGuess(s2n,PG,epoch,nCheck=50):
 
     return dL
 
+
+thresh = 0.001
+
+
 def iPoP(tset,tabval):
     """
     """
     nsim = len(tset.PAR.P)
     print "sim, iP    ,   oP   ,  eP , iepoch,oepoch,eepoch, s2n"
+    tres = copy.deepcopy(tset.PAR)
+    tres.add_empty_column('oP',np.float)
+    tres.add_empty_column('oepoch',np.float)
+    tres.add_empty_column('odf',np.float)
+    tres.add_empty_column('os2n',np.float)
 
-    tl,fl = qalg.genEmpLC(qalg.tab2dl(tset.PAR),tset.LC.t,tset.LC.f)
+    tres.add_empty_column('KIC',np.int)
+
     for isim in range(nsim):
         s2n = ma.masked_invalid(tabval[isim].s2n)
         iMax = s2n.argmax()
 
         s2n  = tabval[isim].s2n[iMax]
+        df  = tabval[isim].df[iMax]
 
         iP =  tset.PAR.P[isim]
         oP =  tabval[isim].P[iMax]
@@ -256,33 +318,40 @@ def iPoP(tset,tabval):
             print "%03i ------  ------  -----  -----  -----  -----  %.2f" % \
                 (isim,s2n)
 
-def tabval(file,par=False):
+        tres.oP[isim] = oP
+        tres.oepoch[isim] = oepoch
+        tres.KIC[isim] = tset.LC.keywords['KEPLERID']
+
+        tres.os2n[isim] = s2n
+        tres.odf[isim] = df
+
+
+    return tres
+
+def redSim(files):
     """
-    
+    Collects the information from each simulation and reduces it into
+    1 file.
     """
 
-    file = 'test.fits'
-    tset = atpy.TableSet(file)
-    nsim = len(tset.PAR.P)
-    tres = tset.RES
-    
-    # Check the 50 highest s/n peaks in the MF spectrum
+    vfiles = []
+    for i in range(len(files)):
+        basename = files[i].split('.')[-2]
+        vfiles.append(basename+'_val.fits')
+        assert len(glob.glob(vfiles[i])) == 1, "val file must be unique"
 
-    tabval = atpy.TableSet()
-    tl,fl = qalg.genEmpLC(qalg.tab2dl(tset.PAR),tset.LC.t,tset.LC.f)
-    for isim in range(nsim):
-        s2n   = tres.s2n[isim]
-        P     = tres.PG[isim]
-        epoch = tres.epoch[isim]
-        dL = parGuess(s2n,P,epoch,nCheck=50)
-        resL = fitcandW(tl[isim],fl[isim],dL,par=par)
 
-        print 21*"-" + " %d" % (isim)
-        print "  iP   oP    s2n    "
-        for d,r in zip(dL,resL):
-            print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
+    dL = []
+    for f,v in zip(files,vfiles):
+        print "Reducing %s and %s" % (f,v) 
+        tset   = atpy.TableSet(f)
+        tabval = atpy.TableSet(v)
 
-        tab = qalg.dl2tab(resL)
+        tres   = iPoP(tset,tabval)
+        dL = dL + qalg.tab2dl(tres)
+        
+    tres = qalg.dl2tab(dL)  
+    return tres
 
-    fileL = file.split('.')
-    tabval.write(fileL[0]+'_val'+'.fits',overwrite=True)
+
+
