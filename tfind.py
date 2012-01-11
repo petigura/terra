@@ -10,6 +10,7 @@ import numpy as np
 from numpy import ma
 from keptoy import *
 from keptoy import lc 
+import keplerio
 
 def GenK(twdcad,fcwd=1):
     """
@@ -70,6 +71,29 @@ def MF(fsig,twd,fcwd=1):
 
     return dM,bM,aM,DfDt,f0
 
+def isfilled(t,f,twd):
+    """
+    Is putative transit filled?  This means:
+    1 - Transit > 25% filled
+    2 - L & R wings are both > 25% filled
+    """
+    assert keplerio.iscadFill(t,f),'Series might not be evenly sampled'
+
+    bK,boxK,tK,aK,dK = GenK(twd ) 
+    dM,bM,aM,DfDt,f0 = MF(f,20)
+    fn = ma.masked_invalid(f)
+    bgood = (~fn.mask).astype(float) 
+
+    bfl = nd.convolve(bgood,bK) # Compute the filled fraction.
+    afl = nd.convolve(bgood,aK)
+    tfl = nd.convolve(bgood,tK)
+
+    # True -- there is enough data for us to look at a transit at the
+    # midpoint
+    filled = (bfl > 0.25) & (afl > 0.25) & (tfl > 0.25) 
+
+    return filled
+
 def XWrap(x,ifold,fill_value=0):
     """
     Extend and wrap array.
@@ -123,7 +147,6 @@ def getT(time,P,epoch,wd):
 def P2Pcad(PG0):
     """
     Period Grid (cadences)
-
     """
     assert type(PG0) is np.ndarray, "Period Grid must be an array"
 
@@ -132,20 +155,19 @@ def P2Pcad(PG0):
 
     return PcadG,PG
 
-def tdpep(fsig,PG0):
+def tdpep(t,f,PG0):
     """
     Transit-duration - Period - Epoch
 
     Parameters
     ----------
-    fsig - Flux time series.  It is assumed that elements of fsig are
+    f - Flux time series.  It is assumed that elements of f are
            evenly spaced in time.
 
     PG0  - Initial period grid.
 
     Returns
     -------
-
     eee - epoch of maximum depth for a paticular (twd,P)
     ddd - depth of maximum depth for a paticular (twd,P)
     sss - typical scatter for a paticular (twd,P)
@@ -170,15 +192,27 @@ def tdpep(fsig,PG0):
 
     for twd in twdG:
         bK,boxK,tK,aK,dK = GenK( twd )
-        dM = nd.convolve1d(fsig,dK)
+        dM = nd.convolve1d(f,dK)
 
         # Discard cadences that are too high.
         dM = ma.masked_outside(dM,-1e-3,1e-3)
-        fsig = ma.masked_array(fsig,mask=dM.mask,fill_value = np.nan)
-        fsig = fsig.filled()
-        dM = nd.convolve1d(fsig,dK)
+        f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
+        f = f.filled()
+        dM = nd.convolve1d(f,dK)
 
-        dd,ee, cc, ss =  pep(dM,PcadG)
+        filled = isfilled(t,f,twd)
+
+        ee = []
+        dd = []
+        ss = []
+        cc = []
+
+        for Pcad in PcadG:
+            res = ep(dM,Pcad)
+            ee.append( res['mepoch'])
+            dd.append( res['mdf']   )
+            ss.append( res['sfom']  )
+            cc.append( res['count'] )
 
         eee.append(ee)
         ddd.append(dd)
@@ -192,52 +226,51 @@ def tdpep(fsig,PG0):
 
     return eee,ddd,sss,ccc,PG
 
-def pep(dM,PcadG):
+def ep(dM,Pcad):
     """
-    Period-epoch search
+    Search in Epoch.
+
+    Returns the following information:
+    - 'mfom'   : Maximal figure of merit
+    - 'sfom'   : Scatter in the fom
+    - 'mepoch' : Corresponding Epoch
+    - 'mdf'    : Corresponding transit depth.
+    - 'count'  : Number of valid regions
+    - 'epoch'  : Array corresponding to epochs
+    - 'win'    : Which epochs passed (window function)
+    """
+
+    dMW = XWrap(dM,Pcad,fill_value=np.nan)
+    dMW = ma.masked_invalid(dMW)
+
+    nt,ne = dMW.shape
+    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc 
+
+    vcount = (~dMW.mask).astype(int).sum(axis=0)
+    win = (vcount >= 3) 
+
+    d = win*dMW.mean(axis=0)
     
-    Parameters
-    ----------
-    dM    - mean depth
-    PcadG - Grid of trial periods (in units of cadences). 
+    mad = ma.abs(d)
+    mad = ma.masked_less(d,1e-6)
+    mad = ma.median(mad)
 
-    Returns
-    -------
-    dd    - Average depth of folded transit.
-    ee    - Epoch of maximum signal strength
-    cc    - Number of transits in peak signal.
-    ss    - Robust scatter for a particular peroid.
+    fom = d
+    iMax = fom.argmax()
 
-    """
+    res = {
+        'fom'    : fom         ,
+        'mfom'   : fom[iMax]   ,
+        'sfom'   : mad         ,
+        'mepoch' : epoch[iMax] ,       
+        'mdf'    : d[iMax]     ,
+        'count'  : vcount[iMax] ,       
+        'epoch'  : epoch       ,
+        'win'    : win         ,
+        }
 
-    ee = []
-    dd = []
-    ss = []
-    cc = []
-    for Pcad in PcadG:
+    return res
 
-        dMW = XWrap(dM,Pcad,fill_value=np.nan)
-        dMW = ma.masked_invalid(dMW)
-        nt,ne = dMW.shape
-
-        epoch = np.arange(ne,dtype=float)/ne * Pcad *lc 
-        count = (~dMW.mask).astype(int).sum(axis=0)
-        bcount = count >= 3
-
-        d = bcount*dMW.mean(axis=0)
-
-        mad = ma.abs(d)
-        mad = ma.masked_less(d,1e-6)
-        mad = ma.median(mad)
-
-        iMax = d.argmax()
-
-        ee.append( epoch[iMax] )
-        dd.append( d[iMax]     )
-        ss.append( mad         )
-        cc.append( count[iMax] )
-
-    return  dd,ee, cc, ss
 
 def tfindpro(t,f,PG0,i):
     """
@@ -256,16 +289,20 @@ def tfindpro(t,f,PG0,i):
     
     """
     sys.stderr.write("%i\n" % i)
-    epoch,df,noise,nT,PG = tdpep(f,PG0)
+    epoch,df,noise,nT,PG = tdpep(t,f,PG0)
     iMaTwd = np.argmax(df/noise,axis=0)
     x      = np.arange(PG0.size)
 
     epoch = epoch[iMaTwd,x]
-    df = df[iMaTwd,x]
+    df    = df[iMaTwd,x]
     noise = noise[iMaTwd,x]
-    nT = nT[iMaTwd,x]
-    s2n = df/noise
+    nT    = nT[iMaTwd,x]
+    s2n   = df/noise
 
     res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n}
 
     return res
+
+
+
+
