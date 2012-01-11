@@ -215,3 +215,26 @@ def profile(tl,fl,PGrid,func,par=False):
         res = map(func,tl,fl,PGridList,counter)        
 
     return res
+
+
+def ROC(t):
+    """
+    Construct a reciever operating curve for a given table.
+
+    Table must be homogenous (same star, same input parameters).
+    """
+    
+#    fomL = logspace( log10(t.os2n.min()),log10( t.os2n.max()), 1000   )
+    fomL = unique(t.os2n)
+    print t.os2n.min(), t.os2n.max(),
+    etaL = [] 
+    fapL = []
+    n  = t.data.size
+    for fom in fomL:
+        eta = float((t.where( (t.os2n > fom) & t.bg )).data.size) / n
+        fap = float((t.where( (t.os2n > fom) & ~t.bg )).data.size) / n
+
+        etaL.append(eta)
+        fapL.append(fap)
+               
+    return fapL,etaL
