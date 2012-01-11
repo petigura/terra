@@ -381,7 +381,6 @@ def designLS(t,f,p,order=3,domain=[-1,1]):
             bcoef = zeros(order+1) # Coefficient for the Legendre basis functions
 
             bcoef[iOrder] = coef[iOrder]
-            print bcoef
 
             X[sL:sH,dCol] = b[iLC]*Legendre(bcoef,domain=domain)(t)
         
@@ -530,63 +529,11 @@ def nanIntrp(x0,y0,nContig=3):
     x.mask = ~x.mask
     sL = ma.notmasked_contiguous(x)
     for s in sL:
-        if s.stop - s.start <= nContig:
-           y[s] = sp(x[s])
+        nNans = s.stop-s.start
+        if nNans <= nContig:
+            y[s] = sp(x[s])
 
     return x.data,y.data
-
-
-def cadFill(x,cad):
-    """
-
-    Cadence Fill
-    
-    There is missing data in the Kepler light curve.  Fill in the
-    missing values with nans.
-
-    """
-
-    cadNew = arange(cad[0],cad[-1])
-    nNew = len(cadNew)
-
-    xNew = empty(nNew)
-    xNew[::] = nan
-    
-    for i in range(nNew):
-        if ~len(where(cad == cadNew)[0]) == 0:
-            xNew[i] = x
-
-
-    
-    
-
-
-
-
-
-
-
-def mfltr(y,twid,fcwid=1):
-    """
-    Matched filter.
-
-    Convolving the signal with a kernal of the form.
-
-    [1 1 1 1 1 , -1 -1 -1 -1 -1 ,  1 1 1 1 1]
-
-    Will give the diffence between the average depth of transit and
-    the nominal conintuum depth irrespective of a overall linear term.
-    
-    twid - length of the transit (in units of cadence length)
-    """
-    assert len(where(isnan(y))[0]) == 0,"Convolution does not like nan"
-
-    cwid = twid * fcwid
-    kern = ones(twid+2*cwid) / (2*cwid)
-    kern[cwid:-cwid] = -1. / twid
-    
-    fltr = nd.convolve1d(y,kern,mode='wrap')
-    return fltr
 
 
 def sQ(tset,swd = 0.5):
