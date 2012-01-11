@@ -11,6 +11,7 @@ import os
 import glob
 import pyfits
 
+import keptoy
 import detrend
 import tfind
 
@@ -150,3 +151,19 @@ def cadFill(cad0):
     iFill = np.where(count == 1)[0]
     
     return cad,iFill
+
+
+def iscadFill(t,f):
+    """
+    Is the time series evenly spaced.
+
+    The vectorized implementation of LDMF depends on the data being
+    evenly sampled.  This function checks the time between cadances.
+    If this is more than a small fraction of the cadence length,
+    fail!
+    """
+
+    tol = keptoy.lc/100. 
+    return ( (t[1:] - t[:-1]).ptp() < tol ) & (t.size == f.size)
+
+    

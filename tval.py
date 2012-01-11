@@ -101,16 +101,16 @@ def LDT(t,f,p,wd=2.):
 
     # Detrended time and flux arrays.  The only unmasked points
     # correspond to viable transits
-    tdt = ma.masked_array(t,mask=True)
-    fdt = ma.masked_array(f,copy=True,mask=True)
+    tdt   = ma.masked_array(t,mask=True)
+    fdt   = ma.masked_array(f,copy=True,mask=True)
     trend = ma.masked_array(f,copy=True,mask=True)
-    ffit = ma.masked_array(f,copy=True,mask=True)
+    ffit  = ma.masked_array(f,copy=True,mask=True)
 
     p1L = []
     # Fit each segment individually and store best fit parameters.
     for s,m in zip(sLDT,ms):
         y = ma.masked_invalid(f[s]) 
-        x = ma.masked_array(t[s],mask=y.mask)
+        x = ma.masked_array( t[s] , mask =y.mask)
 
         x = x.compressed()
         y = y.compressed()
@@ -353,5 +353,23 @@ def redSim(files):
     tres = qalg.dl2tab(dL)  
     return tres
 
+def window(fl,PcadG):
+    """
+    Compute the window function.
+
+    The fraction of epochs that pass our criteria for transit.
+    """
+
+    winL = []
+    for Pcad in PcadG:
+        flW = tfind.XWrap(fl,Pcad,fill_value=False)
+        win = (flW.sum(axis=0) >= 3).astype(float)
+        npass = np.where(win)[0].size
+        win =  float(npass) / win.size
+        winL.append(win)
+
+    return winL
 
 
+        
+        
