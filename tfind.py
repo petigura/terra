@@ -1,17 +1,13 @@
 """
-Transit finder: A new approach to finding low signal to noise transits.
+Transit finder.
+
+Evaluate a figure of merit at each point in P,epoch,tdur space.
 """
 from scipy import ndimage as nd
-from scipy.interpolate import interp1d
-import matplotlib.pylab as plt
 import scipy
 import sys
 import numpy as np
-from numpy import ma,nan
-from numpy.polynomial import Legendre
-from scipy import optimize
-
-import ebls
+from numpy import ma
 from keptoy import *
 from keptoy import lc 
 
@@ -57,7 +53,6 @@ def GenK(twdcad,fcwd=1):
 
     return bK,boxK,tK,aK,dK
 
-
 def MF(fsig,twd,fcwd=1):
     """
     Matched filter.
@@ -74,69 +69,6 @@ def MF(fsig,twd,fcwd=1):
     f0     = 0.5 * (aM + bM)    # Continuum value of fsig (mid transit)
 
     return dM,bM,aM,DfDt,f0
-
-def dThresh(dM,dMi=50,dMa=1000):
-    """
-    Depth threshold.
-
-    Applies a cut to the possible transits based on their depth.
-
-    Parameters
-    ----------
-    dM  : Mean depth of transit.
-    dMa : The maximum depth (ppm).
-    dMi : The minimum depth (ppm).
-
-    Returns
-    -------
-
-    tCand : Boolean array with showing which cadances are cadidate
-            mid-transit.
-
-    """
-    
-    dMi *= 1e-6
-    dMa *= 1e-6
-
-    tCand = (dM > dMi) & (dM < dMa)
-
-    return tCand
-
-def pCheck(time,tCand,P0,tbin,nTMi=3):
-    """
-    Periodicity check.
-
-    Throw out transit cadidates that are not consistent with a single
-    period.
-
-    Parameters
-    ----------
-    time  : Times of each cadance.
-    tCand : Boolean array with showing which cadances are cadidate
-            mid-transit.
-    P0    : Trial period (units of days)
-    tbin    : Number of phase bins to check.
-    nTMi  : Require that signals repeat a certain number of times.  
-
-    Returns
-    -------
-    eCand : List of epochs that show 3 transits.
-
-    """
-    assert type(tbin) == int
-
-    tbase = np.nanmax(time)-np.nanmin(time)
-    epoch = np.arange( tbin,dtype=float ) / tbin * P0
-    nT = np.ceil(tbase/P0)
-    timeInt = np.arange(tbin*nT)/tbin*P0
-    tCandInt = interp1d(time,tCand,kind='nearest',bounds_error=False,
-                        fill_value=0)
-    
-    tCandRS = tCandInt(timeInt).reshape(nT,tbin)
-    boolT = tCandRS.sum(axis=0) >= nTMi
-    eCand = epoch[np.where(boolT)]
-
-    return eCand
 
 def XWrap(x,ifold,fill_value=0):
     """
@@ -169,149 +101,6 @@ def XWrap(x,ifold,fill_value=0):
 
     return xwrap
 
-def lseg(x,P,ph,wid):
-    """
-    List of segments.
-
-    Fold input according to P.  Return segments of the array at a
-    specific phase of a specific width.
-
-    Parameters
-    ----------
-    x   : Array to be extracted
-    P   : Fold array every P indecies (cad)
-    ph  : Return every points at ph. (cad)
-    wid : Width of each returned segment (cad)
-
-    """
-    
-    sl = 0 # low end of the slice.
-    sh = 0 # Upper end of the slice.
-    iseg = 0
-    xlseg = []
-
-    n = len(x)
-    while sl < n:
-        sl = P * iseg + ph - wid/2
-        sh = P * iseg + ph + wid/2
-        xlseg.append(x[sl:sh])
-        iseg += 1
-
-    return xlseg
-
-
-
-
-def boxBR(fsig,dTrans,sig,boxK):
-    """
-    Box Bayes Ratio.
-
-    Compute the Bayes ratio of Prob( transit ) / Prob( flat ).
-
-
-    Parameters
-    ----------
-    fsig   : Detrended flux time series.
-    dTrans : Depth of transit.
-    boxK   : Model constructed from the same kernel.
-    sig    : Point by point sigma.
-
-    Returns
-    -------
-    BR : log of Bayes Ratio.
-
-    """
-
-    # Compute Chi^2 for the transit model
-    tMod = -1.*depth*boxK
-    tChi2 = Chi2(fsig,tMod,sig)
-
-    # Compute Chi^2 for the null model
-    nlMod = 0.*boxK
-    nlChi2 = Chi2(fsig,nlMod,sig)
-
-    BR = tChi2 - nlChi2 
-
-    return BR
-
-
-def Chi2(data,model,sig):
-    """
-    Chi^2 with constant sigma.
-    """
-    
-    r = data - model
-    nr = r/sig
-    chi2 = (nr**2).sum()
-
-    return chi2
-
-def taylorDT(fs,ts,t0,DfDt,f0):
-    """
-    Taylor series detrending.
-    
-    Perform a local detrending at a particular cadence.
-
-    Arguments
-    ---------
-    fs   : Flux segment.
-    ts   : Time segment.
-    t0   : Time we're expanding about.
-    DfDt : Local slope of lightcurve (determined from continuum).
-    f0   : Local flux level of continuum.
-
-    Returns
-    -------
-    trend : Fluxes corresponding to the detrended light curve.
-
-    """
-    nptsMi = 10.
-    assert fs.size == ts.size, "ts and fs must have equal sizes"
-    assert fs.size > nptsMi, "Not enough points"
-
-    trend =  DfDt*(ts - t0) + f0
-
-    return trend
-
-
-def seg(time,P,ph,wid):
-    """
-    Segment 
-
-    Return a list of slices corresponding to P,ph and have width = wid
-
-    Arguments
-    ---------
-    time : numpy array (not masked).
-    P    : Period to fold about (days)
-    ph   : phase (offset from t = 0)/P
-    wid  : Width (days)
-
-    Returns
-    -------
-    List of slices corresponding to the segment.
-
-    Notes 
-    ----- 
-    Will not return segments that are shorter than the specified
-    width.  If there is missing data, interpolate over it or lose it.
-    
-    """
-    tph = ph*P # time phase.
-
-    tfold = np.mod(time,P)
-    tfold = ma.masked_invalid(tfold)
-    tfold = ma.masked_outside(tfold,tph-wid/2.,tph+wid/2.)
-    sL = ma.notmasked_contiguous(tfold)
-    ssL = []
-    for s in sL:
-        if time[s].ptp() >= wid/2.:
-            ssL.append(s)
-
-    return ssL
-
-
-
 def getT(time,P,epoch,wd):
     """
     Get Transits
@@ -331,118 +120,6 @@ def getT(time,P,epoch,wd):
     tfold = ma.masked_invalid(tfold)
     return tfold
 
-def FOM(time,fsig,DfDt,f0,P,epoch,wd=2,twd=.3,plot=False):
-    tfold = getT(time,P,epoch,wd)
-    time = ma.masked_array(time,mask=tfold.mask)
-
-    sLDT = ma.notmasked_contiguous(time)
-    sLDT = [ s for s in sLDT if s.stop-s.start > wd / lc / 2 ]
-    fdt,trend = LDT(time,fsig,DfDt,f0,wd)
-
-    # Calculate figure of merit.
-    tfold = getT(time,P,epoch,twd)
-    time = ma.masked_array(time,mask=tfold.mask)
-    
-    fdt.mask = True
-    fdt.mask = tfold.mask
-    fdt = ma.masked_invalid(fdt)
-
-    sLFOM = ma.notmasked_contiguous(fdt)
-         
-    if fdt.count() > 10:
-        s2n = -ma.mean(fdt)/ma.std(fdt)*np.sqrt(fdt.count())
-    else:
-        s2n = 0
-
-    if plot:
-        fig = plt.gcf()
-        fig.clf()
-        ax = plt.gca()
-
-        nT = len(sLDT)
-
-
-        x = tfold.data
-        ofst = 1e-3*np.arange(1,nT+1)
-
-        for i in range(nT):
-            o = ofst[i]
-            sDT = sLDT[i]
-            sFOM = sLFOM[i]
-            mT = np.mean(trend[sDT])
-
-
-            ax.plot(x[ sDT  ] ,fsig[sDT]  + o -mT,',k') 
-            ax.plot(x[ sFOM ] ,fsig[sFOM] + o -mT,'or',ms=2)
-            ax.plot(x[ sDT  ] ,trend[sDT] + o -mT) 
-
-            ax.axvline(x[s.start + wd/lc/2])
-
-            ax.plot(x[sDT],fdt.data[sDT],'o',alpha=.3)
-            ax.plot(x[sDT],fdt.data[sDT],'o') 
-
-        ax.set_title("epoch = %f" % epoch)
-        ax.annotate("s2n = %f" % s2n,(.8,.8),
-                    xycoords='figure fraction',
-                    bbox=dict(boxstyle="round", fc="0.8"))
-
-        fig.savefig("test.png" )
-
-    return s2n
-
-
-def pep(time,fsig,twd,cwd):
-    """
-
-    Period-epoch search
-    
-    Parameters
-    ----------
-    time - time series
-    fsig - flux
-    twd - transit width (in days)
-    cwd - continuum width (each side, days)
-
-    """
-
-    twd = int(twd/lc) # length of transit in units of cadence
-    bK,boxK,tK,aK,dK = GenK( twd ) 
-    dM , bM   , aM   , DfDt , f0 = MF(fsig,twd)
-
-    # Discard cadences that are too high.
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    fsig = ma.masked_array(fsig,mask=dM.mask,fill_value = nan)
-    fsig = fsig.filled()
-
-    tCand = dThresh(dM,dMi=100)
-    
-    # Generate a grid of plausable periods (days)
-    PGrid = ebls.grid( np.nanmax(time) - np.nanmin(time) , 0.5, Pmin=50, 
-                       Psmp=0.5 )
-
-    eCandGrid = []
-    PCandGrid = []
-
-    for P in PGrid:
-        eCand = pCheck(time,tCand,P,1000)
-        eCandGrid.append( eCand )
-        PCand = np.empty( len(eCand) )
-        PCand[:] = P
-        PCandGrid.append( PCand )
-
-
-    ee = reduce(np.append,eCandGrid)
-    PP = reduce(np.append,PCandGrid)
-    print "%i (P,epoch)" % len(ee)
-
-    s2n = np.zeros(len(ee))
-    for i in range(len(ee)):
-        ep = ee[i]
-        P  = PP[i]
-        s2n[i] = FOM(time,fsig,DfDt,f0,P,ep,twd=.3,wid=.9)
-
-    return ee,PP,s2n
-
 def P2Pcad(PG0):
     """
     Period Grid (cadences)
@@ -455,8 +132,7 @@ def P2Pcad(PG0):
 
     return PcadG,PG
 
-
-def tdpep2(fsig,PG0):
+def tdpep(fsig,PG0):
     """
     Transit-duration - Period - Epoch
 
@@ -487,7 +163,6 @@ def tdpep2(fsig,PG0):
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
     print twdG
 
-
     eee = []
     ddd = []
     sss = []
@@ -503,7 +178,7 @@ def tdpep2(fsig,PG0):
         fsig = fsig.filled()
         dM = nd.convolve1d(fsig,dK)
 
-        dd,ee, cc, ss =  pep2(dM,PcadG)
+        dd,ee, cc, ss =  pep(dM,PcadG)
 
         eee.append(ee)
         ddd.append(dd)
@@ -517,7 +192,7 @@ def tdpep2(fsig,PG0):
 
     return eee,ddd,sss,ccc,PG
 
-def pep2(dM,PcadG):
+def pep(dM,PcadG):
     """
     Period-epoch search
     
@@ -564,55 +239,6 @@ def pep2(dM,PcadG):
 
     return  dd,ee, cc, ss
 
-def tdpep(time,fsig):
-    """
-    Transit-duration - Period - Epoch
-    """
-
-    tdur = np.linspace(0.3,0.8,4)
-    tt = []
-    PP = []
-    ee = []
-    s2n = []
-
-    for t in tdur:
-        e,P,s = pep(time,fsig,t,t)
-        PP.append(P)
-        ee.append(e)
-        s2n.append(s)
-        tt.append(np.zeros(len(P))+t)
-        
-    tt = reduce(np.append,tt)
-    PP = reduce(np.append,PP)
-    ee = reduce(np.append,ee)
-    s2n = reduce(np.append,s2n)
-
-    return tt,PP,ee,s2n
-
-def cadFill(cad0):
-    """
-    Cadence Fill
-
-    We want the elements of the arrays to be evenly sampled so that
-    phase folding is equivalent to array reshaping.
-
-    Parameters
-    ----------
-    cad : Array of cadence identifiers.
-    
-    Returns
-    -------
-    cad   : New array of cadences (without gaps).
-    iFill : Indecies that were not missing.
-
-    """
-    
-    bins = np.arange(cad0[0],cad0[-1]+2)
-    count,cad = np.histogram(cad0,bins=bins)
-    iFill = np.where(count == 1)[0]
-    
-    return cad,iFill
-
 def tfindpro(t,f,PG0,i):
     """
     Transit Finder Profiler
@@ -630,7 +256,7 @@ def tfindpro(t,f,PG0,i):
     
     """
     sys.stderr.write("%i\n" % i)
-    epoch,df,noise,nT,PG = tdpep2(f,PG0)
+    epoch,df,noise,nT,PG = tdpep(f,PG0)
     iMaTwd = np.argmax(df/noise,axis=0)
     x      = np.arange(PG0.size)
 
