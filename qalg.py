@@ -55,18 +55,15 @@ def init(**kwargs):
 
     - List of dictionaries specifying 5 runs centered around P = 200,
       5 values of s2n ranging from 10 to 20, and tbase=500.
-    
-
     """
     keys=kwargs.keys()
     assert keys.count('P') == 1, "Must specify period"
 
     P = kwargs['P']
-    wP   = P / 10.   # dither period by 10%
+    wP   =  0.1   # dither period by 10%
     arrL = []
 
     mult = kwargs['n']
-    keys.remove('P')
     keys.remove('n')
 
     for k in keys:
@@ -89,14 +86,17 @@ def init(**kwargs):
     seed = 0
     for p in par:        
         for i in range(mult):
-            np.random.seed(seed)
-            epoch = P*random()
-            dP   = wP*random()
-            d = {'P':P+dP,'epoch':epoch,'seed':seed}
+            d = {}
             for k,v in zip(keys,p):
                 d[k] = v
 
+            d['Pblock'] = d['P']
+            np.random.seed(seed)
+            d['P'] = d['P']*(1 + wP*random() ) 
+            d['epoch'] = d['P']*random()
+            d['seed'] = seed
             darr.append(d) 
+
             seed += 1
 
     return darr
