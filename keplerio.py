@@ -5,7 +5,8 @@ import numpy as np
 from numpy import ma
 from scipy.interpolate import UnivariateSpline
 from matplotlib import mlab
-
+from scipy import ndimage as nd
+import copy
 import atpy
 import os
 import glob
@@ -51,11 +52,35 @@ def mqload(files):
         t.table_name = 'Q%i' % Q
         t.add_keyword('PATH',f)
         t.add_keyword('QUARTER',Q)
-
         tset.append(t)
 
     return tset 
 
+def sQ(tset0):
+    tset = copy.deepcopy(tset0)
+
+    offset = ma.masked_invalid(tset[0].SAP_FLUX).mean()
+    for t in tset:
+        t.add_column('f',t.SAP_FLUX - ma.masked_invalid(t.SAP_FLUX).mean() + 
+                     offset)
+
+    return tset    
+
+def cut(tset0):
+    """
+    Cut out the bad regions.
+    """
+
+    tset = copy.deepcopy(tset0)
+    rec = mlab.csv2rec('ranges/cut_time.txt')
+    for t in tset:
+        tm = ma.masked_array(t.TIME,copy=True)
+        for r in rec:
+            tm = ma.masked_inside(tm,r['start'],r['stop'])
+        f = ma.masked_array(t.f,mask=tm.mask,fill_value=np.nan,copy=True)
+        t.f = f.filled()
+        
+    return tset
 
 def prepLC(tLC0):
     """
@@ -67,10 +92,9 @@ def prepLC(tLC0):
 
     """
 
-    f     = [tab.SAP_FLUX for tab in tLC0]
+    f     = [tab.f for tab in tLC0]
     t     = [tab.TIME for tab in tLC0]
     cad   = [tab.CADENCENO for tab in tLC0]
-
 
     cad  = detrend.larr(cad)
     f    = detrend.larr(f)
@@ -99,15 +123,6 @@ def prepLC(tLC0):
     cad = cad.data
     t = sp(cad)
 
-    # Cut out the bad regions.
-    rec = mlab.csv2rec('ranges/cut_time.txt')
-
-    tm = ma.masked_array(t)
-    for r in rec:
-        tm = ma.masked_inside(tm,r['start'],r['stop'])
-    f = ma.masked_array(f,mask=tm.mask,fill_value=np.nan)
-    f = f.filled()
-
     # Normalize lightcurve.
     f /= np.median(f)
     f -= 1
@@ -124,10 +139,29 @@ def prepLC(tLC0):
     tLC.keywords = tLC0[0].keywords
     tLC.add_column('f',f)
     tLC.add_column('t',t)
+    tLC.add_column('cad',cad)
 
     return tLC
 
+def outReg(tLC0):
+    """
 
+    """
+
+    tLC = copy.deepcopy(tLC0)
+    medf = nd.median_filter(tLC.f,size=4)
+    resf = tLC.f - medf
+    resf = ma.masked_invalid(resf)
+    resfcomp = resf.compressed()
+    lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)
+    out = ma.masked_outside(resf,lo,up,copy=True)
+    tLC.f[np.where(out.mask)] = np.nan
+
+    tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
+    return tLC
+
+
+    
 def cadFill(cad0):
     """
     Cadence Fill
