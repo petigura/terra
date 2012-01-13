@@ -183,16 +183,21 @@ def tdpep(t,f,PG0):
     twdMa = a2tdur( P2a( PG[-1] ) ) /lc
 
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
-    print twdG
 
     eee = []
     ddd = []
-    sss = []
     ccc = []
 
+    noise = []
     for twd in twdG:
         bK,boxK,tK,aK,dK = GenK( twd )
         dM = nd.convolve1d(f,dK)
+
+        # Noise per transit 
+        mad = ma.masked_invalid(dM)
+        mad = ma.abs(mad)
+        mad = ma.median(mad)
+        
 
         # Discard cadences that are too high.
         dM = ma.masked_outside(dM,-1e-3,1e-3)
@@ -204,27 +209,32 @@ def tdpep(t,f,PG0):
 
         ee = []
         dd = []
-        ss = []
         cc = []
 
         for Pcad in PcadG:
             res = ep(dM,Pcad)
             ee.append( res['mepoch'])
             dd.append( res['mdf']   )
-            ss.append( res['sfom']  )
             cc.append( res['count'] )
 
         eee.append(ee)
         ddd.append(dd)
-        sss.append(ss)
         ccc.append(cc)
+        noise.append(mad)
 
     eee = np.vstack( [np.array(ee) for ee in eee] )
     ddd = np.vstack( [np.array(dd) for dd in ddd] )
-    sss = np.vstack( [np.array(ss) for ss in sss] )
     ccc = np.vstack( [np.array(cc) for cc in ccc] )
+    noise = array(noise)
 
-    return eee,ddd,sss,ccc,PG
+    res = {'epoch2d':eee,
+           'df2d':ddd,
+           'count2d':ccc,
+           'PG':PG,
+           'twd':twdG,
+           'noise':noise
+           }
+    return res
 
 def ep(dM,Pcad):
     """
@@ -251,17 +261,12 @@ def ep(dM,Pcad):
 
     d = win*dMW.mean(axis=0)
     
-    mad = ma.abs(d)
-    mad = ma.masked_less(d,1e-6)
-    mad = ma.median(mad)
-
     fom = d
     iMax = fom.argmax()
 
     res = {
         'fom'    : fom         ,
         'mfom'   : fom[iMax]   ,
-        'sfom'   : mad         ,
         'mepoch' : epoch[iMax] ,       
         'mdf'    : d[iMax]     ,
         'count'  : vcount[iMax] ,       
@@ -270,7 +275,6 @@ def ep(dM,Pcad):
         }
 
     return res
-
 
 def tfindpro(t,f,PG0,i):
     """
@@ -289,17 +293,29 @@ def tfindpro(t,f,PG0,i):
     
     """
     sys.stderr.write("%i\n" % i)
-    epoch,df,noise,nT,PG = tdpep(t,f,PG0)
-    iMaTwd = np.argmax(df/noise,axis=0)
+    res = tdpep(t,f,PG0)
+
+
+    epoch = res['epoch2d']
+    df    = res['df2d']
+    nT    = res['count2d']
+    PG    = res['PG']
+    twd   = res['twd']
+
+    noise2d = res['noise'].reshape(twd.size,1).repeat(df.shape[1],axis=1)
+    s2n = df/noise2d*sqrt(nT)
+
+    iMaTwd = np.argmax(s2n,axis=0)
     x      = np.arange(PG0.size)
 
     epoch = epoch[iMaTwd,x]
     df    = df[iMaTwd,x]
-    noise = noise[iMaTwd,x]
+    noise = noise2d[iMaTwd,x]
     nT    = nT[iMaTwd,x]
-    s2n   = df/noise
+    s2n   = s2n[iMaTwd,x]
+    twd   = np.array( [twd[i] for i in iMaTwd] )
 
-    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n}
+    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,'twd':twd}
 
     return res
 
