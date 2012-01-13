@@ -56,9 +56,13 @@ def mqload(files):
 
     return tset 
 
-def sQ(tset0):
-    tset = copy.deepcopy(tset0)
+def nQ(tset0):
+    """
 
+    Normalize the quarters, this is just for easy viewing.
+
+    """
+    tset = copy.deepcopy(tset0)
     offset = ma.masked_invalid(tset[0].SAP_FLUX).mean()
     for t in tset:
         t.add_column('f',t.SAP_FLUX - ma.masked_invalid(t.SAP_FLUX).mean() + 
@@ -66,35 +70,16 @@ def sQ(tset0):
 
     return tset    
 
-def cut(tset0):
+def sQ(tset0):
     """
-    Cut out the bad regions.
+    Stitch quarters together.
     """
 
     tset = copy.deepcopy(tset0)
-    rec = mlab.csv2rec('ranges/cut_time.txt')
-    for t in tset:
-        tm = ma.masked_array(t.TIME,copy=True)
-        for r in rec:
-            tm = ma.masked_inside(tm,r['start'],r['stop'])
-        f = ma.masked_array(t.f,mask=tm.mask,fill_value=np.nan,copy=True)
-        t.f = f.filled()
-        
-    return tset
 
-def prepLC(tLC0):
-    """
-    Prepare Lightcurve
-
-    1.  Fill in missing cadences (time, cad, flux nan)
-    2.  Cut out bad regions.
-    3.  Interpolate over the short gaps in the timeseries.
-
-    """
-
-    f     = [tab.f for tab in tLC0]
-    t     = [tab.TIME for tab in tLC0]
-    cad   = [tab.CADENCENO for tab in tLC0]
+    f     = [tab.f for tab in tset]
+    t     = [tab.TIME for tab in tset]
+    cad   = [tab.CADENCENO for tab in tset]
 
     cad  = detrend.larr(cad)
     f    = detrend.larr(f)
@@ -123,29 +108,35 @@ def prepLC(tLC0):
     cad = cad.data
     t = sp(cad)
 
-    # Normalize lightcurve.
-    f /= np.median(f)
-    f -= 1
-
-    # Set time = 0
-    t -= np.nanmin(t)
-
-    f = detrend.mqclip(t,f)
-    cad,f = detrend.nanIntrp(cad,f,nContig=25)
-    
     tLC = atpy.Table()
-
     tLC.table_name = "LC" 
-    tLC.keywords = tLC0[0].keywords
+    tLC.keywords = tset[0].keywords
     tLC.add_column('f',f)
-    tLC.add_column('t',t)
+    tLC.add_column('TIME',t)
     tLC.add_column('cad',cad)
 
     return tLC
 
-def outReg(tLC0):
+def cut(tLC0):
+    """
+    Cut out the bad regions.
     """
 
+    tLC = copy.deepcopy(tLC0)
+    rec = mlab.csv2rec('ranges/cut_time.txt')
+
+    tm = ma.masked_array(tLC.TIME,copy=True)
+    for r in rec:
+        tm = ma.masked_inside(tm,r['start'],r['stop'])
+
+    f = ma.masked_array(tLC.f,mask=tm.mask,fill_value=np.nan,copy=True)
+    tLC.f = f.filled()
+        
+    return tLC
+
+def outReg(tLC0):
+    """
+    Outlier rejection.
     """
 
     tLC = copy.deepcopy(tLC0)
@@ -159,6 +150,36 @@ def outReg(tLC0):
 
     tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
     return tLC
+
+def prepLC(tset):
+    """
+    Prepare Lightcurve
+
+    1.  Fill in missing cadences (time, cad, flux nan)
+    2.  Cut out bad regions.
+    3.  Interpolate over the short gaps in the timeseries.
+
+    """
+
+    tset = nQ(tset)
+    tset = cut(tset)
+    tLC = sQ(tset)
+    tLC = outReg(tLC)
+
+    # Normalize lightcurve.
+    tLC.f /= np.median(tLC.f)
+    tLC.f -= 1
+
+    # Set time = 0
+    tLC.add_column('t',tLC.TIME)
+    tLC.t -= np.nanmin(tLC.t)
+
+    tLC.f = detrend.mqclip(tLC.t,tLC.f)
+    tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
+
+    return tLC
+
+
 
 
     
