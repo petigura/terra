@@ -79,14 +79,7 @@ def LDT(t,f,p,wd=2.):
     bK,boxK,tK,aK,dK = tfind.GenK( twd ) 
     dM,bM,aM,DfDt,f0 = tfind.MF(fIntrp,twd)
 
-    fn = ma.masked_invalid(f)
-    bgood = (~fn.mask).astype(float) # 1. if the data is good (non a nan)
-
-    bfl = nd.convolve(bgood,bK) # Filling factor.  
-    afl = nd.convolve(bgood,aK)
-    tfl = nd.convolve(bgood,tK)
-
-    fl = (bfl > 0.25) & (afl > 0.25) & (tfl > 0.25) 
+    fl = tfind.isfilled(t,f,twd) 
 
     f0W = tfind.XWrap(f0,Pcad,fill_value=np.nan)
     dMW = tfind.XWrap(dM,Pcad,fill_value=np.nan)
@@ -226,10 +219,7 @@ def tabval(file,view=None):
     tabval = atpy.TableSet()
     tl,fl = qalg.genEmpLC(qalg.tab2dl(tset.PAR),tset.LC.t,tset.LC.f)
     for isim in range(nsim):
-        s2n   = tres.s2n[isim]
-        P     = tres.PG[isim]
-        epoch = tres.epoch[isim]
-        dL = parGuess(s2n,P,epoch,nCheck=50)
+        dL = parGuess(qalg.tab2dl(tres)[isim],nCheck=50)
         resL = fitcandW(tl[isim],fl[isim],dL,view=view)
 
         print 21*"-" + " %d" % (isim)
@@ -245,7 +235,7 @@ def tabval(file,view=None):
     tabval.write(fileL[0]+'_val'+'.fits',overwrite=True)
     return tabval
 
-def parGuess(s2n,PG,epoch,nCheck=50):
+def parGuess(res,nCheck=50):
     """
     Parameter guess
 
@@ -255,9 +245,12 @@ def parGuess(s2n,PG,epoch,nCheck=50):
     Parameters
     ----------
 
-    s2n   : Array of s2n
-    P     : Period grid
-    epoch : Array of epochs
+    res - Dictionary with the following keys:
+
+        s2n   : Array of s2n
+        P     : Period grid
+        epoch : Array of epochs
+        twd   : Array of epochs
     
     Optional Parameters
     -------------------
@@ -272,11 +265,12 @@ def parGuess(s2n,PG,epoch,nCheck=50):
 
     """
 
-    idCand = np.argsort(-s2n)
+    idCand = np.argsort(-res['s2n'])
     dL = []
     for i in range(nCheck):
         idx = idCand[i]
-        d = dict(P=PG[idx],epoch=epoch[idx],tdur=0.3)
+        d = dict(P=res['PG'][idx],epoch=res['epoch'][idx],
+                 tdur=res['twd'][idx]*keptoy.lc)
         dL.append(d)
 
     return dL
@@ -369,7 +363,3 @@ def window(fl,PcadG):
         winL.append(win)
 
     return winL
-
-
-        
-        
