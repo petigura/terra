@@ -162,8 +162,8 @@ def prepLC(tset):
     """
 
     tset = nQ(tset)
-    tset = cut(tset)
     tLC = sQ(tset)
+    tLC = cut(tLC)
     tLC = outReg(tLC)
 
     # Normalize lightcurve.
@@ -178,10 +178,6 @@ def prepLC(tset):
     tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
 
     return tLC
-
-
-
-
     
 def cadFill(cad0):
     """
