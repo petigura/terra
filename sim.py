@@ -14,30 +14,36 @@ import ebls
 import git
 import os
 import tval
+import stat
 
 KIC  = 8144222
 
 simpath = 'Sim/01-13-12/KIC-%09d/' % KIC
 simpath = os.path.join(os.environ['KEPDIR'],simpath)
 
-def gridW(LCfile,PARfile,nsim=None,view=None,test=False):
-    tLC = atpy.Table(LCfile)
-    tPAR = atpy.Table(PARfile)
-    
+def makeGridScript(LCfile,PARfile,nsim=None,view=None,test=False):
+
+    tPAR = atpy.Table( PARfile )
     if nsim==None:
         nsim = len(tPAR.data)
 
-    PG0 = ebls.grid( tPAR.tbase[0] , 0.5, Pmin=50.0, Psmp=0.25)
-    if test:
-        PG0 = PG0[::10]
+    for isim in range(nsim):
+        template = """
 
-    func = lambda i: grid(tLC.t,tLC.f,tPAR,PG0,i)
+import sim
+import atpy
+import ebls
+tLC =  atpy.Table( '%(LCfile)s' )
+tPAR = atpy.Table( '%(PARfile)s' )
+PG0 = ebls.grid( tPAR.tbase[0] , 0.5, Pmin=50.0, Psmp=0.25)
+sim.grid(tLC.t,tLC.f,tPAR,PG0, %(isim)i  )
 
-    irng = range(nsim)
-    if view==None:
-        map(func,irng)
-    else:
-        view.map( grid,nsim*[tLC.t],nsim*[tLC.f],nsim*[tPAR],nsim*[PG0], irng,block=True)
+""" % {'LCfile':LCfile,'PARfile':PARfile,'isim':isim}
+
+        fpath = os.path.join(simpath,'grid%04d.py' % isim   )
+        f = open( fpath,'wb' )
+        f.writelines(template)
+        os.chmod(fpath, stat.S_IREAD | stat.S_IWRITE | stat.S_IXUSR)
 
 def grid(t,f,tPAR,PG0,i):
     t,f = qalg.genEmpLC( [qalg.tab2dl(tPAR)[i]] , t , f )
@@ -54,28 +60,38 @@ def grid(t,f,tPAR,PG0,i):
     RESfile = os.path.join(simpath,'tRES%04d.fits' % i)
     tres.write(RESfile,overwrite=True)
 
-def valW(LCfile,PARfile,nsim=None,view=None,test=False):
-    tLC = atpy.Table(LCfile)
-    tPAR = atpy.Table(PARfile)
-    
+def makevalScript(LCfile,PARfile,nsim=None,view=None,test=False):
+    tPAR = atpy.Table( PARfile )
     if test:
         nCheck = 5
     else:
         nCheck = 50
 
-    tl,fl = qalg.genEmpLC( qalg.tab2dl(tPAR) , tLC.t , tLC.f)
 
     if nsim==None:
         nsim = len(tPAR.data)
 
-    tl,fl = tl[:nsim],fl[:nsim]
 
-    func = lambda t,f,i: val(t,f,nCheck,i)
+    for isim in range(nsim):
+        template = """
 
-    if view==None:
-        map(func,tl,fl,range(nsim))
-    else:
-        view.map(val,nsim*[tl],nsim*[fl],nsim*[nCheck],range(nsim),block=True)
+import sim
+import atpy
+import qalg
+
+tLC =  atpy.Table( '%(LCfile)s' )
+tPAR = atpy.Table( '%(PARfile)s' )
+tl,fl = qalg.genEmpLC( qalg.tab2dl(tPAR) , tLC.t , tLC.f)
+t,f = tl[ %(isim)i ],fl[ %(isim)i ]
+
+sim.val(t,f,%(nCheck)i, %(isim)i )
+
+""" % {'LCfile':LCfile,'PARfile':PARfile,'isim':isim,'nCheck':nCheck}
+
+        fpath = os.path.join(simpath,'val%04d.py' % isim   )
+        f = open( fpath,'wb' )
+        f.writelines(template)
+        os.chmod(fpath, stat.S_IREAD | stat.S_IWRITE | stat.S_IXUSR)
 
 
 def val(t,f,nCheck,i):
