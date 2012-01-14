@@ -184,48 +184,18 @@ def tdpep(t,f,PG0):
 
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
 
-    eee = []
-    ddd = []
-    ccc = []
+    func = lambda twd: pep(t,f,twd,PcadG)
+    resL = map(func,twdG)
 
-    noise = []
-    for twd in twdG:
-        bK,boxK,tK,aK,dK = GenK( twd )
-        dM = nd.convolve1d(f,dK)
+    eee = [ r['ee'] for r in resL ]
+    ddd = [ r['dd' ] for r in resL ]
+    ccc = [ r['cc' ] for r in resL ]
 
-        # Noise per transit 
-        mad = ma.masked_invalid(dM)
-        mad = ma.abs(mad)
-        mad = ma.median(mad)
-        
-
-        # Discard cadences that are too high.
-        dM = ma.masked_outside(dM,-1e-3,1e-3)
-        f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
-        f = f.filled()
-        dM = nd.convolve1d(f,dK)
-
-        filled = isfilled(t,f,twd)
-
-        ee = []
-        dd = []
-        cc = []
-
-        for Pcad in PcadG:
-            res = ep(dM,Pcad)
-            ee.append( res['mepoch'])
-            dd.append( res['mdf']   )
-            cc.append( res['count'] )
-
-        eee.append(ee)
-        ddd.append(dd)
-        ccc.append(cc)
-        noise.append(mad)
+    noise = array([ r['noise' ] for r in resL ])
 
     eee = np.vstack( [np.array(ee) for ee in eee] )
     ddd = np.vstack( [np.array(dd) for dd in ddd] )
     ccc = np.vstack( [np.array(cc) for cc in ccc] )
-    noise = array(noise)
 
     res = {'epoch2d':eee,
            'df2d':ddd,
@@ -234,6 +204,42 @@ def tdpep(t,f,PG0):
            'twd':twdG,
            'noise':noise
            }
+    return res
+
+def pep(t,f,twd,PcadG):
+    """
+    Search in period then epoch:
+    """
+    bK,boxK,tK,aK,dK = GenK( twd )
+    dM = nd.convolve1d(f,dK)
+
+    # Noise per transit 
+    mad = ma.masked_invalid(dM)
+    mad = ma.abs(mad)
+    mad = ma.median(mad)
+
+    # Discard cadences that are too high.
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
+    f = f.filled()
+    dM = nd.convolve1d(f,dK)
+
+    filled = isfilled(t,f,twd)
+
+    func = lambda Pcad: ep(dM,Pcad)
+    resL = map(func,PcadG)
+
+    ee = array([ r['mepoch'] for r in resL ])
+    dd = array([ r['mdf'   ] for r in resL ])
+    cc = array([ r['count' ] for r in resL ])
+    noise = mad
+
+    res = {
+        'ee'    : ee   ,
+        'dd'    : dd   ,
+        'cc'    : cc   ,       
+        'noise' : noise,
+        }
     return res
 
 def ep(dM,Pcad):
@@ -318,7 +324,4 @@ def tfindpro(t,f,PG0,i):
     res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,'twd':twd}
 
     return res
-
-
-
 
