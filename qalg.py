@@ -24,7 +24,6 @@ sets.
 
 import itertools
 import cPickle as pickle
-import matplotlib.pylab as plt
 from numpy import *
 from numpy.random import random
 import sys

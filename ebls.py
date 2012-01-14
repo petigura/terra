@@ -8,7 +8,6 @@ from numpy import array
 import pdb
 from scipy import ndimage
 
-import matplotlib.pylab as plt
 from keptoy import P2a,a2tdur,ntrans
 
 # Global parameters:
