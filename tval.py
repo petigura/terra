@@ -20,8 +20,6 @@ import keptoy
 from keptoy import lc
 import tfind
 
-import matplotlib.pylab as plt
-
 def trsh(P,tbase):
     ftdurmi = 0.5
     tdur = keptoy.a2tdur( keptoy.P2a(P) ) 
@@ -163,7 +161,7 @@ def fitcand(t,f,p0,disp=True):
         nT = len(p1L)
         dtpass = True
     except:
-        print sys.exc_info()
+        print sys.exc_info()[1]
         nT = 0 
         dtpass = False
                 
@@ -191,10 +189,11 @@ def fitcand(t,f,p0,disp=True):
         except:
             print sys.exc_info()
 
+    # To combine tables everythin must be a float.
     if fitpass:
         return dict( P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n )
     else:
-        return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0 )
+        return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
 
 def fitcandW(t,f,dL,view=None):
     """

@@ -4,7 +4,6 @@ Functions for facilitating the reading and writing of Kepler files.
 import numpy as np
 from numpy import ma
 from scipy.interpolate import UnivariateSpline
-from matplotlib import mlab
 from scipy import ndimage as nd
 import copy
 import atpy
@@ -123,7 +122,7 @@ def cut(tLC0):
     """
 
     tLC = copy.deepcopy(tLC0)
-    rec = mlab.csv2rec('ranges/cut_time.txt')
+    rec = atpy.Table('ranges/cut_time.txt',type='ascii').data
 
     tm = ma.masked_array(tLC.TIME,copy=True)
     for r in rec:

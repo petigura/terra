@@ -1,7 +1,6 @@
 from numpy import *
 import glob
 import pyfits
-import matplotlib.pylab as plt
 import atpy
 import sys
 from scipy import weave
@@ -10,7 +9,6 @@ import os
 from numpy.polynomial import Legendre
 from keptoy import * 
 from scipy import ndimage as nd
-from matplotlib.mlab import csv2rec
 from scipy.interpolate import UnivariateSpline
 
 # Load up multiquarter data.
@@ -135,25 +133,6 @@ def complete():
         eff[i] = 1 - ocount/nph
 
     return Parr,eff
-
-
-def plotov(g0,g1,ig,eg):
-    fig = plt.gcf()
-    fig.clf()
-    ax = fig.add_subplot(111)
-    ax.hlines(ones(len(g0)),g0,g1,'r',lw=10)
-    ax.hlines(ones(len(ig)),ig,eg,'g',lw=10)
-
-
-def plotcomp():
-    """
-
-    """
-    fig = plt.gcf()
-    fig.clf()
-    ax = fig.add_subplot(111)
-    ax.plot(time,flux)
-
 
 
 def dtrunmed(timel,fluxl):
@@ -450,17 +429,6 @@ fitpower %.2f
 method  %s 
 """ % (KIC,q[-1],vectors.split()[-1],fitpower,method)
 
-
-        fig = plt.gcf()
-        axL = fig.get_axes()
-        ax = axL[0]
-        ax.annotate(infostr, xy=(-10, 10),
-                    xycoords='axes points',
-                    horizontalalignment='right', verticalalignment='bottom',
-                    fontsize=14,bbox=dict(boxstyle="round",fc='white'))
-
-        plt.draw()
-        fig.savefig("sketch/%i_0%s.png" % (KIC,q[-1]) )
         
         t = atpy.Table('temp.fits',type='fits')
         t.table_name = q
@@ -500,7 +468,7 @@ def mqclip(t,f):
     t = ma.masked_array(t)
     f = ma.masked_array(f)
 
-    rec = csv2rec(rfile)
+    rec = atpy.Table(rfile,type='ascii').data
     for r in rec:
         tt = ma.masked_inside( t,r['start'],r['stop'] )
         f.mask = f.mask | tt.mask
