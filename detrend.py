@@ -142,7 +142,7 @@ def nanIntrp(x0,y0,nContig=3):
 
 
 
-def cbv(tQLC,fcol,efcol,mask=None):
+def cbv(tQLC,fcol,efcol,cadmask=None,dt=False):
     """
     Cotrending basis vectors.
 
@@ -154,14 +154,17 @@ def cbv(tQLC,fcol,efcol,mask=None):
 
     tQLC    : Table for single quarter.
     fcol    : string.  name of the flux column
-    efol : string.  name of the flux_err colunm
+    efol    : string.  name of the flux_err colunm
+    cadmask : Boolean array specifying a subregion
 
     Returns
     -------
 
     ffit    : The CBV fit to the fluxes.
     """
-    cbv = [1,2,3,4,5,6,7,8]
+    cbv = [1,2,3]
+    ncbv = len(cbv)
+    deg = 5
 
     kw = tQLC.keywords
     assert kw['nQ'],'Assumes lightcurve has been normalized.' 
@@ -180,18 +183,13 @@ def cbv(tQLC,fcol,efcol,mask=None):
     f     = tQLC[fcol        ]
     ferr  = tQLC[efcol       ]
 
-    if mask is not None:
-        assert mask.size == cad.size, "Arrays must be of equal sizes."
-        mid = where(~mask)[0]
-        cad   = cad[mid]
-        t     = t[mid]
-        f     = f[mid]
-        ferr  = ferr[mid]
-
-
     tm = ma.masked_invalid(t)
     fm = ma.masked_invalid(f)
     mask  = tm.mask | fm.mask 
+
+    if cadmask is not None:
+        assert cadmask.size == cad.size, "Arrays must be of equal sizes."
+        mask  = mask | cadmask # Add the time cut to the mask
 
     gid   = where(~mask)[0]
     bid   = where(mask)[0]
@@ -201,20 +199,39 @@ def cbv(tQLC,fcol,efcol,mask=None):
     cad   = cad[gid] 
     ferr  = ferr[gid] 
 
-    mbv = lambda i: tBV['VECTOR_%i' % i][gid]
+    # Construct a matrix of BV
+    mbv = lambda i:  tBV['VECTOR_%i' % i][gid]
     bvectors = map(mbv,cbv)
     bvectors = vstack(bvectors)
 
-    p0 = np.zeros( len(cbv) ) # Guess for parameters.
-    p0[:2] = 1
+    if dt:
+        for i in range(ncbv):
+            bvtrend = Legendre.fit(t,bvectors[i],deg)
+            bvectors[i] = bvectors[i] - bvtrend(t)
 
-    p1 , fopt ,iter ,funcalls, warnflag = \
-        fmin(objCBV,p0,args=(f,ferr,bvectors) ,disp=False,full_output=True)
+        ftrend = Legendre.fit(t,f,deg)
+        f = f - ftrend(t)
+
+    data      = fm.data.copy()
+    data[gid] = f.astype(float32)
+    data[bid] = np.nan
+
+    p0 = np.zeros( len(cbv) ) # Guess for parameters.
+
+
+    p1,fopt ,iter ,funcalls, warnflag  = \
+        fmin(objCBV,p0,args=(f,ferr,bvectors),disp=True,maxfun=10000,
+             maxiter=10000,full_output=True,)
+
+    if warnflag != 0:
+        p1 = p0
 
     ffit      = fm.data.copy()
     ffit[gid] = modelCBV(p1,bvectors).astype(float32)
     ffit[bid] = np.nan    
-    return ffit
+
+    return data,ffit,bvectors,p1
+
 
 def objCBV(p,f,ferr,bvectors):
    """
