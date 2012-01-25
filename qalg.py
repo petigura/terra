@@ -89,41 +89,17 @@ def init(**kwargs):
             for k,v in zip(keys,p):
                 d[k] = v
 
-            d['Pblock'] = d['P']
+            d['Pblock'] = int(d['P'])
             np.random.seed(seed)
             d['P'] = d['P']*(1 + wP*random() ) 
             d['epoch'] = d['P']*random()
+            d['tdur'] = a2tdur(P2a(d['P']))
             d['seed'] = seed
             darr.append(d) 
 
             seed += 1
 
     return darr
-
-def genSynLC(darr):
-    """
-    Generate Synthetic Lightcurves
-
-    Parameters
-    ----------
-    darr : List of dictionaries specifying the LC parameters.
-
-    Returns
-    -------
-    tl   : List of time arrays
-    fl   : List of flux arrays
-    
-    """
-    fl,tl = [],[]
-    for d in darr:
-        f,t = lightcurve(**d) 
-    
-        f = f.astype(float32)
-        t = t.astype(float32)
-        fl.append(f)
-        tl.append(t)
-        
-    return tl,fl
 
 def tab2dl(t):
     """
@@ -152,37 +128,7 @@ def dl2tab(dl):
 
     return t
 
-def genEmpLC(darr0,tdt,fdt):
-    """
-    Generate Synthetic Lightcurves
 
-    Parameters
-    ----------
-    darr : List of dictionaries specifying the LC parameters.
-    tdt  :
-    fdt  :
-
-
-    Returns
-    -------
-    tl   : List of time arrays
-    fl   : List of flux arrays
-    
-    """
-
-    darr = copy.deepcopy(darr0)
-
-    fl,tl = [],[]
-    for d in darr:
-        d.pop('seed')
-        d.pop('tbase')
-
-        f = inject(tdt,fdt,**d)
-        f = f.astype(float32)
-        fl.append(f)
-        tl.append(tdt)
-        
-    return tl,fl
 
 def profile(tl,fl,PGrid,func,par=False):
     """
