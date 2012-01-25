@@ -2,6 +2,7 @@ import numpy as np
 from numpy import pi,sqrt,where,std,ma,array
 from numpy import ma,tanh,sin,cos,pi
 from numpy.polynomial import Legendre
+import copy
 
 ### Constants ###
 G = 6.67e-8 # cgs
@@ -296,3 +297,54 @@ def P051T(p,t,P):
 
     return sig + tr
 
+def genEmpLC(d0,tdt,fdt):
+    """
+    Generate Synthetic Lightcurves
+
+    Parameters
+    ----------
+    darr : List of dictionaries specifying the LC parameters.
+    tdt  :
+    fdt  :
+
+
+    Returns
+    -------
+    tl   : List of time arrays
+    fl   : List of flux arrays
+    
+    """
+
+    d = copy.deepcopy(d0)
+
+    d.pop('seed')
+    d.pop('tbase')
+    f = inject(tdt,fdt,**d)
+    f = f.astype(np.float32)
+        
+    return f
+
+def genSynLC(darr):
+    """
+    Generate Synthetic Lightcurves
+
+    Parameters
+    ----------
+    darr : List of dictionaries specifying the LC parameters.
+
+    Returns
+    -------
+    tl   : List of time arrays
+    fl   : List of flux arrays
+    
+    """
+    fl,tl = [],[]
+    for d in darr:
+        f,t = lightcurve(**d) 
+    
+        f = f.astype(float32)
+        t = t.astype(float32)
+        fl.append(f)
+        tl.append(t)
+        
+    return tl,fl
