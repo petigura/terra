@@ -15,8 +15,14 @@ import keptoy
 import detrend
 import tfind
 
-
 kepdir = os.environ['KEPDIR']
+
+def update_column(t,name,value):
+    try:
+        t.add_column(name,value)
+    except ValueError:
+        t.remove_columns([name])
+        t.add_column(name,value)
 
 def KICPath(KIC,basedir):
     """
@@ -43,114 +49,151 @@ def mqload(files):
     Load up a table set given a list of fits files.
     """
     tset = atpy.TableSet()
+    kw = ['nQ','cut','outreg']
     
     for f in files:
         hdu = pyfits.open(f)
         t = atpy.Table(f,type='fits')
-        Q = hdu[0].header['QUARTER']
-        t.table_name = 'Q%i' % Q
+
+        t.keywords = dict(hdu[0].header)
         t.add_keyword('PATH',f)
-        t.add_keyword('QUARTER',Q)
+        for k in kw:
+            t.keywords[k] = False
+
+        t.table_name = 'Q%i' % t.keywords['QUARTER']        
         tset.append(t)
 
     return tset 
 
 def nQ(tset0):
     """
-
-    Normalize the quarters, this is just for easy viewing.
+    Normalize the quarters.  
 
     """
     tset = copy.deepcopy(tset0)
-    offset = ma.masked_invalid(tset[0].SAP_FLUX).mean()
-    for t in tset:
-        t.add_column('f',t.SAP_FLUX - ma.masked_invalid(t.SAP_FLUX).mean() + 
-                     offset)
 
-    return tset    
+    col = ['SAP_FLUX','PDCSAP_FLUX']
+    ecol = ['SAP_FLUX_ERR','PDCSAP_FLUX_ERR']
+    col2 = ['f','fpdc']    # Names for the modified columns.
+    ecol2 = ['ef','efpdc']
 
-def sQ(tset0):
-    """
-    Stitch quarters together.
-    """
+    for c,ec,c2,ec2 in zip(col,ecol,col2,ecol2):
+        for t in tset:
+            update_column(t,c2, copy.deepcopy(t[c]) )
+            update_column(t, ec2, copy.deepcopy(t[ec]) )
 
-    tset = copy.deepcopy(tset0)
+            medf = np.median(t[c])
+            t.data[c2]  =  t.data[c2]/medf - 1
+            t.data[ec2] =  t.data[ec2]/medf
+            t.keywords['nQ'] = True
 
-    f     = [tab.f for tab in tset]
-    t     = [tab.TIME for tab in tset]
-    cad   = [tab.CADENCENO for tab in tset]
 
-    cad  = detrend.larr(cad)
-    f    = detrend.larr(f)
-    t    = detrend.larr(t)
+    return tset  
 
-    # Figure out which cadences are missing and fill them in.
-    cad,iFill = cadFill(cad)
-    nFill = cad.size
-
-    fNew = np.empty(nFill)
-    tNew = np.empty(nFill)
-
-    tNew[::] = np.nan
-    fNew[::] = np.nan
-
-    tNew[iFill] = t
-    fNew[iFill] = f
-
-    t = tNew
-    f = fNew
-
-    t = ma.masked_invalid(t)
-    cad = ma.masked_array(cad)
-    cad.mask = t.mask
-    sp = UnivariateSpline(cad.compressed(),t.compressed(),s=0,k=1)
-    cad = cad.data
-    t = sp(cad)
-
-    tLC = atpy.Table()
-    tLC.table_name = "LC" 
-    tLC.keywords = tset[0].keywords
-    tLC.add_column('f',f)
-    tLC.add_column('TIME',t)
-    tLC.add_column('cad',cad)
-
-    return tLC
-
-def cut(tLC0):
+def cut(tLC0,cutk=['f','ef','fpdc','efpdc'] ):
     """
     Cut out the bad regions.
     """
-
     tLC = copy.deepcopy(tLC0)
-    rec = atpy.Table('ranges/cut_time.txt',type='ascii').data
-
+    cutpath = os.path.join(os.environ['KEPDIR'],'ranges/cut_time.txt')
+    rec = atpy.Table(cutpath,type='ascii').data
     tm = ma.masked_array(tLC.TIME,copy=True)
     for r in rec:
         tm = ma.masked_inside(tm,r['start'],r['stop'])
 
-    f = ma.masked_array(tLC.f,mask=tm.mask,fill_value=np.nan,copy=True)
-    tLC.f = f.filled()
-        
+    for k in cutk:
+        tLC.data[k][np.where(tm.mask)] = np.nan
+
+    tLC.keywords['cut'] = True
     return tLC
 
-def outReg(tLC0):
+def sQ(tLCset0):
     """
-    Outlier rejection.
+    Stitch quarters together.
+
+    Fills in missing times and cadences with their proper values
     """
 
-    tLC = copy.deepcopy(tLC0)
-    medf = nd.median_filter(tLC.f,size=4)
-    resf = tLC.f - medf
+    tLCset = copy.deepcopy(tLCset0)
+    tLC = atpy.Table()
+    tLC.table_name = "LC" 
+    tLC.keywords = tLCset[0].keywords
+
+    # Figure out which cadences are missing and fill them in.
+    cad       = [tab.CADENCENO for tab in tLCset]
+    cad       = detrend.larr(cad)       # Convert the list to an array 
+    cad,iFill = cadFill(cad)
+    nFill     = cad.size
+    update_column(tLC,'cad',cad)
+
+    for t in tLCset:
+        update_column(t,'q',np.zeros(t.data.size) + 
+                      t.keywords['QUARTER'] )
+
+
+    # Add all the columns from the FITS file.
+    fitsname = tLCset[0].data.dtype.fields.keys()
+    for fn in fitsname:
+        ctemp = np.empty(nFill) # Temporary column
+        ctemp[::] = np.nan      # default value is nan
+
+        col = [tab[fn] for tab in tLCset] # Column in list form
+        col =  detrend.larr(col)       # Convert the list to an array 
+
+        ctemp[iFill] = col
+        update_column(tLC,fn,ctemp)
+
+
+    # Fill in the missing times.
+    t        = ma.masked_invalid(tLC['TIME'])
+    cad      = ma.masked_array(cad)
+    cad.mask = t.mask
+    sp       = UnivariateSpline(cad.compressed(),t.compressed(),s=0,k=1)
+    cad      = cad.data
+    tLC.data['TIME'] = sp(cad)
+
+    return tLC
+
+def outReg(f):
+    """
+    Outlier rejection.
+
+    Reject single outliers based on a median & percentile filter.  sQ
+    need to be run.
+
+    Parameters
+    ----------
+    f : Column to perform outlier rejection.
+    """
+
+    medf = nd.median_filter(f,size=4)
+    resf = f - medf
     resf = ma.masked_invalid(resf)
     resfcomp = resf.compressed()
     lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)
     out = ma.masked_outside(resf,lo,up,copy=True)
-    tLC.f[np.where(out.mask)] = np.nan
+    f[np.where(out.mask)] = np.nan
 
-    tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
+    return f
+
+def toutReg(tLC0,outregcol=['f','fpdc']):
+    tLC = copy.deepcopy(tLC0)
+    for orc in outregcol:
+        x = outReg( tLC.data[orc] )
+
+        eorc = 'e'+orc
+        ex = outReg( tLC.data[orc] )
+
+        cad,x = detrend.nanIntrp(tLC.data['CADENCENO'],x,nContig=25)
+        cad,ex = detrend.nanIntrp(tLC.data['CADENCENO'],ex,nContig=25)
+
+        tLC.data[orc] = x
+        tLC.data[eorc] = ex
+
+
     return tLC
-
-def prepLC(tset):
+ 
+def prepLC(tLCset):
     """
     Prepare Lightcurve
 
@@ -160,17 +203,17 @@ def prepLC(tset):
 
     """
 
-    tset = nQ(tset)
-    tLC = sQ(tset)
-    tLC = cut(tLC)
-    tLC = outReg(tLC)
+    tLCset = nQ(tLCset)
+    for tLC in tLCset:
+        tLC.data = cut(tLC).data
+        tLC.data = toutReg(tLC).data
+        data,ffit,bvectors,p1 = detrend.cbv(tLC,'f','ef')
+        update_column(tLC,'fcbv',ffit)
 
-    # Normalize lightcurve.
-    tLC.f /= np.median(tLC.f)
-    tLC.f -= 1
+    tLC = sQ(tLCset)
 
     # Set time = 0
-    tLC.add_column('t',tLC.TIME)
+    update_column(tLC,'t',tLC.TIME)
     tLC.t -= np.nanmin(tLC.t)
 
     tLC.f = detrend.mqclip(tLC.t,tLC.f)
