@@ -11,9 +11,9 @@ from scipy import optimize
 import scipy.ndimage as nd
 import detrend
 import sys
-import copy
-import glob
 
+import glob
+import copy
 import atpy
 import qalg
 import keptoy
@@ -67,10 +67,11 @@ def LDT(t,f,p,wd=2.):
     epoch = p['epoch']
     tdur  = p['tdur']
 
-    twd = round(tdur/lc)
-
     Pcad     = int(round(P/lc))
     epochcad = int(round(epoch/lc))
+
+    twd = round(tdur/lc)
+
     wdcad    = int(round(wd/lc))
     tIntrp,fIntrp = detrend.nanIntrp(t,f,nContig=100/lc)
 
@@ -81,14 +82,12 @@ def LDT(t,f,p,wd=2.):
 
     f0W = tfind.XWrap(f0,Pcad,fill_value=np.nan)
     dMW = tfind.XWrap(dM,Pcad,fill_value=np.nan)
-    flW = tfind.XWrap(fl,Pcad,fill_value=False)
 
     ### Determine the indecies of the points to fit. ###
-    ms   = np.arange( f0W.shape[0] ) * Pcad + epochcad
-
     # Exclude regions where the convolution returned a nan.
-    ms   = [m for m in ms if flW.flatten()[m] ]
-    sLDT = [slice(m - wdcad/2 , m+wdcad/2) for m in ms]
+    ms   = midTransId(t,p)
+    ms   = [m for m in ms if fl[m] ]
+    sLDT = [ getSlice(m,wdcad) for m in ms]
 
     # Detrended time and flux arrays.  The only unmasked points
     # correspond to viable transits
@@ -175,23 +174,28 @@ def fitcand(t,f,p0,disp=True):
             tbase = t.ptp()
             dp0 =  trsh(P,tbase)
             dp0 = [dp0['dP'],dp0['depoch']]
-            p1 = optimize.fmin(objMT,p0,args=(tfit,ffit,p0,dp0) ,disp=False)
+            p1 , fopt ,iter ,funcalls, warnflag = \
+                optimize.fmin(objMT,p0,args=(tfit,ffit,p0,dp0) ,disp=False,full_output=True)
+
             tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
             fdt2 = ma.masked_array(fdt,mask=tfold.mask)
             if fdt2.count() > 20:
                 s2n = - ma.mean(fdt2)/ma.std(fdt2)*np.sqrt( fdt2.count() )
+
                 fitpass = True
             else: 
                 fitpass = False
                 s2n = 0
             if disp:
                 print "%7.02f %7.02f %7.02f" % (p1[0] , p1[1] , s2n )
+
         except:
-            print sys.exc_info()
+            print sys.exc_info()[1]
 
     # To combine tables everythin must be a float.
     if fitpass:
-        return dict( P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n )
+        res = dict( P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n )
+        return res
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
 
@@ -206,6 +210,31 @@ def fitcandW(t,f,dL,view=None):
  
     return resL
 
+def aliasW(t,f,resL0):
+    """
+    Alias Wrap
+
+    If Chi^2 for the alias is lower than Chi^2 for the given period, refit.
+    """
+
+    s2n = np.array([ r['s2n'] for r in resL0])
+    assert ( s2n > 0).all(),"Cut out failed fits"
+
+
+    resL = copy.deepcopy(resL0)
+
+    for i in range(len(resL0)):
+        X2,X2A,pA,fTransitA,mTransit,mTransitA = alias(t,f,resL0[i])
+        if X2A < X2:
+            res = fitcand(t,f,pA)
+            resL[i] = res
+
+    return resL
+
+
+
+
+
 def tabval(file,view=None):
     """
     
@@ -216,7 +245,11 @@ def tabval(file,view=None):
     
     # Check the 50 highest s/n peaks in the MF spectrum
     tabval = atpy.TableSet()
-    tl,fl = qalg.genEmpLC(qalg.tab2dl(tset.PAR),tset.LC.t,tset.LC.f)
+
+    f = keptoy.genEmpLC( qalg.tab2dl(tset.PAR)[0] , tset.LC.t , tset.LC.f)
+    t = tset.LC.t
+
+
     for isim in range(nsim):
         dL = parGuess(qalg.tab2dl(tres)[isim],nCheck=50)
         resL = fitcandW(tl[isim],fl[isim],dL,view=view)
@@ -362,3 +395,125 @@ def window(fl,PcadG):
         winL.append(win)
 
     return winL
+
+def midTransId(t,p):
+    """
+    Mid Transit Index
+
+    Return the indecies of mid transit for input parameters.
+
+    Parameters
+    ----------
+
+    t - timeseries
+    p - dictionary with 'P','epoch','tdur'
+
+    """
+    P     = p['P']
+    epoch = p['epoch']
+
+    Pcad     = int(round(P/lc))
+    epochcad = int(round(epoch/lc))
+
+    nT = t.size/Pcad + 1  # maximum number of transits
+
+    ### Determine the indecies of the points to fit. ###
+    ms = np.arange(nT) * Pcad + epochcad
+    ms = [m for m in  ms if m < t.size]
+    return ms
+
+def alias(t,f,p):
+    """
+    Evaluate the Bayes Ratio between signal with P and 2 *P
+
+    Parameters
+    ----------
+
+    t : Time series
+    f : Flux series
+    p : Parameter dictionary.
+    
+    """
+
+
+    pA = copy.deepcopy(p)
+    pA['P'] = 0.5 * pA['P']
+    pA['epoch'] = np.mod(pA['epoch'],pA['P']) # Epoch must be less than the period
+    
+    res = LDT(t,f,pA)
+    tdt = res['tdt']
+    fdt = res['fdt']
+    
+    pl  = [p['P'],p['epoch'],p['df'],p['tdur']]
+    plA = [pA['P'],pA['epoch'],pA['df'],pA['tdur']]
+
+    model  = keptoy.P05(pl  , tdt )
+    modelA = keptoy.P05(plA , tdt )
+
+    tTransitA = tfind.getT(tdt.data,pA['P'],pA['epoch'],pA['tdur'])
+    
+    mTransit  = ma.masked_array(model.data,copy=True,mask=tTransitA.mask)
+    mTransitA = ma.masked_array(modelA.data,copy=True,mask=tTransitA.mask)
+
+    fTransitA = ma.masked_array(fdt.data,copy=True,mask=tTransitA.mask)
+
+    X2  = ma.sum( (fTransitA - mTransit)**2 )
+    X2A = ma.sum( (fTransitA - mTransitA)**2 )
+
+    print "Input Period Chi2 = %e, Alias Chi2 = %e " % (X2, X2A)
+#    import matplotlib.pylab as plt
+#    plt.plot(fdt.compressed(),'.')
+#    plt.plot(model.compressed() ,'k',label='Model at input period.' )
+#    plt.plot(modelA.compressed(),'r',label='Model at alias period' )
+#
+#    print t
+#    plt.plot(fTransitA.compressed() +2e-3 ,'.')
+#    plt.plot(mTransit.compressed()  +2e-3,'k',lw=2,)
+#    plt.plot(mTransitA.compressed() +2e-3,'r',lw=2)
+#
+#    plt.draw()
+#    plt.show()
+    
+    return X2,X2A,pA,fTransitA,mTransit,mTransitA
+    
+
+def getSlice(m,wdcad):
+    """
+    Get slice
+    
+    Parameters
+    ----------
+    m    : middle index (center of the slice).
+    wdcad : width of slice list (units of cadence).
+
+    """
+
+    return slice( max(0,m-wdcad/2) , m+wdcad/2 )
+
+
+
+def tdict(d,prefix=''):
+    """
+    
+    """
+    outcol = ['P','epoch','df','tdur']
+
+    incol = [prefix+oc for oc in outcol]
+
+    outd = {}
+    for o,c in zip(outcol,incol):
+        try:
+            outd[o] = d[c]
+        except KeyError:
+            pass
+
+    return outd
+
+
+
+
+
+
+
+
+
