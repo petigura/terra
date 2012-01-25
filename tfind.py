@@ -255,7 +255,7 @@ def ep(dM,Pcad):
     - 'epoch'  : Array corresponding to epochs
     - 'win'    : Which epochs passed (window function)
     """
-
+    
     dMW = XWrap(dM,Pcad,fill_value=np.nan)
     dMW = ma.masked_invalid(dMW)
 
@@ -263,9 +263,15 @@ def ep(dM,Pcad):
     epoch = np.arange(ne,dtype=float)/ne * Pcad *lc 
 
     vcount = (~dMW.mask).astype(int).sum(axis=0)
-    win = (vcount >= 3) 
+    win = (vcount >= 3).astype(float)
 
-    d = win*dMW.mean(axis=0)
+    sig = (dM > 50e-6).astype(int)
+    sigW = XWrap(sig,Pcad,fill_value=0)
+    nsig = sigW.sum(axis=0)
+    bsig = (nsig == vcount).astype(float)
+
+
+    d = bsig*win*dMW.mean(axis=0)
     
     fom = d
     iMax = fom.argmax()
