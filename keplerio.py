@@ -16,13 +16,8 @@ import detrend
 import tfind
 
 kepdir = os.environ['KEPDIR']
+kepdat = os.environ['KEPDAT']
 
-def update_column(t,name,value):
-    try:
-        t.add_column(name,value)
-    except ValueError:
-        t.remove_columns([name])
-        t.add_column(name,value)
 
 def KICPath(KIC,basedir):
     """
@@ -34,84 +29,127 @@ def KICPath(KIC,basedir):
     """
 
     if basedir is 'orig':
-        basedir = 'kepdat/EX/Q*/'
+        basedir = os.path.join(kepdat,'EX/Q*/')
     if basedir is 'clip':
         basedir = 'tempfits/clip/'
     if basedir is 'dt':
-        basedir = 'kepdat/DT/'
+        basedir = os.path.join(kepdat,'DT/')
 
-    basedir = os.path.join(kepdir,basedir)
     g = glob.glob(basedir+'*%09i*.fits' % KIC)
     return g
 
-def mqload(files):
+def qload(file):
     """
-    Load up a table set given a list of fits files.
+    Quarter Load
+
+    Load up a quarter and append the proper keywords
+
+    Parameters
+    ----------
+
+    file : path to the fits file.
+
+    Returns
+    -------
+
+    t    : atpy table
+
     """
-    tset = atpy.TableSet()
+    hdu = pyfits.open(file)
+    t = atpy.Table(file,type='fits')    
+
     kw = ['nQ','cut','outreg']
+    hkw = ['QUARTER','MODULE','CHANNEL','OUTPUT']
+
+    t.add_keyword('PATH',file)
+    for k in kw:
+        t.keywords[k] = False
+
+    for k in hkw:
+        t.keywords[k] = hdu[0].header[k]
+
+    t.table_name = 'Q%i' % t.keywords['QUARTER']
+    return t
     
-    for f in files:
-        hdu = pyfits.open(f)
-        t = atpy.Table(f,type='fits')
-
-        t.keywords = dict(hdu[0].header)
-        t.add_keyword('PATH',f)
-        for k in kw:
-            t.keywords[k] = False
-
-        t.table_name = 'Q%i' % t.keywords['QUARTER']        
-        tset.append(t)
-
-    return tset 
-
-def nQ(tset0):
+def nQ(t0):
     """
-    Normalize the quarters.  
+    Normalize lightcurve.
 
+    Parameters
+    ----------
+    t0 : input table.
+
+    Returns
+    -------
+    t  : Table with new, normalized columns.
+    
     """
-    tset = copy.deepcopy(tset0)
+    t = copy.deepcopy(t0)
 
-    col = ['SAP_FLUX','PDCSAP_FLUX']
-    ecol = ['SAP_FLUX_ERR','PDCSAP_FLUX_ERR']
-    col2 = ['f','fpdc']    # Names for the modified columns.
+    col   = ['SAP_FLUX','PDCSAP_FLUX']
+    ecol  = ['SAP_FLUX_ERR','PDCSAP_FLUX_ERR']
+    col2  = ['f','fpdc']   # Names for the modified columns.
     ecol2 = ['ef','efpdc']
 
     for c,ec,c2,ec2 in zip(col,ecol,col2,ecol2):
-        for t in tset:
-            update_column(t,c2, copy.deepcopy(t[c]) )
-            update_column(t, ec2, copy.deepcopy(t[ec]) )
+        update_column(t,c2, copy.deepcopy(t[c]) )
+        update_column(t, ec2, copy.deepcopy(t[ec]) )
+        medf = np.median(t[c])
+        t.data[c2]  =  t.data[c2]/medf - 1
+        t.data[ec2] =  t.data[ec2]/medf
 
-            medf = np.median(t[c])
-            t.data[c2]  =  t.data[c2]/medf - 1
-            t.data[ec2] =  t.data[ec2]/medf
-            t.keywords['nQ'] = True
+    t.keywords['nQ'] = True
+
+    return t
 
 
-    return tset  
-
-def cut(tLC0,cutk=['f','ef','fpdc','efpdc'] ):
+def cut(t0, cutk=['f','ef','fpdc','efpdc'] ):
     """
     Cut out the bad regions.
+
+    Paramters
+    ---------
+
+    t0   : Input table
+    cutk : Cut columns
+
+    Returns
+    -------
+
+    Table with regions cut out.
     """
-    tLC = copy.deepcopy(tLC0)
+
+    t = copy.deepcopy(t0)
     cutpath = os.path.join(os.environ['KEPDIR'],'ranges/cut_time.txt')
     rec = atpy.Table(cutpath,type='ascii').data
-    tm = ma.masked_array(tLC.TIME,copy=True)
+
+    tm = ma.masked_array(t.TIME,copy=True)
     for r in rec:
         tm = ma.masked_inside(tm,r['start'],r['stop'])
 
     for k in cutk:
-        tLC.data[k][np.where(tm.mask)] = np.nan
+        t.data[k][np.where(tm.mask)] = np.nan
 
-    tLC.keywords['cut'] = True
-    return tLC
+    t.keywords['cut'] = True
+    return t
 
 def sQ(tLCset0):
     """
-    Stitch quarters together.
+    Stitch Quarters together.
 
     Fills in missing times and cadences with their proper values
+
+    Parameters
+    ----------
+
+    tL : List of tables to stitch together.
+    
+
+    Returns
+    -------
+
+    tLC : Lightcurve that has been stitched together.    
+
     """
 
     tLCset = copy.deepcopy(tLCset0)
@@ -190,9 +228,23 @@ def toutReg(tLC0,outregcol=['f','fpdc']):
         tLC.data[orc] = x
         tLC.data[eorc] = ex
 
-
     return tLC
- 
+
+def ppQ(t0):
+    """
+    Preprocess Quarter
+
+    Apply the following functions to every quarter.
+    """
+    t = copy.deepcopy(t0)
+    t = nQ(t)
+    
+    t.data = cut(t).data
+    t.data = toutReg(t).data
+    data,ffit,bvectors,p1 = detrend.cbv(t,'f','ef')
+    update_column(t,'fcbv',ffit)
+    return t
+
 def prepLC(tLCset):
     """
     Prepare Lightcurve
@@ -202,23 +254,14 @@ def prepLC(tLCset):
     3.  Interpolate over the short gaps in the timeseries.
 
     """
-
-    tLCset = nQ(tLCset)
-    for tLC in tLCset:
-        tLC.data = cut(tLC).data
-        tLC.data = toutReg(tLC).data
-        data,ffit,bvectors,p1 = detrend.cbv(tLC,'f','ef')
-        update_column(tLC,'fcbv',ffit)
-
+    tLCset = map(ppQ,tLCset)
     tLC = sQ(tLCset)
 
     # Set time = 0
     update_column(tLC,'t',tLC.TIME)
     tLC.t -= np.nanmin(tLC.t)
 
-    tLC.f = detrend.mqclip(tLC.t,tLC.f)
     tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
-
     return tLC
     
 def cadFill(cad0):
@@ -259,4 +302,9 @@ def iscadFill(t,f):
     tol = keptoy.lc/100. 
     return ( (t[1:] - t[:-1]).ptp() < tol ) & (t.size == f.size)
 
-    
+def update_column(t,name,value):
+    try:
+        t.add_column(name,value)
+    except ValueError:
+        t.remove_columns([name])
+        t.add_column(name,value)
