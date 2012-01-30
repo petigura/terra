@@ -19,8 +19,8 @@ dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
 kepdir = os.environ['KEPDIR']
-cbvdir = os.path.join(kepdir,'kepdat/CBV/')
-
+kepdat = os.environ['KEPDAT']
+cbvdir = os.path.join(kepdat,'CBV/')
 def stitch(fl,tl,swd = 0.5):
     """
     Stitch together the boundaries of the quarters.
@@ -60,7 +60,7 @@ def cbvDT(KIC):
     otset = atpy.TableSet()
     for q in quarters:
 
-        cbvfile = glob.glob(kepdir+'kepdat/CBV/*q0%s*' % q[-1]) [0]
+        cbvfile = glob.glob(kepdat+'/CBV/*q0%s*' % q[-1]) [0]
         iraf.kepler.kepcotrend(infile=tset[q].keywords['PATH'],
                                outfile='temp.fits',
                                clobber=True,
@@ -88,31 +88,14 @@ method  %s
         t.table_name = q
 
         otset.append(t)
-    otset.write(kepdir+'kepdat/DT/%s.fits' % KIC,type='fits',overwrite=True)
+    otset.write(kepdat+'/DT/%s.fits' % KIC,type='fits',overwrite=True)
     
-
-
 def larr(iL):
     oL = array([])
     for l in iL:
         oL = append(oL,l)
         
     return oL
-
-
-def mqclip(t,f):
-    rfile= os.path.join(kepdir,'ranges/cut_time.txt')
-    t = ma.masked_array(t)
-    f = ma.masked_array(f)
-
-    rec = atpy.Table(rfile,type='ascii').data
-    for r in rec:
-        tt = ma.masked_inside( t,r['start'],r['stop'] )
-        f.mask = f.mask | tt.mask
-        
-    f.fill_value = nan
-    return f.filled()
-
 
 def nanIntrp(x0,y0,nContig=3):
     """
@@ -130,7 +113,6 @@ def nanIntrp(x0,y0,nContig=3):
 
     sp = UnivariateSpline(xc,yc,k=1,s=0)
 
-    
     x.mask = ~x.mask
     sL = ma.notmasked_contiguous(x)
     for s in sL:
