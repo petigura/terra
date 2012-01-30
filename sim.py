@@ -1,3 +1,5 @@
+
+
 """
 8669806|17.0088653564453 <- Studied this one before.
 8144222|20.9299125671387
@@ -17,9 +19,9 @@ import copy
 import qalg
 import tfind
 import ebls
-import git
 import tval
 import keptoy
+import keplerio
 
 def makeGridScript(LCfile,PARfile,nsim=None,view=None,test=False):
     simpath = os.path.dirname(LCfile)
@@ -73,11 +75,6 @@ def grid(LCfile,PARfile,seed,Psmp=0.25):
     tRES.add_keyword("PARFILE",PARfile)
     tRES.table_name = "RES"
     tRES.comments = "Table with the simulation results"
-    repo = git.Repo('/Users/petigura/Marcy/Kepler/pycode/')
-    headcommit = repo.head.commit
-    tRES.add_keyword( 'GitCommit' , headcommit.hexsha)
-    tRES.add_keyword( 'RepoDirty' , repo.is_dirty() )
-    tRES.add_keyword( 'Node'      , platform.node()  )
     RESfile = os.path.join(simpath,'tRES%04d.fits' % seed)
     tRES.write(RESfile,overwrite=True)
 
@@ -414,4 +411,25 @@ def addVALkw(files):
             t.keywords[c] = tROW.data[c][0]
         t.write(f,overwrite=True,type='fits')
 
-    
+
+def inject(tLCbase,tPAR,seed):
+    """
+    Inject transit signal into lightcurve.
+    """
+    tPAR = tPAR.where(tPAR.seed == seed)
+    assert len(tPAR.data) == 1, "Seed must be unique" 
+    d0 = qalg.tab2dl(tPAR)[0]    
+    tLC = map(keplerio.nQ,tLCbase)
+    inj = lambda t : tinject(t,d0)
+    tLC = map(inj,tLC)
+    tLCraw = atpy.TableSet(tLC)
+    return tLCraw
+
+def tinject(t0,d0):
+    """
+    Table inject
+    """    
+    t = copy.deepcopy(t0)
+    f = keptoy.genEmpLC(d0,t.TIME,t.f)
+    keplerio.update_column(t,'f',f)
+    return t
