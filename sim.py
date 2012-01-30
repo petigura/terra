@@ -1,5 +1,3 @@
-
-
 """
 8669806|17.0088653564453 <- Studied this one before.
 8144222|20.9299125671387
@@ -23,195 +21,33 @@ import tval
 import keptoy
 import keplerio
 
-def makeGridScript(LCfile,PARfile,nsim=None,view=None,test=False):
-    simpath = os.path.dirname(LCfile)
-
-    tPAR = atpy.Table( PARfile )
-    if test:
-        Psmp = 4
-        nsim = 1
-        suffix = '_test'
-    else:
-        Psmp = 0.25
-        nsim = len(tPAR.data)
-        suffix = ''
-
-
-    scripts = []
-    for isim in range(nsim):
-        template = """
-import sim
-sim.grid( '%(LCfile)s','%(PARfile)s' , %(isim)i, Psmp = %(Psmp)f  )
-""" % {'LCfile':LCfile,'PARfile':PARfile,'isim':isim,'Psmp':Psmp}
-
-        fpath = os.path.join(simpath,'grid%04d%s.py' % (isim,suffix)   )
-        fpath = os.path.abspath(fpath)
-
-        
-        f = open( fpath,'wb' )
-        f.writelines(template)
-        f.close()
-        
-        os.chmod(fpath, stat.S_IREAD | stat.S_IWRITE | stat.S_IXUSR)
-        scripts.append(fpath)
-        
-    print template
-
-    return scripts
-    
-def grid(LCfile,PARfile,seed,Psmp=0.25):
-    simpath = os.path.dirname(LCfile)
-    tLC =  atpy.Table( LCfile )
-    tPAR = atpy.Table( PARfile )
-
-    f = keptoy.genEmpLC( qalg.tab2dl( tPAR.rows([seed]) )[0] , tLC.t , tLC.f)
-    t = tLC.t
-
+def grid(tLC,Psmp=0.25):
     PG0 = ebls.grid( tLC.t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
-    res = tfind.tfindpro(t,f,PG0,0)
+    res = tfind.tfindpro(tLC.t,tLC.f,PG0,0)
     tRES = qalg.dl2tab([res])
-
-    tRES.add_keyword("LCFILE" ,LCfile)
-    tRES.add_keyword("PARFILE",PARfile)
-    tRES.table_name = "RES"
     tRES.comments = "Table with the simulation results"
-    RESfile = os.path.join(simpath,'tRES%04d.fits' % seed)
-    tRES.write(RESfile,overwrite=True)
+    tRES.table_name = "RES"
+    tRES.keywords = tLC.keywords
+    return tRES
 
-def makeValScript(LCfile,PARfile,nsim=None,test=False):
-    tPAR = atpy.Table( PARfile )
-    simpath = os.path.dirname(LCfile)
-
-    if test:
-        nCheck = 5
-        nsim = 1
-        suffix = '_test'
-    else:
-        nCheck = 50
-        nsim = len(tPAR.data)
-        suffix = ''
-
-    scripts = []
-    for seed in range(nsim):
-        template = """
-import sim
-sim.val('%(LCfile)s','%(PARfile)s',%(nCheck)i, %(seed)i )
-""" % {'LCfile':LCfile,'PARfile':PARfile,'seed':seed,'nCheck':nCheck}
-
-        fpath = os.path.join(simpath,'val%04d%s.py' % (seed,suffix)   )
-        f = open( fpath,'wb' )
-        f.writelines(template)
-        os.chmod(fpath, stat.S_IREAD | stat.S_IWRITE | stat.S_IXUSR)
-        scripts.append(fpath)
-
-    print template
-
-    return scripts
-
-
-def val(LCfile,PARfile,nCheck,seed):
-    simpath = os.path.dirname(LCfile)
-
-    tLC =  atpy.Table( LCfile )
-    tPAR = atpy.Table( PARfile )
-    f = keptoy.genEmpLC( qalg.tab2dl( tPAR.rows([seed]) )[0] , tLC.t , tLC.f)
-    t = tLC.t
-
-    RESfile = os.path.join(simpath,'tRES%04d.fits' % seed)
-    tRES = atpy.Table(RESfile)
-
+def val(tLC,tRES,nCheck=50):
     dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)
+    resL = tval.fitcandW(tLC.t,tLC.f,dL)
 
-    print 21*"-" + " %d" % (seed)
-    
-    resL = tval.fitcandW(t,f,dL)
     print "   iP      oP      s2n    "
     for d,r in zip(dL,resL):
         print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
 
-
     # Alias Lodgic.
     resL = [r for r in resL if  r['s2n'] > 5]
-
-    resL = tval.aliasW(t,f,resL)
+    resL = tval.aliasW(tLC.t,tLC.f,resL)
     for d,r in zip(dL,resL):
         print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
 
     tVAL = qalg.dl2tab(resL)
     tVAL.keywords = tRES.keywords
-    tVAL.keywords['RESFILE'] = RESfile
+    return tVAL
 
-    VALfile = os.path.join(simpath,'tVAL%04d.fits' % seed )
-    tVAL.write(VALfile,overwrite=True)
-
-def simSetup():
-    """
-    Walk user through setting up a script.
-    """
-
-    simpath = raw_input('Enter Simulation Directory: ')
-    simpath = os.path.abspath(simpath)
-
-    LCfile = os.path.join(simpath,'tLC.fits')
-    PARfile = os.path.join(simpath,'tPAR.fits')
-
-    tPAR = atpy.Table(PARfile)
-    tLC  = atpy.Table(LCfile)
-
-    gridScripts = makeGridScript(LCfile,PARfile)
-    valScripts  = makeValScript(LCfile,PARfile)
-
-    gridScriptTest = makeGridScript(LCfile,PARfile,test=True)
-    valScriptTest  = makeValScript(LCfile,PARfile,test=True)
-
-    boolRunGrid = yesno( raw_input('Process Grid Scripts? [y/n]') )
-    boolRunVal  = yesno( raw_input('Process Val Scripts? [y/n] ')  )
-
-    from IPython.parallel import Client
-    rc = Client()
-    view = rc.load_balanced_view()
-
-    runfail = True
-    while runfail:
-        print "Running a test case"
-        bgrid = view.map(srun,gridScriptTest,block=True)[0]
-        bval  = view.map(srun,valScriptTest,block=True)[0]
-        print "Test Grid Exit Status %i" % bgrid
-        print "Test Val Exit Status %i" % bval
-
-        runfail = bgrid | bval # Both exit statuses must be 0
-        if ~runfail:
-            print "both test runs suceeded"
-        
-
-    RESfiles = glob.glob( os.path.join(simpath,'tRES????.fits') )
-    VALfiles = glob.glob( os.path.join(simpath,'tVAL????.fits') )
-
-    if ~yesno( raw_input('Overwrite tRES ? [y/n]') ):
-        for RESfile in RESfiles:
-            f = os.path.join(simpath,'grid%04d.py' % name2seed(RESfile) )
-            gridScripts.remove(f)
-
-    if ~yesno( raw_input('Overwrite tVAL ? [y/n]') ):
-        for VALfile in VALfiles:
-            f = os.path.join(simpath,'val%04d.py' % name2seed(VALfile) )
-            valScripts.remove(f)
-
-    if boolRunGrid:
-        view.map(srun,gridScripts,block=True)
-
-    if boolRunVal:
-        view.map(srun,valScripts,block=True)
-        files = glob.glob(simpath+'tRES????.fits')
-        tRED = resRed(tPAR,files)
-        tRED.write(os.path.join(simpath,'tRED.fits'))
-
-def srun(s):
-    """
-    Convert a script to a python call + log
-    """
-    log = s.split('.')[0]+'.log'
-    return subprocess.call( 'python %s > %s' % (s,log) ,shell=True )
 
 
 def iPoP(tval):
@@ -221,15 +57,6 @@ def iPoP(tval):
     iMax = s2n.argmax()
     t = tval.rows( [iMax] )
     return t
-
-def yesno(s):
-    """
-    Convert yes no to boolean
-    """
-    if s[0] == 'y':
-        return True
-    else:
-        return False
 
 def diagFail(t):
     """
@@ -263,8 +90,8 @@ def addFlag(t):
         balias,bwin = diagFail(t.rows([i]))
         baliasL.append(balias)
         bwinL.append(bwin)
-    keplerio.update_columns(t,'balias',baliasL)
-    keplerio.update_columns(t,'bwin',bwinL)
+    keplerio.update_column(t,'balias',baliasL)
+    keplerio.update_column(t,'bwin',bwinL)
     return t
 
 
@@ -319,7 +146,7 @@ def resRed(files,PARfile=None,LCfile=None):
 
     col = ['s2n','P','epoch','tdur','df'] # columns to attach
     for c in col:
-        keplerio.update_columns(tRED,'o'+c,ttemp[c])    
+        keplerio.update_column(tRED,'o'+c,ttemp[c])    
 
     addbg(tRED)
     addFlag(tRED)
@@ -327,7 +154,7 @@ def resRed(files,PARfile=None,LCfile=None):
 
 def addbg(t):    
     bg = ( abs(t.P - t.oP)/t.P < 0.001 ) & ( abs(t.epoch - t.oepoch) < 0.1 )
-    keplerio.update_columns(t,'bg',bg)    
+    keplerio.update_column(t,'bg',bg)    
     return t
 
 def getkw(file):
@@ -417,12 +244,15 @@ def inject(tLCbase,tPAR,seed):
     Inject transit signal into lightcurve.
     """
     tPAR = tPAR.where(tPAR.seed == seed)
-    assert len(tPAR.data) == 1, "Seed must be unique" 
     d0 = qalg.tab2dl(tPAR)[0]    
+
+    assert len(tPAR.data) == 1, "Seed must be unique" 
     tLC = map(keplerio.nQ,tLCbase)
     inj = lambda t : tinject(t,d0)
     tLC = map(inj,tLC)
     tLCraw = atpy.TableSet(tLC)
+    tLCraw.keywords = d0
+
     return tLCraw
 
 def tinject(t0,d0):
