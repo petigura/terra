@@ -27,7 +27,6 @@ def KICPath(KIC,basedir):
               'clip' - clipped data
               'dt'   - detrended data.
     """
-
     if basedir is 'orig':
         basedir = os.path.join(kepdat,'EX/Q*/')
     if basedir is 'clip':
@@ -58,8 +57,10 @@ def qload(file):
     hdu = pyfits.open(file)
     t = atpy.Table(file,type='fits')    
 
-    kw = ['nQ','cut','outreg']
+    kw = ['NQ','CUT','OUTREG']
     hkw = ['QUARTER','MODULE','CHANNEL','OUTPUT']
+
+    remcol = []
 
     t.add_keyword('PATH',file)
     for k in kw:
@@ -98,7 +99,7 @@ def nQ(t0):
         t.data[c2]  =  t.data[c2]/medf - 1
         t.data[ec2] =  t.data[ec2]/medf
 
-    t.keywords['nQ'] = True
+    t.keywords['NQ'] = True
 
     return t
 
@@ -130,7 +131,7 @@ def cut(t0, cutk=['f','ef','fpdc','efpdc'] ):
     for k in cutk:
         t.data[k][np.where(tm.mask)] = np.nan
 
-    t.keywords['cut'] = True
+    t.keywords['CUT'] = True
     return t
 
 def sQ(tLCset0):
@@ -228,6 +229,7 @@ def toutReg(tLC0,outregcol=['f','fpdc']):
         tLC.data[orc] = x
         tLC.data[eorc] = ex
 
+    tLC.keywords['OUTREG'] = True
     return tLC
 
 def ppQ(t0):
@@ -237,8 +239,6 @@ def ppQ(t0):
     Apply the following functions to every quarter.
     """
     t = copy.deepcopy(t0)
-    t = nQ(t)
-    
     t.data = cut(t).data
     t.data = toutReg(t).data
     data,ffit,bvectors,p1 = detrend.cbv(t,'f','ef')
@@ -254,13 +254,16 @@ def prepLC(tLCset):
     3.  Interpolate over the short gaps in the timeseries.
 
     """
+    kw = tLCset.keywords
     tLCset = map(ppQ,tLCset)
-    tLC = sQ(tLCset)
+    tLC    = sQ(tLCset)
+
+    for k in kw.keys():
+        tLC.keywords[k] = kw[k]
 
     # Set time = 0
     update_column(tLC,'t',tLC.TIME)
     tLC.t -= np.nanmin(tLC.t)
-
     tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
     return tLC
     
@@ -281,7 +284,6 @@ def cadFill(cad0):
     iFill : Indecies that were not missing.
 
     """
-    
     bins = np.arange(cad0[0],cad0[-1]+2)
     count,cad = np.histogram(cad0,bins=bins)
     iFill = np.where(count == 1)[0]

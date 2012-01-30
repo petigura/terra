@@ -149,7 +149,7 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False):
     deg = 5
 
     kw = tQLC.keywords
-    assert kw['nQ'],'Assumes lightcurve has been normalized.' 
+    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
 
     # Load up the BV
     bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % kw['QUARTER'])
