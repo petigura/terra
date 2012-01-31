@@ -50,7 +50,6 @@ def val(tLC,tRES,nCheck=50,ver=True):
     return tVAL
 
 
-
 def iPoP(tval):
     """
     """
@@ -152,6 +151,17 @@ def resRed(files,PARfile=None,LCfile=None):
     addbg(tRED)
     addFlag(tRED)
     return tRED
+
+def convEpoch(epoch0,P,t0):
+    """
+    Convert Epoch
+
+    There are a couple of conventions for epochs.  keptoy.genEmpLC
+    injects signals at the input epoch.  The transit finder zeroes out
+    the starting time.  The output epoch will not be the same.
+    """
+    
+    return np.remainder(epoch0 + t0,P)
 
 def addbg(t):    
     bg = ( abs(t.P - t.oP)/t.P < 0.001 ) & ( abs(t.epoch - t.oepoch) < 0.1 )
