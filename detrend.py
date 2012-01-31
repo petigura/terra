@@ -124,7 +124,7 @@ def nanIntrp(x0,y0,nContig=3):
 
 
 
-def cbv(tQLC,fcol,efcol,cadmask=None,dt=False):
+def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
     """
     Cotrending basis vectors.
 
@@ -138,6 +138,7 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False):
     fcol    : string.  name of the flux column
     efol    : string.  name of the flux_err colunm
     cadmask : Boolean array specifying a subregion
+    ver     : Verbose output (turn off for batch).
 
     Returns
     -------
@@ -203,7 +204,7 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False):
 
     p1,fopt ,iter ,funcalls, warnflag  = \
         fmin(objCBV,p0,args=(f,ferr,bvectors),disp=True,maxfun=10000,
-             maxiter=10000,full_output=True,)
+             maxiter=10000,full_output=ver)
 
     if warnflag != 0:
         p1 = p0
