@@ -4,7 +4,6 @@ import os
 import stat
 from numpy import ma
 import glob
-import subprocess
 import numpy as np
 import copy
 
