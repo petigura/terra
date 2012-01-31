@@ -16,6 +16,6 @@ VALfile = 'tVAL%04d.fits' % tLC.keywords['SEED']
 dir = os.path.dirname(args.RESfile)
 VALfile = os.path.join(dir,VALfile)
 
-tVAL = sim.val(tLC,tRES)
+tVAL = sim.val(tLC,tRES,ver=False)
 tVAL.write(VALfile,type='fits',overwrite=True)
 
