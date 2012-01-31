@@ -203,8 +203,8 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
 
 
     p1,fopt ,iter ,funcalls, warnflag  = \
-        fmin(objCBV,p0,args=(f,ferr,bvectors),disp=True,maxfun=10000,
-             maxiter=10000,full_output=ver)
+        fmin(objCBV,p0,args=(f,ferr,bvectors),disp=ver,maxfun=10000,
+             maxiter=10000,full_output=True)
 
     if warnflag != 0:
         p1 = p0

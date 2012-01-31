@@ -16,5 +16,5 @@ dir = os.path.dirname(args.RAWfile)
 
 tLCrawfile = 'tLC%04d.fits' % tLC.keywords['SEED']
 tLCrawfile = os.path.join(dir,tLCrawfile)
-
 tLC.write(tLCrawfile,overwrite=True)
+print "raw2lc: Created %s" % (tLCrawfile)
