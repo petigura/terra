@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('RAWfile',type=str)
 args   = parser.parse_args()
 tLCraw = atpy.TableSet(args.RAWfile,type='fits')
-tLC    = keplerio.prepLC(tLCraw)
+tLC    = keplerio.prepLC(tLCraw,ver=False)
 
 dir = os.path.dirname(args.RAWfile)
 

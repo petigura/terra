@@ -232,7 +232,7 @@ def toutReg(tLC0,outregcol=['f','fpdc']):
     tLC.keywords['OUTREG'] = True
     return tLC
 
-def ppQ(t0):
+def ppQ(t0,ver=True):
     """
     Preprocess Quarter
 
@@ -241,11 +241,11 @@ def ppQ(t0):
     t = copy.deepcopy(t0)
     t.data = cut(t).data
     t.data = toutReg(t).data
-    data,ffit,bvectors,p1 = detrend.cbv(t,'f','ef')
+    data,ffit,bvectors,p1 = detrend.cbv(t,'f','ef',ver=ver)
     update_column(t,'fcbv',ffit)
     return t
 
-def prepLC(tLCset):
+def prepLC(tLCset,ver=True):
     """
     Prepare Lightcurve
 
@@ -255,7 +255,9 @@ def prepLC(tLCset):
 
     """
     kw = tLCset.keywords
-    tLCset = map(ppQ,tLCset)
+    
+    ppQlam = lambda t0 : ppQ(t0,ver=ver)
+    tLCset = map(ppQlam,tLCset)
     tLC    = sQ(tLCset)
 
     for k in kw.keys():

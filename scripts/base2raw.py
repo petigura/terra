@@ -20,3 +20,4 @@ dir = os.path.dirname(args.BASEfile)
 tLCrawfile = 'tLCraw%04d.fits' % args.seed
 tLCrawfile = os.path.join(dir,tLCrawfile)
 tLCraw.write(tLCrawfile,overwrite=True)
+print "base2raw: wrote %s" % tLCrawfile
