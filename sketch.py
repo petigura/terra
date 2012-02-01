@@ -268,9 +268,12 @@ def window(tRES,tLC):
 
 import tval
 import copy
+
 def LDT(t,f,p):
-    # run the local detrender.
-    fig = plt.gcf()
+    """
+    Visualize how the local detrender works
+    """
+
     ax = gca()
 
     d  = tval.LDT(t,f,p,wd=2)
@@ -622,6 +625,12 @@ def inspVAL(tVAL,p=None):
     plt.subplots_adjust(hspace=0.001)
     
     draw()
+
+
+
+
+
+
 
 def dMLDT(t,f,p,axL):
     """
