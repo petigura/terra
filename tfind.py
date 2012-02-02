@@ -226,7 +226,7 @@ def pep(t,f,twd,PcadG):
 
     filled = isfilled(t,f,twd)
 
-    func = lambda Pcad: ep(dM,Pcad)
+    func = lambda Pcad: ep(t,dM,Pcad)
     resL = map(func,PcadG)
 
     ee = array([ r['mepoch'] for r in resL ])
@@ -242,9 +242,10 @@ def pep(t,f,twd,PcadG):
         }
     return res
 
-def ep(dM,Pcad):
+def ep(t,dM,Pcad):
     """
     Search in Epoch.
+
 
     Returns the following information:
     - 'mfom'   : Maximal figure of merit
@@ -260,7 +261,7 @@ def ep(dM,Pcad):
     dMW = ma.masked_invalid(dMW)
 
     nt,ne = dMW.shape
-    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc 
+    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t[0]
 
     vcount = (~dMW.mask).astype(int).sum(axis=0)
     win = (vcount >= 3).astype(float)
@@ -288,7 +289,7 @@ def ep(dM,Pcad):
 
     return res
 
-def tfindpro(t,f,PG0,i):
+def tfindpro(t,f,PG0):
     """
     Transit Finder Profiler
 
@@ -304,9 +305,7 @@ def tfindpro(t,f,PG0,i):
     res : Dictionary of results for subsequent interpretation.
     
     """
-    sys.stderr.write("%i\n" % i)
     res = tdpep(t,f,PG0)
-
 
     epoch = res['epoch2d']
     df    = res['df2d']
@@ -327,7 +326,8 @@ def tfindpro(t,f,PG0,i):
     s2n   = s2n[iMaTwd,x]
     twd   = np.array( [twd[i] for i in iMaTwd] )
 
-    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,'twd':twd}
+    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,
+           'twd':twd}
 
     return res
 

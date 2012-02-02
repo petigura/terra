@@ -109,19 +109,19 @@ def at(f,t,P,phase,num,s2n):
 
     return f
 
-def inject(t0,f0,**kw):
+def inject(time0,flux0,**kw):
     """
     Inject a transit into an existing time series.
 
     Parameters
     ----------
-    t0    : time series (required).
-    f0    : flux series (required).
+    time0    : time series (required).
+    flux0    : flux series (required).
     
     phase : Phase of ingress (phase * P = time of ingress) or:
     epoch : Epoch of mid transit.
 
-    df    : Depth of transit
+    df    : Depth of transit (ppm)
     s2n   : Signal to noise (noise computed in a naive way).
 
     tdur : Transit duration (units of days).  If not given, compute
@@ -131,8 +131,8 @@ def inject(t0,f0,**kw):
     -------
     f     : the modified time series.
     """
-    t = t0.copy()
-    f = f0.copy()
+    t = time0.copy()
+    f = flux0.copy()
 
     assert kw.has_key('epoch') ^ kw.has_key('phase') ,\
         "Must specify epoch xor phase"
@@ -156,13 +156,14 @@ def inject(t0,f0,**kw):
         noise = ma.std(f)
         df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,lc) )
     else:
-        df = kw['df']
+        df = 1e-6*kw['df']
 
     if kw.has_key('epoch'):
         epoch = kw['epoch']
     else:
         epoch = kw['phase']*P
 
+    epoch = np.mod(epoch,P)
     tm = abs( tfold - epoch ) # Time before (or after) midtransit.
     ie = 0.5*(tdur - lc)
     oe = 0.5*(tdur + lc)
@@ -304,24 +305,19 @@ def genEmpLC(d0,tdt,fdt):
     Parameters
     ----------
     darr : List of dictionaries specifying the LC parameters.
-    tdt  :
-    fdt  :
+    tdt  : Input time series
+    fdt  : Input flux series
 
 
     Returns
     -------
-    tl   : List of time arrays
-    fl   : List of flux arrays
-    
+    f :  flux arrays
     """
-
     d = copy.deepcopy(d0)
-
     d.pop('seed')
-    d.pop('tbase')
+    d.pop('t0')
     f = inject(tdt,fdt,**d)
     f = f.astype(np.float32)
-        
     return f
 
 def genSynLC(darr):

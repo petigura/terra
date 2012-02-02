@@ -263,9 +263,7 @@ def prepLC(tLCset,ver=True):
     for k in kw.keys():
         tLC.keywords[k] = kw[k]
 
-    # Set time = 0
     update_column(tLC,'t',tLC.TIME)
-    tLC.t -= np.nanmin(tLC.t)
     tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
     return tLC
     

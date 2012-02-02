@@ -50,27 +50,33 @@ def init(**kwargs):
 
     Usage
     -----
-    init(P=200,s2n=([10,20],5),tbase=500).  
+    init(P=200,df=([100,400],5),tbase=500).  
 
     - List of dictionaries specifying 5 runs centered around P = 200,
       5 values of s2n ranging from 10 to 20, and tbase=500.
     """
     keys=kwargs.keys()
     assert keys.count('P') == 1, "Must specify period"
+    assert keys.count('t0') == 1, "Specify t0 kwarg."
+    assert kwargs['df'] > 1, "df should be in units of ppm"
 
     P = kwargs['P']
+    t0 = kwargs['t0']
     wP   =  0.1   # dither period by 10%
     arrL = []
 
-    mult = kwargs['n']
-    keys.remove('n')
+    if keys.count('n') == 1:
+        mult = kwargs['n']
+        keys.remove('n')
+    else:
+        mult = 1
 
     for k in keys:
         arg = kwargs[k]
         if type(arg) is not tuple:
             arg = (arg,1)
 
-        n     = arg[1]
+        n = arg[1]
         if type(arg[0]) is list:
             rng = arg[0]
             arr   = logspace( log10(rng[0]) , log10(rng[1]) , n)
@@ -90,9 +96,11 @@ def init(**kwargs):
                 d[k] = v
 
             d['Pblock'] = int(d['P'])
+            d['df'] = int(d['df'])
+
             np.random.seed(seed)
             d['P'] = d['P']*(1 + wP*random() ) 
-            d['epoch'] = d['P']*random()
+            d['epoch'] = t0 + d['P']*random()
             d['tdur'] = a2tdur(P2a(d['P']))
             d['seed'] = seed
             darr.append(d) 
@@ -127,40 +135,6 @@ def dl2tab(dl):
         t.add_column(k,data)
 
     return t
-
-
-
-def profile(tl,fl,PGrid,func,par=False):
-    """
-    Will profile a transit search algorithm over a range of:
-    - S/N
-    - tbase
-    
-    Parameters
-    ----------
-    tl : List of time measurements
-    fl : List of flux measurements
-    PGrid : List trial periods
-
-    func : Function that is being profiled. Must have the following
-           signature:
-           func(t,f,PGrid,counter)
-
-    """
-    nsim = len(tl)
-    PGridList = [PGrid for i in range(nsim)]
-    counter = range(nsim)
-
-    if par:
-        from IPython.parallel import Client
-        rc = Client()
-        lview = rc.load_balanced_view()
-        res = lview.map(func,tl,fl,PGridList,counter,block=True)
-    else:
-        res = map(func,tl,fl,PGridList,counter)        
-
-    return res
-
 
 def ROC(t):
     """
