@@ -634,20 +634,18 @@ def pep(tRES):
     x = tRES.PG[0]
     y = tRES.epoch[0]
     c = tRES.s2n[0]
+    sid = argsort(c)
+
+    x = x[sid]
+    y = y[sid]
+    c = c[sid]
     ax.scatter(x,y,c=c,cmap=cm.gray_r,edgecolors='none',vmin=7)
 
 def periodogram(tRES):
     ax = gca()
     x = tRES.PG[0]
-    y = tRES.epoch[0]
+    y = tRES.s2n[0]
     ax.plot(x,y)
-
-
-def DM():
-    return
-
-
-
 
 
 def dMLDT(t,f,p,axL):
