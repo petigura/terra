@@ -186,7 +186,7 @@ def fitcand(t,f,p0,ver=True):
             else: 
                 fitpass = False
                 s2n = 0
-            if disp:
+            if ver:
                 print "%7.02f %7.02f %7.02f" % (p1[0] , p1[1] , s2n )
 
         except:
