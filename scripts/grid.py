@@ -17,3 +17,4 @@ tRESfile = 'tRES%04d.fits' % tLC.keywords['SEED']
 dir = os.path.dirname(args.LCfile)
 tRESfile = os.path.join(dir,tRESfile)
 tRES.write(tRESfile,type='fits',overwrite=True)
+print "grid: Created %s" % tRESfile
