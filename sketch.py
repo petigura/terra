@@ -565,68 +565,86 @@ def inspSim():
             LDTfail.append( tPAR.seed[0] )
 
 
-def inspVAL(tVAL,p=None):
-#    fig,axL = subplots(nrows=2)
-    nrows = 4
+def inspVAL(tLC,tRES,*pL):
+    f = tLC.f # - tLC.fcbv
+    t = tLC.t
 
-    tLC = atpy.Table(tVAL.keywords['LCFILE'])
-    tPAR = atpy.Table(tVAL.keywords['PARFILE'])
-    valkw = tVAL.keywords
-    pknown = dict(P=valkw['P'],epoch=valkw['EPOCH'],df=valkw['DF'],
-                  tdur=valkw['TDUR'],seed=valkw['SEED'],tbase=valkw['TBASE'])
+    nrows = 4 + 2*len(pL)
 
-    f = keptoy.genEmpLC(pknown, tLC.t,tLC.f  )
-
-    if p == None:
-        nrows = 4
-        pL = [pknown ]
-        colors = ['r']
-    else:
-        nrows = 6
-        pL = [pknown,p]
-        colors = ['r','c']
+    colors = ['r']
 
     fig = gcf()
     fig.clf()
     ax0 = fig.add_subplot(nrows,1,1)
     ax1 = fig.add_subplot(nrows,1,2,sharex = ax0)
     axL = [ax0,ax1]
-    axL[0].plot(tLC.t,f)
+    axL[0].plot(t,f)
     dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    axL[1].plot(tLC.t,dM)
+    axL[1].plot(t,dM)
 
     for i in range(3,nrows+1):
         axL.append( fig.add_subplot(nrows,1,i) )
 
+    sca(axL[2])
+    periodogram(tRES)
+
+    sca(axL[4])
+    pep(tRES)
+
+
     for i in range(len(pL)):
         p = pL[i]
         c = colors[i]
-        ms = tval.midTransId( tLC.t ,  p)
-        sL = [tval.getSlice(m,100) for m in ms]
-        [axL[0].plot(tLC.t[s],f[s],c) for s in sL]
 
-        [axL[1].plot(tLC.t[s],dM[s],c) for s in sL]
+#        ms = tval.midTransId( t ,  p)
+#        sL = [tval.getSlice(m,100) for m in ms]
+#        [axL[0].plot(t[s],f[s],c) for s in sL]
+#        [axL[1].plot(t[s],dM[s],c) for s in sL]
 
-        ifom = 2+2*i
-        ildt = 3+2*i
+        ifom = 3+2*i
+        ildt = 4+2*i
 
         sca( axL[ifom] )
         FOM(dM,p['P'])
-        axvline(p['epoch']/lc)
-        sca( axL[ildt] )
-        LDT(tLC.t,f,p)
 
-    for ax in axL:
-        xa = ax.get_xaxis()
-        ya = ax.get_yaxis()
-        xa.set_visible(False)
-#        ya.set_visible(False)
+        try:
+            axvline(p['epoch']/lc)
+            sca( axL[ildt] )
+            LDT(t,f,p)
+        except:
+            pass
 
-    plt.subplots_adjust(hspace=0.001)
+#    for ax in axL:
+#        xa = ax.get_xaxis()
+#        ya = ax.get_yaxis()
+#        xa.set_visible(False)
+##        ya.set_visible(False)
+
+    plt.subplots_adjust(hspace=0.16)
     
     draw()
 
 
+def pep(tRES):
+    """
+    Show best epoch as a function of period
+    """
+    ax = gca()
+
+    x = tRES.PG[0]
+    y = tRES.epoch[0]
+    c = tRES.s2n[0]
+    ax.scatter(x,y,c=c,cmap=cm.gray_r,edgecolors='none',vmin=7)
+
+def periodogram(tRES):
+    ax = gca()
+    x = tRES.PG[0]
+    y = tRES.epoch[0]
+    ax.plot(x,y)
+
+
+def DM():
+    return
 
 
 
