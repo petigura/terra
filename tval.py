@@ -134,7 +134,7 @@ def LDT(t,f,p,wd=2.):
     ret = dict(tdt=tdt,fdt=fdt,trend=trend,ffit=ffit,p1L=p1L)
     return ret
 
-def fitcand(t,f,p0,disp=True):
+def fitcand(t,f,p0,ver=True):
     """
     Fit Candidate Transits
 
@@ -199,14 +199,16 @@ def fitcand(t,f,p0,disp=True):
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
 
-def fitcandW(t,f,dL,view=None):
+def fitcandW(t,f,dL,view=None,ver=True):
     """
     """
     n = len(dL)
+    func = lambda d: fitcand(t,f,d,ver=ver)
+
     if view != None:
-        resL = view.map(fitcand , n*[t] , n*[f] , dL, n*[False] ,block=True)
+        resL = view.map(func, dL,block=True)
     else:
-        resL = map(fitcand , n*[t] , n*[f] , dL)
+        resL = map(func, dL)
  
     return resL
 

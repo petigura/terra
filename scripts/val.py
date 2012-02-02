@@ -9,8 +9,8 @@ parser = argparse.ArgumentParser(description='Create tRES from tLC/tPAR')
 parser.add_argument('RESfile',type=str)
 args = parser.parse_args()
 
-tRES = atpy.Table(args.RESfile)
-tLC  = atpy.Table(tRES.keywords['LCFILE'])
+tRES = atpy.Table(args.RESfile,type='fits')
+tLC  = atpy.Table(tRES.keywords['LCFILE'],type='fits')
 
 VALfile = 'tVAL%04d.fits' % tLC.keywords['SEED']
 dir = os.path.dirname(args.RESfile)

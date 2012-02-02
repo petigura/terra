@@ -25,12 +25,7 @@ def grid(tLC,Psmp=0.25):
 
 def val(tLC,tRES,nCheck=50,ver=True):
     dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)
-    resL = tval.fitcandW(tLC.t,tLC.f,dL)
-
-    if ver:
-        print "   iP      oP      s2n    "
-        for d,r in zip(dL,resL):
-            print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
+    resL = tval.fitcandW(tLC.t,tLC.f,dL,ver=ver)
 
     # Alias Lodgic.
     # Check the following periods for aliases.
@@ -38,10 +33,6 @@ def val(tLC,tRES,nCheck=50,ver=True):
     resLLow  = [r for r in resL if  r['s2n'] < 5] 	
     
     resLHigh = tval.aliasW(tLC.t,tLC.f,resLHigh)
-
-    if ver:
-        for d,r in zip(dL,resLHigh):
-            print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
             
     # Combine the high and low S/N 
     resL = resLHigh + resLLow
