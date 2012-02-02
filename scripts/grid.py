@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description='Create tRES from tLC/tPAR')
 parser.add_argument('LCfile',type=str)
 args = parser.parse_args()
 
-tLC = atpy.Table(args.LCfile)
+tLC = atpy.Table(args.LCfile,type='fits')
 tRES = sim.grid(tLC,Psmp = 0.25)
 tRES.add_keyword("LCFILE" ,args.LCfile)
 tRESfile = 'tRES%04d.fits' % tLC.keywords['SEED']
