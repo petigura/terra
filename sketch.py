@@ -661,5 +661,56 @@ def dMLDT(t,f,p,axL):
     LDT(tLC.t,f,p)
         
 
-    
+def pp(tLCbase,tLC):
+    """
+    """
+    fig,axL = subplots(nrows=4,sharex=True)
+    fig.subplots_adjust(hspace=0.0001,bottom=0.03,top=0.97,left=0.06,right=0.97)
+    ll = [axL[0].plot(t.TIME,t.f,',r',mew=0) for t in tLCbase]
+    ll[0][0].set_label('Original Time Series')
+    axL[0].plot(tLC.TIME,tLC.f,',k',mew=0,label='Pre-processing')
+    axL[0].plot(tLC.TIME,tLC.fcbv,'c',mew=0,label='CBV detrend')
 
+    dM,x,x,x,x = tfind.MF(tLC.f,20)
+    dMcbv,x,x,x,x = tfind.MF(tLC.f-tLC.fcbv,20)
+    axL[1].plot(tLC.TIME,dM,'k')
+    axL[1].plot(tLC.TIME,dMcbv,'c')
+
+    sca(axL[2])
+    waterfall(tLC.TIME,tLC.f,cmap=cm.hot )
+    ylabel('Specgram LC')
+    sca(axL[3])
+    waterfall(tLC.TIME,tLC.fcbv,cmap=cm.hot)
+    ylabel('Specgram DT')
+    
+def waterfall(t,f,**kwargs):
+    fm = ma.masked_invalid(f)
+    fmdt = fm.copy()
+    fmdt.fill_value=0
+    sL = ma.notmasked_contiguous(fm)
+
+    dt3 = lambda x,y: y - polyval(polyfit(x,y,3),x)
+    for s in sL:
+        fmdt[s] = dt3(t[s],fm[s])
+    fdt0 = fmdt.filled()
+    
+    n = 10
+    NFFT = 2**n
+    Fs = 48
+
+    Pxx, freqs, bins, im = \
+        specgram(fdt0, NFFT=2**n, Fs=Fs,xextent=(t[0],t[-1]) ,
+                 interpolation='nearest',scale_by_freq=False,pad_to=2**14,
+                 noverlap=2**n-2**6)    
+    cla()
+
+    fMaId = argsort(abs(freqs-1))[0]
+    fMa = freqs[fMaId]    
+    Pxx = Pxx[:fMaId,::]
+    per = percentile(Pxx,50)
+    bins += t[0] - NFFT/ 2 /Fs
+
+    imshow(Pxx,aspect='auto',extent=[bins[0],bins[-1],0,freqs[fMaId]],
+           origin='left',vmin=per,**kwargs)
+
+    

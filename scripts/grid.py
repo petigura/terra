@@ -7,11 +7,23 @@ import atpy
 
 parser = argparse.ArgumentParser(description='Create tRES from tLC/tPAR')
 parser.add_argument('LCfile',type=str)
+parser.add_argument('--cbv',action='store_true',help='process with CBV')
 args = parser.parse_args()
 
 tLC = atpy.Table(args.LCfile,type='fits')
-tRES = sim.grid(tLC,Psmp = 0.25)
+t = tLC.t
+
+if args.cbv:
+    f = tLC.f - tLC.fcbv
+else:
+    f = tLC.f
+    
+tRES = sim.grid(t,f,Psmp = 0.25)
+tRES.comments = "Table with the simulation results"
+tRES.table_name = "RES"
+tRES.keywords = tLC.keywords
 tRES.add_keyword("LCFILE" ,args.LCfile)
+
 tRESfile = 'tRES%04d.fits' % tLC.keywords['SEED']
 
 dir = os.path.dirname(args.LCfile)

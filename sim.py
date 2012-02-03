@@ -14,14 +14,12 @@ import tval
 import keptoy
 import keplerio
 
-def grid(tLC,Psmp=0.25):
-    PG0 = ebls.grid( tLC.t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
-    res = tfind.tfindpro(tLC.t,tLC.f,PG0)
+def grid(t,f,Psmp=0.25):
+    PG0 = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
+    res = tfind.tfindpro(t,f,PG0)
     tRES = qalg.dl2tab([res])
-    tRES.comments = "Table with the simulation results"
-    tRES.table_name = "RES"
-    tRES.keywords = tLC.keywords
     return tRES
+
 
 def val(tLC,tRES,nCheck=50,ver=True):
     dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)
