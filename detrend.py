@@ -18,7 +18,7 @@ gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
-cbvdir = os.path.join(kepdat,'CBV/')
+cbvdir = os.path.join(kepdir,'CBV/')
 
 def stitch(fl,tl,swd = 0.5):
     """
