@@ -43,7 +43,6 @@ def cdpp():
 
 
 
-
 def markT(ax,tT,**kwargs):
     for t in tT:
         ax.axvline(t,**kwargs)
@@ -664,22 +663,25 @@ def dMLDT(t,f,p,axL):
 def pp(tLCbase,tLC):
     """
     """
-    fig,axL = subplots(nrows=4,sharex=True)
+    fig,axL = subplots(nrows=5,sharex=True)
     fig.subplots_adjust(hspace=0.0001,bottom=0.03,top=0.97,left=0.06,right=0.97)
     ll = [axL[0].plot(t.TIME,t.f,',r',mew=0) for t in tLCbase]
     ll[0][0].set_label('Original Time Series')
     axL[0].plot(tLC.TIME,tLC.f,',k',mew=0,label='Pre-processing')
-    axL[0].plot(tLC.TIME,tLC.fcbv,'c',mew=0,label='CBV detrend')
+
+    axL[1].plot(tLC.TIME,tLC.fdtm,',k',mew=0,label='Filtered Data')
+    axL[1].plot(tLC.TIME,tLC.fcbv,'r',mew=0,label='CBV detrend')
+
 
     dM,x,x,x,x = tfind.MF(tLC.f,20)
     dMcbv,x,x,x,x = tfind.MF(tLC.f-tLC.fcbv,20)
-    axL[1].plot(tLC.TIME,dM,'k')
-    axL[1].plot(tLC.TIME,dMcbv,'c')
+    axL[2].plot(tLC.TIME,dM,'k')
+    axL[2].plot(tLC.TIME,dMcbv,'r')
 
-    sca(axL[2])
+    sca(axL[3])
     waterfall(tLC.TIME,tLC.f,cmap=cm.hot )
     ylabel('Specgram LC')
-    sca(axL[3])
+    sca(axL[4])
     waterfall(tLC.TIME,tLC.fcbv,cmap=cm.hot)
     ylabel('Specgram DT')
     

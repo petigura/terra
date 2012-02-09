@@ -50,7 +50,7 @@ def init(**kwargs):
 
     Usage
     -----
-    init(P=200,df=([100,400],5),tbase=500).  
+    init(P=200,df=([100,400],5),tbase=500,KIC=[8144222,8409753]).  
 
     - List of dictionaries specifying 5 runs centered around P = 200,
       5 values of s2n ranging from 10 to 20, and tbase=500.
@@ -58,6 +58,7 @@ def init(**kwargs):
     keys=kwargs.keys()
     assert keys.count('P') == 1, "Must specify period"
     assert keys.count('t0') == 1, "Specify t0 kwarg."
+    assert keys.count('KIC') == 1, "Specify KIC number."
     assert kwargs['df'] > 1, "df should be in units of ppm"
 
     P = kwargs['P']
@@ -71,19 +72,16 @@ def init(**kwargs):
     else:
         mult = 1
 
+    # Convert KW to list
     for k in keys:
         arg = kwargs[k]
-        if type(arg) is not tuple:
-            arg = (arg,1)
-
-        n = arg[1]
-        if type(arg[0]) is list:
+        if type(arg) is tuple:
             rng = arg[0]
-            arr   = logspace( log10(rng[0]) , log10(rng[1]) , n)
+            arr   = logspace( log10(rng[0]) , log10(rng[1]) , arg[1])
+        elif type(arg) is list:
+            arr = arg
         else:
-            arr    = empty(n)
-            arr[:] = arg[0]
-
+            arr = [arg]
         arrL.append(arr)
 
     par = itertools.product(*arrL)

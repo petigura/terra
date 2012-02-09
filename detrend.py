@@ -12,8 +12,6 @@ from scipy import ndimage as nd
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fmin 
 
-# Load up multiquarter data.
-
 cad = 30./60./24.
 dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
@@ -21,6 +19,7 @@ nq = 8
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdat,'CBV/')
+
 def stitch(fl,tl,swd = 0.5):
     """
     Stitch together the boundaries of the quarters.
@@ -43,53 +42,6 @@ def stitch(fl,tl,swd = 0.5):
 
     return fl,tl
 
-from scipy.interpolate import interp1d
-
-
-def cbvDT(KIC):
-    from pyraf import iraf
-    iraf.kepler(_doprint=0)
-
-    vectors = '1 2 3 4 5 6 7 8 9 10'
-    method = 'llsq'
-    fitpower = 2
-    infiles = KICPath(KIC,'tempfits/clip/')
-
-    tset = mqload(infiles)
-    quarters = tset.tables.keys
-    otset = atpy.TableSet()
-    for q in quarters:
-
-        cbvfile = glob.glob(kepdat+'/CBV/*q0%s*' % q[-1]) [0]
-        iraf.kepler.kepcotrend(infile=tset[q].keywords['PATH'],
-                               outfile='temp.fits',
-                               clobber=True,
-                               cbvfile=cbvfile,
-                               vectors=vectors,
-                               method=method,
-                               fitpower=fitpower,
-                               iterate=True,
-                               sigmaclip='2',
-                               maskfile='ranges/cut_bjd.txt',
-                               scinterp='nearest',
-                               plot=True
-                               )
-
-        infostr=  """
-KIC     %i
-Quarter %s
-CBV %s
-fitpower %.2f
-method  %s 
-""" % (KIC,q[-1],vectors.split()[-1],fitpower,method)
-
-        
-        t = atpy.Table('temp.fits',type='fits')
-        t.table_name = q
-
-        otset.append(t)
-    otset.write(kepdat+'/DT/%s.fits' % KIC,type='fits',overwrite=True)
-    
 def larr(iL):
     oL = array([])
     for l in iL:
@@ -122,8 +74,6 @@ def nanIntrp(x0,y0,nContig=3):
 
     return x.data,y.data
 
-
-
 def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
     """
     Cotrending basis vectors.
@@ -145,21 +95,11 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
 
     ffit    : The CBV fit to the fluxes.
     """
-    cbv = [1,2,3]
+    cbv = [1,2,3,4,5,6] # Which CBVs to use.
     ncbv = len(cbv)
-    deg = 5
 
     kw = tQLC.keywords
     assert kw['NQ'],'Assumes lightcurve has been normalized.' 
-
-    # Load up the BV
-    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % kw['QUARTER'])
-    bvfile = glob.glob(bvfile)[0]
-    bvhdu  = pyfits.open(bvfile)
-    bvkw   = bvhdu[0].header
-    bvcolname = 'MODOUT_%i_%i' % (kw['MODULE'],kw['OUTPUT'])
-    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
-    assert bvkw['QUARTER'] == kw['QUARTER']," BV must be from the same quater"
 
     cad   = tQLC['CADENCENO' ]
     t     = tQLC['TIME'      ]
@@ -169,60 +109,88 @@ def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
     tm = ma.masked_invalid(t)
     fm = ma.masked_invalid(f)
     mask  = tm.mask | fm.mask 
+    tm.mask = fm.mask = mask
 
-    if cadmask is not None:
-        assert cadmask.size == cad.size, "Arrays must be of equal sizes."
-        mask  = mask | cadmask # Add the time cut to the mask
+    tBV = bvload(tQLC)
+    bv = vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
+    bv = ma.masked_array(bv)
+    bv.mask = np.tile(mask, (ncbv,1) )
+    p1v = np.zeros(bv.shape)
 
-    gid   = where(~mask)[0]
-    bid   = where(mask)[0]
+    sL = ma.notmasked_contiguous(tm)
+    sL = [s for s in sL if s.stop-s.start > 5 / lc]
 
-    t     = t[gid]
-    f     = f[gid]
-    cad   = cad[gid] 
-    ferr  = ferr[gid] 
+    ffit  = np.zeros(fm.shape)
+    fdtm  = fm.copy()
+    
 
-    # Construct a matrix of BV
-    mbv = lambda i:  tBV['VECTOR_%i' % i][gid]
-    bvectors = map(mbv,cbv)
-    bvectors = vstack(bvectors)
+    for s in sL:
+        fdt = lsdt(tm[s].data,fm[s].data)
+        bvdt = [lsdt(tm[s].data,bv[i,s].data) for i in range(ncbv) ]
+        bvdt = vstack(bvdt)
+        p1 = np.linalg.lstsq(bvdt.T,fdt)[0]
+        ffit[s] = modelCBV(p1,bvdt)
+        fdtm[s] = fdt
+        p1v[:,s] = np.tile( p1,(s.stop-s.start,1) ).T
 
-    if dt:
-        for i in range(ncbv):
-            bvtrend = Legendre.fit(t,bvectors[i],deg)
-            bvectors[i] = bvectors[i] - bvtrend(t)
 
-        ftrend = Legendre.fit(t,f,deg)
-        f = f - ftrend(t)
+    return fdtm,ffit,p1v
 
-    data      = fm.data.copy()
-    data[gid] = f.astype(float32)
-    data[bid] = np.nan
+def lsdt(t,f):
+    """
+    Long/short timescale detrending.
+    """
 
-    p0 = np.zeros( len(cbv) ) # Guess for parameters.
+    tlong  = 10 # Cut out timescales longer than tlong days.
+    tshort = 2./24 # Cut out timescales shorter than tshort days. 
+    
+    # Require that data is contiguous.
+    assert max(t[1:]-t[0:-1]) < 1.2*lc
 
+    sp = UnivariateSpline(t,f)
+    fdt = f - sp(t)
+
+    wid = tshort / lc
+    fdt = nd.uniform_filter(fdt,size=4)
+    return fdt
+    
+def bvfit(t,f,ferr,bv):
+    """
+    Fit basis vectors:
+    """
+    
+    p0 = np.ones( bv.shape[0] ) # Guess for parameters.
 
     p1,fopt ,iter ,funcalls, warnflag  = \
-        fmin(objCBV,p0,args=(f,ferr,bvectors),disp=ver,maxfun=10000,
+        fmin(objCBV,p0,args=(f,ferr,bv),disp=False,maxfun=10000,
              maxiter=10000,full_output=True)
+    ffit = modelCBV(p1,bv).astype(float32)
+    return p1,ffit
 
-    if warnflag != 0:
-        p1 = p0
-
-    ffit      = fm.data.copy()
-    ffit[gid] = modelCBV(p1,bvectors).astype(float32)
-    ffit[bid] = np.nan    
-
-    return data,ffit,bvectors,p1
-
-
-def objCBV(p,f,ferr,bvectors):
+def objCBV(p,f,ferr,bv):
    """
    Objective function for CBV vectors.
    """
-   nres = ( f - modelCBV(p,bvectors) ) /ferr
+   nres = ( f - modelCBV(p,bv) ) /ferr
    return np.sum( abs(nres) )
 
-def modelCBV(p,bvectors):
-   return np.dot(p,bvectors)
+def modelCBV(p,bv):
+   return np.dot(p,bv)
    
+
+def bvload(tQLC):
+    """
+    Load basis vector.
+
+    """    
+    kw = tQLC.keywords
+    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
+
+    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % kw['QUARTER'])
+    bvfile = glob.glob(bvfile)[0]
+    bvhdu  = pyfits.open(bvfile)
+    bvkw   = bvhdu[0].header
+    bvcolname = 'MODOUT_%i_%i' % (kw['MODULE'],kw['OUTPUT'])
+    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
+    assert bvkw['QUARTER'] == kw['QUARTER']," BV must be from the same quater"
+    return tBV

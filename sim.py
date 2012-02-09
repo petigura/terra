@@ -240,11 +240,11 @@ def addVALkw(files):
         t.write(f,overwrite=True,type='fits')
 
 
-def inject(tLCbase,tPAR,seed):
+def inject(tLCbase,tPAR):
     """
     Inject transit signal into lightcurve.
     """
-    tPAR = tPAR.where(tPAR.seed == seed)
+    assert tPAR.data.size == 1
     d0 = qalg.tab2dl(tPAR)[0]    
 
     assert len(tPAR.data) == 1, "Seed must be unique" 

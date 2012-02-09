@@ -18,7 +18,6 @@ import tfind
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 
-
 def KICPath(KIC,basedir):
     """
     KIC     - Target star identifier.
@@ -45,12 +44,10 @@ def qload(file):
 
     Parameters
     ----------
-
     file : path to the fits file.
 
     Returns
     -------
-
     t    : atpy table
 
     """
@@ -62,7 +59,10 @@ def qload(file):
 
     remcol = []
 
+    # Strip abs path from the file.
+    file = file.split(kepdat)[1]
     t.add_keyword('PATH',file)
+
     for k in kw:
         t.keywords[k] = False
 
@@ -71,6 +71,7 @@ def qload(file):
 
     t.table_name = 'Q%i' % t.keywords['QUARTER']
     return t
+
     
 def nQ(t0):
     """
@@ -102,7 +103,6 @@ def nQ(t0):
     t.keywords['NQ'] = True
 
     return t
-
 
 def cut(t0, cutk=['f','ef','fpdc','efpdc'] ):
     """
@@ -142,13 +142,10 @@ def sQ(tLCset0):
 
     Parameters
     ----------
-
     tL : List of tables to stitch together.
     
-
     Returns
     -------
-
     tLC : Lightcurve that has been stitched together.    
 
     """
@@ -181,7 +178,6 @@ def sQ(tLCset0):
 
         ctemp[iFill] = col
         update_column(tLC,fn,ctemp)
-
 
     # Fill in the missing times.
     t        = ma.masked_invalid(tLC['TIME'])
@@ -219,18 +215,19 @@ def toutReg(tLC0,outregcol=['f','fpdc']):
     tLC = copy.deepcopy(tLC0)
     for orc in outregcol:
         x = outReg( tLC.data[orc] )
-
         eorc = 'e'+orc
         ex = outReg( tLC.data[orc] )
-
-        cad,x = detrend.nanIntrp(tLC.data['CADENCENO'],x,nContig=25)
-        cad,ex = detrend.nanIntrp(tLC.data['CADENCENO'],ex,nContig=25)
-
         tLC.data[orc] = x
         tLC.data[eorc] = ex
 
     tLC.keywords['OUTREG'] = True
     return tLC
+
+def fillnans(t0):
+    t = copy.deepcopy(t0)
+    for k in ['f','ef','fpdc','efpdc']:        
+        cad,t.data[k] = detrend.nanIntrp(t['CADENCENO'],t.data[k],nContig=4)
+    return t
 
 def ppQ(t0,ver=True):
     """
@@ -241,7 +238,10 @@ def ppQ(t0,ver=True):
     t = copy.deepcopy(t0)
     t.data = cut(t).data
     t.data = toutReg(t).data
-    data,ffit,bvectors,p1 = detrend.cbv(t,'f','ef',ver=ver)
+    t.data = fillnans(t).data
+
+    fdtm,ffit,p1v = detrend.cbv(t,'f','ef',ver=ver)
+    update_column(t,'fdtm',fdtm)
     update_column(t,'fcbv',ffit)
     return t
 
@@ -264,7 +264,6 @@ def prepLC(tLCset,ver=True):
         tLC.keywords[k] = kw[k]
 
     update_column(tLC,'t',tLC.TIME)
-    tLC.cad,tLC.f = detrend.nanIntrp(tLC.cad,tLC.f,nContig=25)
     return tLC
     
 def cadFill(cad0):

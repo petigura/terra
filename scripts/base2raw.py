@@ -6,17 +6,22 @@ import os
 parser = argparse.ArgumentParser(
     description='Read in basefile inject a transit')
 
-parser.add_argument('BASEfile',type=str)
 parser.add_argument('PARfile',type=str)
 parser.add_argument('seed',type=int)
 args = parser.parse_args()
-tLCbase = atpy.TableSet(args.BASEfile,type='fits')
-tPAR = atpy.Table(args.PARfile,type='fits')
 
-tLCraw = sim.inject(tLCbase,tPAR,args.seed)
+PARfile = args.PARfile
 
-tLCraw.keywords['PARFILE'] = args.PARfile
-dir = os.path.dirname(args.BASEfile)
+tPAR = atpy.Table(PARfile,type='fits')
+tPAR = tPAR.where(tPAR.seed == args.seed)
+KIC = tPAR.KIC
+dir = os.path.dirname(PARfile)
+BASEfile = os.path.join(dir,'tBASE_%09d.fits' % KIC)
+
+tLCbase = atpy.TableSet(BASEfile,type='fits')
+tLCraw = sim.inject(tLCbase,tPAR)
+
+tLCraw.keywords['PARFILE'] = PARfile
 tLCrawfile = 'tLCraw%04d.fits' % args.seed
 tLCrawfile = os.path.join(dir,tLCrawfile)
 tLCraw.write(tLCrawfile,overwrite=True,type='fits')

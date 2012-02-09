@@ -14,7 +14,7 @@ tLC = atpy.Table(args.LCfile,type='fits')
 t = tLC.t
 
 if args.cbv:
-    f = tLC.f - tLC.fcbv
+    f = tLC.fdtm - tLC.fcbv
 else:
     f = tLC.f
     
