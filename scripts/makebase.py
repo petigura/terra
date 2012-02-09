@@ -19,6 +19,7 @@ for KIC in KICL:
     basepath = os.path.join(dir,'tBASE_%09d.fits' % KIC)
 #    if not os.path.exists(basepath):
     files = keplerio.KICPath(KIC,'orig')
+    assert len(files) > 0,'Could not find files.'
     tBASE = map(keplerio.qload,files)
     tBASE = map(keplerio.nQ,tBASE)
     tBASE = atpy.TableSet(tBASE)
