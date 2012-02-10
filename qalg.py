@@ -1,24 +1,4 @@
 """
-Motivation:
-
-This module contains functions for determining the `efficacy' of
-transit detection algorithms.  
-
-Goals:
-- Manage the creation of monte carlo data.
-- Profiling different algorithms in a systematic way.
-- Storing the results.
-
-Requirements:
-- Functions should should take only t,f as required arguments
-
-What is Efficacy?
------------------
-- The metric for the efficacy of a function will be the number of
-correctly identified transit signatures over the number of mock data
-sets.
-- Function must identify the correct trial period to within 1%
-- Function must determine the phase of the transit to 1%
 """
 
 

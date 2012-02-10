@@ -171,25 +171,20 @@ def getkwW(files,view=None):
     else:
         return view.map(getkw,files)
 
-def quickRED(RESfiles,view=None):
+def quickRED(RESfiles,PARfile=None,view=None):
     """
     Quick look at the periodogram.  Do not incorporate tVAL information.
     """
 
     kwL = getkwW(RESfiles,view=view)
-    PARfileL = [kw['PARFILE'] for kw in kwL]
-    PARfile = np.unique(PARfileL)
-    LCfileL = [kw['LCFILE'] for kw in kwL]
-    LCfile = np.unique(LCfileL)
-    assert PARfile.size == 1, "PARfile must be unique"
-    assert PARfile.size == 1, "LCfile must be unique"
 
-    PARfile = PARfile[0]
-    LCfile = LCfile[0]
+    if PARfile == None:
+        PARfileL = [kw['PARFILE'] for kw in kwL]
+        PARfile = np.unique(PARfileL)
+        assert PARfile.size == 1, "PARfile must be unique"
 
     tRED = atpy.Table(PARfile,type='fits')
     tRED.keywords['PARFILE'] = PARfile
-    tRED.keywords['LCFILE'] = LCfile
     
     col = ['P','epoch'] # columns to attach
     ocol = ['o'+c for c in col]
@@ -208,7 +203,6 @@ def quickRED(RESfiles,view=None):
             tRED[o][irow] = d[c]
 
     addbg(tRED)
-    addFlag(tRED)
     return tRED
 
 def name2seed(file):
