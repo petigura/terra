@@ -7,6 +7,7 @@ import glob
 import numpy as np
 import copy
 
+import join
 import qalg
 import tfind
 import ebls
@@ -182,28 +183,37 @@ def quickRED(RESfiles,PARfile=None,view=None):
         PARfileL = [kw['PARFILE'] for kw in kwL]
         PARfile = np.unique(PARfileL)
         assert PARfile.size == 1, "PARfile must be unique"
-
+        PARfile = PARfile[0]
+        
     tRED = atpy.Table(PARfile,type='fits')
     tRED.keywords['PARFILE'] = PARfile
-    
-    col = ['P','epoch'] # columns to attach
-    ocol = ['o'+c for c in col]
-    for o in ocol:
-        tRED.add_empty_column(o,np.float)
-    
-    for RESfile in RESfiles:
-        tRES = atpy.Table(RESfile,type='fits')
-        seed = name2seed(RESfile)
 
-        dL = tval.parGuess( qalg.tab2dl(tRES)[0] )
-        d = dL[0]
-        irow = np.where(tRED.seed == seed)[0]
+    dL = map(redres,RESfiles)
+    t =  qalg.dl2tab(dL)
 
-        for c,o in zip(col,ocol):
-            tRED[o][irow] = d[c]
+    t.set_primary_key('seed')
+    tRED.set_primary_key('seed')
+    tRED = join.join(tRED,t)
 
-    addbg(tRED)
     return tRED
+
+def redres(resfile):
+    """
+    Take a tRES table and pull out the peak with highest s/n
+    """
+    tRES = atpy.Table(resfile,type='fits')
+    
+    idMa = np.argmax(tRES.s2n[0])
+    d = dict(
+        oP     = tRES.PG[0][idMa],
+        oepoch = tRES.epoch[0][idMa],
+        odf    = tRES.df[0][idMa],
+        os2n   = tRES.s2n[0][idMa],
+        otwd   = tRES.twd[0][idMa],
+        seed  = tRES.keywords['SEED']
+        )
+    return d
+
 
 def name2seed(file):
     """
