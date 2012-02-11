@@ -11,6 +11,10 @@ import ebls
 import detrend
 from keptoy import *
 
+
+Plim =  0.001   # Periods must agree to this fractional amount
+epochlim =  0.1 # Epochs must agree to 0.1 days    
+
 def init(**kwargs):
     """
     Initializes simulation parameters.
@@ -136,6 +140,8 @@ def bg(P,oP,epoch,oepoch):
     """
     Did we correctly identify period
     """
-    Plim =  0.001   # Periods must agree to this fractional amount
-    epochlim =  0.1 # Epochs must agree to 0.1 days    
-    return ( abs(P - oP)/P < Pthresh ) & ( abs(epoch - oepoch) < epochlim )
+    return ( abs(P - oP)/P < Plim ) & ( abs(epoch - oepoch) < epochlim )
+
+def alias(P,oP)
+    Palias = P * np.array([0.5,2])
+    return (abs( oP / Palias - 1) < Plim).any()
