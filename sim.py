@@ -223,7 +223,7 @@ def addFlag(t):
     """
     Adds a string description as to why the run failed'
     """
-
-    keplerio.update_column(t,'balias',qalg.alias(t.P,t.oP) )
+    balias = map(qalg.alias,t.P,t.oP)
+    keplerio.update_column(t,'balias', )
 #    keplerio.update_column(t,'bwin',bwinL)
     return t
