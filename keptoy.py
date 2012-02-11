@@ -11,40 +11,6 @@ M_sun = 2.0e33 # g
 lc = 0.0204343960431288
 c = 100   # Parameter that controls how sharp P05 edge is.
 
-def lightcurve(df=0.01,P=12.1,phase=0.5,cad=lc,tdur=None,
-               s2n=10,tbase=90,a=None,null=False,seed=None,model=False):
-    """
-    generate sample lightcurve.
-    """
-
-    if tdur is None:
-        a = P2a(P)
-        tdur = a2tdur(a)
-
-    npts = tbase/cad
-    t = np.linspace(0,tbase,npts) 
-
-    # Noise is constant
-    noise = 1e-4
-
-    if null:
-        df = 0.
-    elif model:
-        noise = 0
-    else:
-        df = s2n * noise /  np.sqrt( ntpts(P,tdur,tbase,cad) )
-
-    # Add in a seed for deterministic noise
-    if seed != None:
-        np.random.seed(seed)
-
-    f = np.ones(npts) + noise*np.random.randn(npts)
-
-    tidx = np.where( np.mod(t-phase*P,P) < tdur)[0]
-    f[tidx] -= df
-
-    return f,t
-
 def a2tdur(a0):
     """
     Calculate the duration of transit assuming:
@@ -217,48 +183,6 @@ def tprime(P,epoch,tdur,t):
     """
     return  ( P*sin( pi*(t - epoch) / P ) ) / (pi*tdur)
 
-def dP05(p,t):
-    """
-    Analytic evalutation of the Jacobian.  
-
-    Note 
-    ----
-
-    This function has not been properly tested.  I wrote it to see if
-    it made the LM fitter any more robust or speedy.  I could not LM
-    to work even numerically.
-    """
-
-    P     = p[0]
-    epoch = p[1]
-    df    = p[2]
-    tdur  = p[3]
-
-    # Argument to the sin function in tprime.
-    sa = pi*(t - epoch) / P 
-    tp = tprime(P,epoch,tdur,t)
-
-    # Compute partial derivatives with respecto to tprime:
-    dtp_dP     = sin( sa ) / pi / epoch + P * cos( sa ) / pi / epoch
-    dtp_depoch = - tp / epoch
-    dtp_dtdur  = - cos( sa ) / epoch
-
-    # partial(P05)/partial(tprime)
-    dP05_dtp = 0.5 * df * ( (tanh( c*(tp + 0.5) ) )**2 - \
-                                 (tanh( c*(tp - 0.5) ) )**2)
-
-    # Compute the partial derivatives
-    dP05_dP     = dP05_dtp * dtp_dP
-
-    # dP05_dP     = np.zeros(len(t))
-    dP05_depoch = dP05_dtp * dtp_depoch
-    dP05_ddf    = 0.5 * ( - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) )
-    dP05_dtdur  = dP05_dtp * dtp_dtdur
-    
-    # The Jacobian
-    J = np.array([dP05_dP,  dP05_depoch , dP05_ddf, dP05_dtdur])
-
-    return J
 
 def trend(p,t):
     """

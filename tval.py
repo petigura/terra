@@ -50,6 +50,34 @@ def obj1T(p,t,f,P,p0,dp0):
     obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
     return obj
 
+def linfit1T(p,t,f):
+    """
+    Linear fit to 1 Transit.
+
+    Depth and the trend parameters are linear, epoch and width are not.
+    """
+    
+    ndeg=3
+
+    P      = p[0]
+    epoch  = p[1]
+    tdur   = p[2]
+
+    trendDS = []
+    for i in range(ndeg+1):
+        pleg = np.zeros(ndeg+1)
+        pleg[i] = 1
+        trendDS.append( keptoy.trend(pleg,t) )
+    trendDS = np.vstack(trendDS)
+
+    plc = [epoch,1.,tdur]+list(np.zeros(ndeg+1))
+
+    lcDS = keptoy.P051T(plc,t,P)
+    DS = np.vstack((lcDS,trendDS))
+    p1 = np.linalg.lstsq(DS.T,f)[0]
+    return p1
+
+
 def LDT(t,f,p,wd=2.):
     """
     Local detrending.  
