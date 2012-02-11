@@ -39,13 +39,6 @@ def val(tLC,tRES,nCheck=50,ver=True):
     return tVAL
 
 
-def iPoP(tval):
-    """
-    """
-    s2n = ma.masked_invalid(tval.s2n)
-    iMax = s2n.argmax()
-    t = tval.rows( [iMax] )
-    return t
 
 def diagFail(t):
     """
@@ -92,55 +85,6 @@ def kwUnique(kwL,key):
     assert valL.size == 1, '%s must be unique' % key
     return valL[0]
 
-def resRed(files,PARfile=None,LCfile=None):
-    """
-    Result Reduce.
-
-    Read in all the tVAL results and augment tPAR with the results.
-
-    Parameters
-    ----------
-    files : A list of tVAL to reduce.
-    """
-
-    # Build table containing input parameters.
-    seedL,parfileL=[],[]
-
-    tVALL = [atpy.Table(f,type='fits') for f in files]
-
-    if (PARfile == None) | (LCfile == None):
-        kwL = [t.keywords for t in tVALL ]
-
-    if PARfile == None:
-        PARfile = kwUnique(kwL,'PARFILE')
-
-    if PARfile == None:
-        LCfile = kwUnique(kwL,'LCFILE')
-
-    tPAR = atpy.Table(PARfile,type='fits')
-
-    for f in files:
-        bname = os.path.basename(f)
-        bname = os.path.splitext(bname)[0]
-        seed = int(bname.split('tVAL')[-1])
-        seedL.append(seed)
-
-    tRED = tPAR.rows(seedL)
-    tRED.keywords = tVALL[0].keywords
-    
-    ttemp = iPoP( atpy.Table(files[0],type='fits') )
-    for f in files[1:]:
-        tnew = iPoP( atpy.Table(f,type='fits') )
-        ttemp.append( tnew )
-
-    col = ['s2n','P','epoch','tdur','df'] # columns to attach
-    for c in col:
-        keplerio.update_column(tRED,'o'+c,ttemp[c])    
-
-    addbg(tRED)
-    addFlag(tRED)
-    return tRED
-
 def convEpoch(epoch0,P,t0):
     """
     Convert Epoch
@@ -170,36 +114,25 @@ def getkwW(files,view=None):
     else:
         return view.map(getkw,files)
 
-def quickRED(RESfiles,PARfile=None,view=None):
+def simReduce(files):
     """
-    Quick look at the periodogram.  Do not incorporate tVAL information.
+    Reduce output of a simulation.
     """
 
-    kwL = getkwW(RESfiles,view=view)
+    if files[0].count('tVAL') == 1:
+        dL = map(bfitVAL,files)
+    else:
+        dL = map(bfitRES,files)
 
-    if PARfile == None:
-        PARfileL = [kw['PARFILE'] for kw in kwL]
-        PARfile = np.unique(PARfileL)
-        assert PARfile.size == 1, "PARfile must be unique"
-        PARfile = PARfile[0]
-        
-    tRED = atpy.Table(PARfile,type='fits')
-    tRED.keywords['PARFILE'] = PARfile
-
-    dL = map(redres,RESfiles)
-    t =  qalg.dl2tab(dL)
-
-    t.set_primary_key('seed')
+    tRED =  qalg.dl2tab(dL)
     tRED.set_primary_key('seed')
-    tRED = join.join(tRED,t)
-
     return tRED
 
-def redres(resfile):
+def bfitRES(file):
     """
-    Take a tRES table and pull out the peak with highest s/n
+    Returns the best fit parameters from tRES.
     """
-    tRES = atpy.Table(resfile,type='fits')
+    tRES = atpy.Table(file,type='fits')
     
     idMa = np.argmax(tRES.s2n[0])
     d = dict(
@@ -212,22 +145,25 @@ def redres(resfile):
         )
     return d
 
-def redres(resfile):
+def bfitVAL(file):
     """
-    Take a tRES table and pull out the peak with highest s/n
+    Returns the best fit parameters from tVAL.
     """
-    tRES = atpy.Table(resfile,type='fits')
-    
-    idMa = np.argmax(tRES.s2n[0])
+    tVAL = atpy.Table(file,type='fits')
+
+    s2n = ma.masked_invalid(tVAL.s2n)
+    idMa = np.argmax(s2n)
+
     d = dict(
-        oP     = tRES.PG[0][idMa],
-        oepoch = tRES.epoch[0][idMa],
-        odf    = tRES.df[0][idMa],
-        os2n   = tRES.s2n[0][idMa],
-        otwd   = tRES.twd[0][idMa],
-        seed  = tRES.keywords['SEED']
+        oP     = tVAL.P[idMa],
+        oepoch = tVAL.epoch[idMa],
+        odf    = tVAL.df[idMa],
+        os2n   = tVAL.s2n[idMa],
+        otwd   = tVAL.tdur[idMa],
+        seed   = tVAL.keywords['SEED']
         )
     return d
+
 
 
 def name2seed(file):
