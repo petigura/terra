@@ -178,10 +178,13 @@ def tinject(t0,d0):
     keplerio.update_column(t,'f',f)
     return t
 
-def PARRES(tPAR,tRED):
+def PARRES(tPAR0,tRED0):
     """
 
     """
+    tPAR = copy.deepcopy(tPAR0)
+    tRED = copy.deepcopy(tRED0)
+
     tPAR.set_primary_key('seed')
     tRED.set_primary_key('seed')
     tRED = join.join(tPAR,tRED)
@@ -203,19 +206,15 @@ def diagFail(t):
     Why did a particular run fail?
     """
     kepdir = os.environ['KEPDIR']
-    Palias = t.P[0] * np.array([0.5,2])
-
-    # Likely explaination for failure : alias function.
-    balias = (abs( t.oP[0] / Palias - 1) < 1e-3).any()
-    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
-    pknown = qalg.tab2dl(t)[0]
-    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    Pcad = round(pknown['P']/keptoy.lc)
-    res = tfind.ep(tLC.t,dM,Pcad)
-    win = res['win']
-    # Likely explaination for failure : window function.
-    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
+#    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
+#    pknown = qalg.tab2dl(t)[0]
+#    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
+#    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
+#    Pcad = round(pknown['P']/keptoy.lc)
+#    res = tfind.ep(tLC.t,dM,Pcad)
+#    win = res['win']
+#    # Likely explaination for failure : window function.
+#    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
     
     return balias,bwin
 
@@ -225,11 +224,6 @@ def addFlag(t):
     Adds a string description as to why the run failed'
     """
 
-    baliasL,bwinL = [],[]
-    for i in range(len(t.data)):
-        balias,bwin = diagFail(t.rows([i]))
-        baliasL.append(balias)
-        bwinL.append(bwin)
-    keplerio.update_column(t,'balias',baliasL)
-    keplerio.update_column(t,'bwin',bwinL)
+    keplerio.update_column(t,'balias',qalg.alias(t.P,t.oP) )
+#    keplerio.update_column(t,'bwin',bwinL)
     return t
