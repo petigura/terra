@@ -214,6 +214,23 @@ def redres(resfile):
         )
     return d
 
+def redres(resfile):
+    """
+    Take a tRES table and pull out the peak with highest s/n
+    """
+    tRES = atpy.Table(resfile,type='fits')
+    
+    idMa = np.argmax(tRES.s2n[0])
+    d = dict(
+        oP     = tRES.PG[0][idMa],
+        oepoch = tRES.epoch[0][idMa],
+        odf    = tRES.df[0][idMa],
+        os2n   = tRES.s2n[0][idMa],
+        otwd   = tRES.twd[0][idMa],
+        seed  = tRES.keywords['SEED']
+        )
+    return d
+
 
 def name2seed(file):
     """
