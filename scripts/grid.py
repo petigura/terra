@@ -22,7 +22,7 @@ tRES = sim.grid(t,f,Psmp = 0.25)
 tRES.comments = "Table with the simulation results"
 tRES.table_name = "RES"
 tRES.keywords = tLC.keywords
-tRES.add_keyword("LCFILE" ,args.LCfile)
+tRES.keywords['LCFILE'] = os.path.relpath(args.LCfile,os.environ['KEPSIM'] )
 
 tRESfile = 'tRES%04d.fits' % tLC.keywords['SEED']
 

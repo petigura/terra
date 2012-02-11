@@ -10,7 +10,8 @@ parser.add_argument('RESfile',type=str)
 args = parser.parse_args()
 
 tRES = atpy.Table(args.RESfile,type='fits')
-tLC  = atpy.Table(tRES.keywords['LCFILE'],type='fits')
+LCfile = os.path.join(os.environ['KEPSIM'],tRES.keywords['LCFILE'])
+tLC  = atpy.Table(LCfile,type='fits')
 
 VALfile = 'tVAL%04d.fits' % tLC.keywords['SEED']
 dir = os.path.dirname(args.RESfile)

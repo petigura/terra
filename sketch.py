@@ -37,7 +37,7 @@ def cdpp():
 
         med = median(star.SAP_FLUX )
 
-        ax.plot(star.TIME,(star.SAP_FLUX/med-1)*1e6,'.',ms=2,
+        ax.plot(star.TIME,(star.SAP_FLUX/med-1),'.',ms=2,
                 label='KIC-%i, CDPP-12hr %.2f' % (keplerid,starcdpp) )
         ax.legend()
 
@@ -242,7 +242,7 @@ def XWrap(XW,step=1):
     ncad = XW.shape[1]
     [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
-def FOM(dM,P):
+def FOM(t,dM,P):
     """
     Plot the figure of merit
 
@@ -251,7 +251,7 @@ def FOM(dM,P):
     Pcad = int(round(P/lc))
     dMW = tfind.XWrap(dM,Pcad,fill_value=nan)
     XWrap(dMW, step = step  )
-    res = tfind.ep(dM,Pcad)
+    res = tfind.ep(t,dM,Pcad)
     fom = res['fom']
     plot(fom -step )
     return dMW
@@ -392,7 +392,7 @@ def ROC(tres):
     for df in dfL:
         t = tres.where( tres.df == df)
         fapL,etaL = qalg.ROC(t)
-        plot(fapL,etaL,lw=2,label='df  = %03d ' % (df*1e6) )
+        plot(fapL,etaL,lw=2,label='df  = %03d ' % (df) )
     
     x = linspace(0,1,100)
     plot(x,x)
@@ -424,7 +424,7 @@ def hist(tres):
 
         label = r"""
 $\Delta F / F$  = %(df)i ppm
-""" % {'df':df * 1e6}
+""" % {'df':df}
 
         ax.annotate(label,xy=(.8,.1),xycoords='axes fraction',
                     bbox=dict(boxstyle="round", fc="w", ec="k"))
@@ -604,7 +604,7 @@ def inspVAL(tLC,tRES,*pL):
         ildt = 4+2*i
 
         sca( axL[ifom] )
-        FOM(dM,p['P'])
+        FOM(tLC.t,dM,p['P'])
 
         try:
             axvline(p['epoch']/lc)

@@ -139,8 +139,9 @@ def getT(time,P,epoch,wd):
     Time series phase folded with everything but the transits masked out.
 
     """
-    tfold = np.mod(time,P)
-    tfold = ma.masked_outside(tfold,epoch - wd/2,epoch + wd/2)
+    tfold = time - epoch # Slide transits to 0, P, 2P
+    tfold = np.mod(tfold,P)
+    tfold = ma.masked_inside(tfold,wd/2,P-wd/2)
     tfold = ma.masked_invalid(tfold)
     return tfold
 

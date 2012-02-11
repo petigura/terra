@@ -415,7 +415,7 @@ def midTransId(t,p):
     epoch = p['epoch']
 
     Pcad     = int(round(P/lc))
-    epochcad = int(round(epoch/lc))
+    epochcad = int(round( (epoch-t[0])/lc )  )
 
     nT = t.size/Pcad + 1  # maximum number of transits
 
