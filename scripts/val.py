@@ -18,5 +18,7 @@ dir = os.path.dirname(args.RESfile)
 VALfile = os.path.join(dir,VALfile)
 
 tVAL = sim.val(tLC,tRES,ver=False)
+tVAL.keywords = tRES.keywords
+
 tVAL.write(VALfile,type='fits',overwrite=True)
 print "val: Created: %s" % VALfile
