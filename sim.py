@@ -34,10 +34,8 @@ def val(tLC,tRES,nCheck=50,ver=True):
     resLHigh = tval.aliasW(tLC.t,tLC.f,resLHigh)
             
     # Combine the high and low S/N 
-
     resL = resLHigh + resLLow
     tVAL = qalg.dl2tab(resL)
-    tVAL.keywords = tRES.keywords
     return tVAL
 
 

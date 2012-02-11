@@ -212,30 +212,6 @@ def fitcandW(t,f,dL,view=None,ver=True):
  
     return resL
 
-def aliasW(t,f,resL0):
-    """
-    Alias Wrap
-
-    If Chi^2 for the alias is lower than Chi^2 for the given period, refit.
-    """
-
-    s2n = np.array([ r['s2n'] for r in resL0])
-    assert ( s2n > 0).all(),"Cut out failed fits"
-
-
-    resL = copy.deepcopy(resL0)
-
-    for i in range(len(resL0)):
-        X2,X2A,pA,fTransitA,mTransit,mTransitA = alias(t,f,resL0[i])
-        if X2A < X2:
-            res = fitcand(t,f,pA)
-            resL[i] = res
-
-    return resL
-
-
-
-
 
 def tabval(file,view=None):
     """
@@ -356,31 +332,6 @@ def iPoP(tset,tabval):
 
     return tres
 
-def redSim(files):
-    """
-    Collects the information from each simulation and reduces it into
-    1 file.
-    """
-
-    vfiles = []
-    for i in range(len(files)):
-        basename = files[i].split('.')[-2]
-        vfiles.append(basename+'_val.fits')
-        assert len(glob.glob(vfiles[i])) == 1, "val file must be unique"
-
-
-    dL = []
-    for f,v in zip(files,vfiles):
-        print "Reducing %s and %s" % (f,v) 
-        tset   = atpy.TableSet(f)
-        tabval = atpy.TableSet(v)
-
-        tres   = iPoP(tset,tabval)
-        dL = dL + qalg.tab2dl(tres)
-        
-    tres = qalg.dl2tab(dL)  
-    return tres
-
 def window(fl,PcadG):
     """
     Compute the window function.
@@ -424,6 +375,25 @@ def midTransId(t,p):
     ms = [m for m in  ms if m < t.size]
     return ms
 
+def aliasW(t,f,resL0):
+    """
+    Alias Wrap
+
+    """
+
+    s2n = np.array([ r['s2n'] for r in resL0])
+    assert ( s2n > 0).all(),"Cut out failed fits"
+
+    resL = copy.deepcopy(resL0)
+
+    for i in range(len(resL0)):
+        X2,X2A,pA,fTransitA,mTransit,mTransitA = alias(t,f,resL0[i])
+        if X2A < X2:
+            res = fitcand(t,f,pA)
+            resL[i] = res
+
+    return resL
+
 def alias(t,f,p):
     """
     Evaluate the Bayes Ratio between signal with P and 2 *P
@@ -437,10 +407,8 @@ def alias(t,f,p):
     
     """
 
-
     pA = copy.deepcopy(p)
     pA['P'] = 0.5 * pA['P']
-    pA['epoch'] = np.mod(pA['epoch'],pA['P']) # Epoch must be less than the period
     
     res = LDT(t,f,pA)
     tdt = res['tdt']
@@ -463,19 +431,7 @@ def alias(t,f,p):
     X2A = ma.sum( (fTransitA - mTransitA)**2 )
 
     print "Input Period Chi2 = %e, Alias Chi2 = %e " % (X2, X2A)
-#    import matplotlib.pylab as plt
-#    plt.plot(fdt.compressed(),'.')
-#    plt.plot(model.compressed() ,'k',label='Model at input period.' )
-#    plt.plot(modelA.compressed(),'r',label='Model at alias period' )
-#
-#    print t
-#    plt.plot(fTransitA.compressed() +2e-3 ,'.')
-#    plt.plot(mTransit.compressed()  +2e-3,'k',lw=2,)
-#    plt.plot(mTransitA.compressed() +2e-3,'r',lw=2)
-#
-#    plt.draw()
-#    plt.show()
-    
+
     return X2,X2A,pA,fTransitA,mTransit,mTransitA
     
 
