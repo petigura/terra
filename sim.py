@@ -40,41 +40,6 @@ def val(tLC,tRES,nCheck=50,ver=True):
 
 
 
-def diagFail(t):
-    """
-    Why did a particular run fail?
-    """
-    kepdir = os.environ['KEPDIR']
-    Palias = t.P[0] * np.array([0.5,2])
-
-    # Likely explaination for failure : alias function.
-    balias = (abs( t.oP[0] / Palias - 1) < 1e-3).any()
-    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
-    pknown = qalg.tab2dl(t)[0]
-    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    Pcad = round(pknown['P']/keptoy.lc)
-    res = tfind.ep(dM,Pcad)
-    win = res['win']
-    # Likely explaination for failure : window function.
-    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
-    
-    return balias,bwin
-
-
-def addFlag(t):
-    """
-    Adds a string description as to why the run failed'
-    """
-
-    baliasL,bwinL = [],[]
-    for i in range(len(t.data)):
-        balias,bwin = diagFail(t.rows([i]))
-        baliasL.append(balias)
-        bwinL.append(bwin)
-    keplerio.update_column(t,'balias',baliasL)
-    keplerio.update_column(t,'bwin',bwinL)
-    return t
 
 
 def kwUnique(kwL,key):
@@ -96,10 +61,6 @@ def convEpoch(epoch0,P,t0):
     
     return np.remainder(epoch0 + t0,P)
 
-def addbg(t):    
-    bg = ( abs(t.P - t.oP)/t.P < 0.001 ) & ( abs(t.epoch - t.oepoch) < 0.1 )
-    keplerio.update_column(t,'bg',bg)    
-    return t
 
 def getkw(file):
     """
@@ -164,8 +125,6 @@ def bfitVAL(file):
         )
     return d
 
-
-
 def name2seed(file):
     """
     Convert the name of a file to a seed value.
@@ -194,7 +153,6 @@ def addVALkw(files):
             t.keywords[c] = tROW.data[c][0]
         t.write(f,overwrite=True,type='fits')
 
-
 def inject(tLCbase,tPAR):
     """
     Inject transit signal into lightcurve.
@@ -218,4 +176,60 @@ def tinject(t0,d0):
     t = copy.deepcopy(t0)
     f = keptoy.genEmpLC(d0,t.TIME,t.f)
     keplerio.update_column(t,'f',f)
+    return t
+
+def PARRES(tPAR,tRED):
+    """
+
+    """
+    tPAR.set_primary_key('seed')
+    tRED.set_primary_key('seed')
+    tRED = join.join(tPAR,tRED)
+
+    # Convert epochs back into input
+    tRED.data['oepoch'] = np.remainder(tRED.oepoch,tRED.P)
+    addbg(tRED)
+    addFlag(tRED)
+    return tRED
+
+
+def addbg(t):    
+    bg = qalg.bg(t.P,t.oP,t.epoch,t.oepoch)
+    keplerio.update_column(t,'bg',bg)    
+    return t
+
+def diagFail(t):
+    """
+    Why did a particular run fail?
+    """
+    kepdir = os.environ['KEPDIR']
+    Palias = t.P[0] * np.array([0.5,2])
+
+    # Likely explaination for failure : alias function.
+    balias = (abs( t.oP[0] / Palias - 1) < 1e-3).any()
+    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
+    pknown = qalg.tab2dl(t)[0]
+    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
+    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
+    Pcad = round(pknown['P']/keptoy.lc)
+    res = tfind.ep(tLC.t,dM,Pcad)
+    win = res['win']
+    # Likely explaination for failure : window function.
+    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
+    
+    return balias,bwin
+
+
+def addFlag(t):
+    """
+    Adds a string description as to why the run failed'
+    """
+
+    baliasL,bwinL = [],[]
+    for i in range(len(t.data)):
+        balias,bwin = diagFail(t.rows([i]))
+        baliasL.append(balias)
+        bwinL.append(bwin)
+    keplerio.update_column(t,'balias',baliasL)
+    keplerio.update_column(t,'bwin',bwinL)
     return t

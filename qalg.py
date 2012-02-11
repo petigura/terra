@@ -1,7 +1,3 @@
-"""
-"""
-
-
 import itertools
 import cPickle as pickle
 from numpy import *
@@ -135,3 +131,11 @@ def ROC(t):
         fapL.append(fap)
                
     return fapL,etaL
+
+def bg(P,oP,epoch,oepoch):
+    """
+    Did we correctly identify period
+    """
+    Plim =  0.001   # Periods must agree to this fractional amount
+    epochlim =  0.1 # Epochs must agree to 0.1 days    
+    return ( abs(P - oP)/P < Pthresh ) & ( abs(epoch - oepoch) < epochlim )
