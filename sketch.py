@@ -412,7 +412,7 @@ def hist(tres):
     KIC = unique(tres.KIC)[0]
     dfL = unique(tres.df)
 
-    fig,axL = subplots(nrows=len(dfL),sharex=True,figsize=( 11,  12))
+    fig,axL = subplots(nrows=len(dfL),sharex=True,figsize=( 5,  12))
     for df,ax in zip(dfL,axL):
         tg = tres.where( (tres.df == df) & tres.bg)
         tb = tres.where( (tres.df == df) & ~tres.bg)

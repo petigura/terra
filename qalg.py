@@ -145,3 +145,17 @@ def bg(P,oP,epoch,oepoch):
 def alias(P,oP)
     Palias = P * np.array([0.5,2])
     return (abs( oP / Palias - 1) < Plim).any()
+
+
+
+def window():
+#    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
+#    pknown = qalg.tab2dl(t)[0]
+#    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
+#    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
+#    Pcad = round(pknown['P']/keptoy.lc)
+#    res = tfind.ep(tLC.t,dM,Pcad)
+#    win = res['win']
+#    # Likely explaination for failure : window function.
+#    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
+    
