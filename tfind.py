@@ -162,17 +162,21 @@ def tdpep(t,f,PG0):
 
     Parameters
     ----------
-    f - Flux time series.  It is assumed that elements of f are
+    f    : Flux time series.  It is assumed that elements of f are
            evenly spaced in time.
 
-    PG0  - Initial period grid.
+    PG0  : Initial period grid.
 
     Returns
     -------
-    eee - epoch of maximum depth for a paticular (twd,P)
-    ddd - depth of maximum depth for a paticular (twd,P)
-    sss - typical scatter for a paticular (twd,P)
-    ccc - number of filled data for particular (twd,P)
+
+    epoch2d : Grid (twd,P) of best epoch 
+    df2d    : Grid (twd,P) of depth epoch 
+    count2d : number of filled data for particular (twd,P)
+    noise   : Grid (twd) typical scatter 
+    PG      : The Period grid
+    twd     : Grid of trial transit widths.
+
     """
 
     # Determine the grid of periods that corresponds to integer
@@ -188,22 +192,15 @@ def tdpep(t,f,PG0):
     func = lambda twd: pep(t,f,twd,PcadG)
     resL = map(func,twdG)
 
-    eee = [ r['ee'] for r in resL ]
-    ddd = [ r['dd' ] for r in resL ]
-    ccc = [ r['cc' ] for r in resL ]
+    rec2d = np.vstack([ r[0] for r in resL ])
+    noise = np.array([  r[1] for r in resL ])
 
-    noise = array([ r['noise' ] for r in resL ])
-
-    eee = np.vstack( [np.array(ee) for ee in eee] )
-    ddd = np.vstack( [np.array(dd) for dd in ddd] )
-    ccc = np.vstack( [np.array(cc) for cc in ccc] )
-
-    res = {'epoch2d':eee,
-           'df2d':ddd,
-           'count2d':ccc,
-           'PG':PG,
-           'twd':twdG,
-           'noise':noise
+    res = {'epoch2d':rec2d['epoch'],
+           'df2d'   :rec2d['fom'],
+           'count2d':rec2d['count'],
+           'PG'     :PG,
+           'twd'    :twdG,
+           'noise'  :noise
            }
     return res
 
@@ -238,7 +235,7 @@ def pep(t,f,twd,PcadG):
     res = array(res,dtype=[('epoch',float),('fom',float),('count',int)])
 
     noise = mad
-    return dict(ee=res['epoch'],dd=res['fom'],cc=res['count'],noise=noise)
+    return res,noise
 
 def ep(t,dM,Pcad):
     """
@@ -246,12 +243,9 @@ def ep(t,dM,Pcad):
 
 
     Returns the following information:
-    - 'mfom'   : Maximal figure of merit
-    - 'sfom'   : Scatter in the fom
-    - 'mepoch' : Corresponding Epoch
-    - 'mdf'    : Corresponding transit depth.
-    - 'count'  : Number of valid regions
-    - 'epoch'  : Array corresponding to epochs
+    - 'fom'    : Figure of merit for each trial epoch
+    - 'count'  : 
+    - 'epoch'  : Trial 
     - 'win'    : Which epochs passed (window function)
     """
     
