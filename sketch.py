@@ -452,89 +452,6 @@ def simplots(tres):
         fig.savefig('%02d.png' % fcount )
         fcount +=1
         fig.clf()
-    
-def inspFail(tPAR,tLC,tRES):
-    """
-
-    """
-
-    assert tPAR.data.size == 1, "Must be length 1 tables"
-
-    # Generate the lightcurve.
-    f = keptoy.genEmpLC( qalg.tab2dl(tPAR)[0] ,tLC.t,tLC.f   )
-    t = tLC.t
-
-    # Find the parameters:
-    pkwn   = dict(P = tPAR.P, epoch=tPAR.epoch, tdur=0.3 )
-    
-    iclose = argmin( abs(tRES.PG - tPAR.P) )
-    pclose = dict(
-        P     = tRES.PG[0][iclose], 
-        epoch = tRES.epoch[0][iclose],
-        tdur  = 0.3 
-        )
-
-    phigh = dict(
-        P     = tPAR.oP, 
-        epoch = tPAR.oepoch,
-        tdur  = 0.3 ,
-        df    = tPAR.df,
-        )
-
-    
-    fig,axL = subplots(nrows=5,figsize=( 11, 12))
-
-    iax = 0
-    axL[iax].axvline( pkwn['P'],label='Input Period' )
-    axL[iax].plot( tRES.PG[0],tRES.s2n[0] )
-    axL[iax].legend()
-    iax += 1
-
-    sca(axL[iax])
-#    axes(sharex=axL[0])
-    axL[iax].scatter(tRES[0]['PG'],tRES[0]['epoch'],c=tRES[0]['s2n'],
-                     cmap=cm.gray_r,edgecolors='none',vmin=7)
-    iax += 1
-
-    axL[iax].set_title('Known site of transit')
-    sca(axL[iax])
-    try:
-        LDT(t,f,pkwn)
-    except ValueError:
-        pass
-
-    iax += 1
-
-    axL[iax].set_title('Closest Peak')
-    sca(axL[iax])
-    try:
-        LDT(t,f,pclose)
-    except ValueError:
-        pass
-
-    iax += 1
-
-    axL[iax].set_title('Highest Peak')
-    sca(axL[iax])
-
-    LDT(t,f,phigh)
-    X2,X2A,pA,fTransitA , mTransit, mTransitA = tval.alias(t,f,phigh)
-
-    label = r"""
-$\chi^2 $ Input  = %(X2)e
-$\chi^2 $ Alias  = %(X2A)e 
-""" % { 'X2':X2 , 'X2A':X2A }
-    ax = gca()
-    ax.annotate(label,xy=(.8,.1),xycoords='axes fraction',
-                bbox=dict(boxstyle="round", fc="w", ec="k"))
-
-
-
-    iax += 1
-
-    return #X2,X2A,fTransitA , mTransit, mTransitA
-
-
 
 def inspSim():
 
@@ -587,7 +504,7 @@ def inspVAL(tLC,tRES,*pL):
     sca(axL[2])
     periodogram(tRES)
 
-    sca(axL[4])
+    sca(axL[3])
     pep(tRES)
 
 
