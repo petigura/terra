@@ -230,18 +230,15 @@ def pep(t,f,twd,PcadG):
     func = lambda Pcad: ep(t,dM,Pcad)
     resL = map(func,PcadG)
 
-    ee = array([ r['mepoch'] for r in resL ])
-    dd = array([ r['mdf'   ] for r in resL ])
-    cc = array([ r['count' ] for r in resL ])
-    noise = mad
+    # Find the maximum index for every period.
+    iMa = [ np.argmax(r['fom']) for r in resL  ]
 
-    res = {
-        'ee'    : ee   ,
-        'dd'    : dd   ,
-        'cc'    : cc   ,       
-        'noise' : noise,
-        }
-    return res
+    func = lambda r,i : (r['epoch'][i],r['fom'][i],r['count'][i])
+    res = map(func,resL,iMa)
+    res = array(res,dtype=[('epoch',float),('fom',float),('count',int)])
+
+    noise = mad
+    return dict(ee=res['epoch'],dd=res['fom'],cc=res['count'],noise=noise)
 
 def ep(t,dM,Pcad):
     """
@@ -276,16 +273,12 @@ def ep(t,dM,Pcad):
     d = bsig*win*dMW.mean(axis=0)
     
     fom = d
-    iMax = fom.argmax()
 
     res = {
         'fom'    : fom         ,
-        'mfom'   : fom[iMax]   ,
-        'mepoch' : epoch[iMax] ,       
-        'mdf'    : d[iMax]     ,
-        'count'  : vcount[iMax] ,       
         'epoch'  : epoch       ,
         'win'    : win         ,
+        'count'  : vcount        ,
         }
 
     return res
