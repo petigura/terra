@@ -8,10 +8,12 @@ import scipy
 import sys
 import numpy as np
 from numpy import ma
+
+
 from keptoy import *
 from keptoy import lc 
 import keplerio
-
+import detrend
 def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
@@ -80,7 +82,6 @@ def isfilled(t,f,twd):
     assert keplerio.iscadFill(t,f),'Series might not be evenly sampled'
 
     bK,boxK,tK,aK,dK = GenK(twd ) 
-    dM,bM,aM,DfDt,f0 = MF(f,20)
     fn = ma.masked_invalid(f)
     bgood = (~fn.mask).astype(float) 
 
@@ -204,25 +205,50 @@ def tdpep(t,f,PG0):
            }
     return res
 
-def pep(t,f,twd,PcadG):
+
+def mtd(t,f,twd):
     """
-    Search in period then epoch:
+    Mean Transit Depth
+
+    Convolve time series with our locally detrended matched filter.  
+
+    Notes
+    -----
+    Since a single nan in the convolution kernel will return a nan, we
+    interpolate the entire time series.  We see some edge effects
+
     """
     bK,boxK,tK,aK,dK = GenK( twd )
-    dM = nd.convolve1d(f,dK)
+
+    t,ffilled = detrend.nanIntrp(t,f,nContig=1000)
+    dM = nd.convolve1d(ffilled,dK)
+
+    # Discard cadences that are too high.
+    dM = ma.masked_array(dM,mask=~isfilled(t,f,twd))
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    return dM
+
+
+def pep(t,f,twd,PcadG):
+    """
+    Period-Epoch
+
+    Search in period then epoch:
+
+    Parameters
+    ----------
+    t     : time 
+    f     : flux
+    twd   : Width of putative transit (cadances)
+    PcadG : Grid of periods (units of cadance)
+    """
+
+    dM = mtd(t,f,twd)
 
     # Noise per transit 
     mad = ma.masked_invalid(dM)
     mad = ma.abs(mad)
     mad = ma.median(mad)
-
-    # Discard cadences that are too high.
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
-    f = f.filled()
-    dM = nd.convolve1d(f,dK)
-
-    filled = isfilled(t,f,twd)
 
     func = lambda Pcad: ep(t,dM,Pcad)
     resL = map(func,PcadG)
