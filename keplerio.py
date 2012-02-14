@@ -1,5 +1,15 @@
 """
 Functions for facilitating the reading and writing of Kepler files.
+
+Load up a lightcurve
+--------------------
+
+>>> files = keplerio.KICPath(8144222,'orig')
+>>> tLCset = map(keplerio.qload,files)
+>>> tLCset = map(keplerio.nQ,tLCset)
+>>> tLCset = atpy.TableSet(tLCset)
+>>> tLC = keplerio.prepLC(tLCset)
+
 """
 import numpy as np
 from numpy import ma
@@ -55,6 +65,9 @@ def qload(file):
     hdu = pyfits.open(file)
     t = atpy.Table(file,type='fits')    
 
+    fm = ma.masked_invalid(t.SAP_FLUX)
+    update_column(t,'fmask',fm.mask)
+
     kw = ['NQ','CUT','OUTREG']
     hkw = ['QUARTER','MODULE','CHANNEL','OUTPUT']
 
@@ -72,7 +85,6 @@ def qload(file):
 
     t.table_name = 'Q%i' % t.keywords['QUARTER']
     return t
-
 
 def bvload(quarter,module,output):
     """
@@ -172,7 +184,7 @@ def sQ(tLCset0):
 
     # Figure out which cadences are missing and fill them in.
     cad       = [tab.CADENCENO for tab in tLCset]
-    cad       = np.hstack(cad)       # Convert the list to an array 
+    cad       = np.hstack(cad) 
     cad,iFill = cadFill(cad)
     nFill     = cad.size
     update_column(tLC,'cad',cad)
@@ -184,13 +196,19 @@ def sQ(tLCset0):
 
     # Add all the columns from the FITS file.
     fitsname = tLCset[0].data.dtype.fields.keys()
+    
     for fn in fitsname:
-        ctemp = np.empty(nFill) # Temporary column
-        ctemp[::] = np.nan      # default value is nan
-
         col = [tab[fn] for tab in tLCset] # Column in list form
         col =  np.hstack(col)       # Convert the list to an array 
 
+        # Fill Value
+        if col.dtype is np.dtype('bool'):
+            fill_value = True
+        else:
+            fill_value = np.nan
+
+        ctemp = np.empty(nFill,dtype=col.dtype) # Temporary column
+        ctemp[::] = fill_value
         ctemp[iFill] = col
         update_column(tLC,fn,ctemp)
 
