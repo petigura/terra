@@ -8,7 +8,7 @@ import scipy
 import sys
 import numpy as np
 from numpy import ma
-
+from matplotlib import mlab
 
 from keptoy import *
 from keptoy import lc 
@@ -157,6 +157,34 @@ def P2Pcad(PG0):
 
     return PcadG,PG
 
+def mtd(t,f,twd):
+    """
+    Mean Transit Depth
+
+    Convolve time series with our locally detrended matched filter.  
+
+    Parameters
+    ----------
+    t   :  time series 
+    f   :  flux series.  f can contain no nans.  nans screw up
+    convolution. Interpolate through them.  Mask will be copied to dM.
+    twd :  Width of kernel in cadances
+
+    Notes
+    -----
+    Since a single nan in the convolution kernel will return a nan, we
+    interpolate the entire time series.  We see some edge effects
+
+    """
+    assert np.where(np.isnan(f))[0].size == 0,\
+        "f must contain no nans (screws up convolution)"
+
+    bK,boxK,tK,aK,dK = GenK( twd )
+    dM = nd.convolve1d(f,dK)
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    dM.fill_value=0
+    return dM
+
 def tdpep(t,f,PG0):
     """
     Transit-duration - Period - Epoch
@@ -190,83 +218,69 @@ def tdpep(t,f,PG0):
 
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
 
-    func = lambda twd: pep(t,f,twd,PcadG)
-    resL = map(func,twdG)
+    rec2d = []
+    noise = []
+    for twd in twdG:
+        fm = ma.masked_array(f,copy=True,mask=False)
+        fm = ma.masked_invalid(fm)
+        fm.fill_value = 0 #  ma.masked_invalid resets default fill_value.
 
-    rec2d = np.vstack([ r[0] for r in resL ])
-    noise = np.array([  r[1] for r in resL ])
+        dM = mtd(t,fm.filled(),twd)
+        dM.mask = fm.mask | ~isfilled(t,f,twd)
+        rec2d.append( pep(t[0],dM,PcadG) )
 
-    res = {'epoch2d':rec2d['epoch'],
-           'df2d'   :rec2d['fom'],
-           'count2d':rec2d['count'],
-           'PG'     :PG,
-           'twd'    :twdG,
-           'noise'  :noise
-           }
-    return res
+        # Noise per transit 
+        mad = ma.masked_invalid(dM)
+        mad = ma.abs(mad)
+        mad = ma.median(mad)
+        noise.append(mad)
 
+    rec2d = np.vstack(rec2d)
 
-def mtd(t,f,twd):
-    """
-    Mean Transit Depth
+    make2d = lambda x : np.tile( np.vstack(x), (1,rec2d.shape[1] ))
+    rec2d = mlab.rec_append_fields(rec2d,'noise',make2d(noise))
+    rec2d = mlab.rec_append_fields(rec2d,'twd',  make2d(twdG))
 
-    Convolve time series with our locally detrended matched filter.  
+    PG = np.tile( PG, (rec2d.shape[0],1 ))
+    rec2d = mlab.rec_append_fields(rec2d,'PG',PG)
 
-    Notes
-    -----
-    Since a single nan in the convolution kernel will return a nan, we
-    interpolate the entire time series.  We see some edge effects
+    s2n   = rec2d['fom']/rec2d['noise']*rec2d['count']
+    rec2d = mlab.rec_append_fields(rec2d,'s2n',  s2n )
+    return rec2d
 
-    """
-    bK,boxK,tK,aK,dK = GenK( twd )
-
-    t,ffilled = detrend.nanIntrp(t,f,nContig=1000)
-    dM = nd.convolve1d(ffilled,dK)
-
-    # Discard cadences that are too high.
-    dM = ma.masked_array(dM,mask=~isfilled(t,f,twd))
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    return dM
-
-
-def pep(t,f,twd,PcadG):
+def pep(t0,dM,PcadG):
     """
     Period-Epoch
 
-    Search in period then epoch:
+    Wraps ep over a grid of periods.  It marginalizes over epoch.
 
     Parameters
     ----------
-    t     : time 
-    f     : flux
-    twd   : Width of putative transit (cadances)
+    t0    : time of first dM[0].
+    dM    : depth statistic
     PcadG : Grid of periods (units of cadance)
     """
 
-    dM = mtd(t,f,twd)
-
-    # Noise per transit 
-    mad = ma.masked_invalid(dM)
-    mad = ma.abs(mad)
-    mad = ma.median(mad)
-
-    func = lambda Pcad: ep(t,dM,Pcad)
+    func = lambda Pcad: ep(t0,dM,Pcad)
     resL = map(func,PcadG)
 
-    # Find the maximum index for every period.
-    iMa = [ np.argmax(r['fom']) for r in resL  ]
-
+    # Marginalize over epoch.
     func = lambda r,i : (r['epoch'][i],r['fom'][i],r['count'][i])
+    iMa = [ np.argmax(r['fom']) for r in resL ]
     res = map(func,resL,iMa)
     res = array(res,dtype=[('epoch',float),('fom',float),('count',int)])
 
-    noise = mad
-    return res,noise
+    return res
 
-def ep(t,dM,Pcad):
+def ep(t0,dM,Pcad):
     """
     Search in Epoch.
 
+    Parameters
+    ----------
+    t0   : Time of first cadance.  This is needed to set the epoch.
+    dM   : Transit depth estimator
+    Pcad : Number of cadances to foldon
 
     Returns the following information:
     - 'fom'    : Figure of merit for each trial epoch
@@ -277,9 +291,9 @@ def ep(t,dM,Pcad):
     
     dMW = XWrap(dM,Pcad,fill_value=np.nan)
     dMW = ma.masked_invalid(dMW)
-
+    dMW.fill_value=0
     nt,ne = dMW.shape
-    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t[0]
+    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t0
 
     vcount = (~dMW.mask).astype(int).sum(axis=0)
     win = (vcount >= 3).astype(float)
@@ -303,45 +317,29 @@ def ep(t,dM,Pcad):
 
     return res
 
-def tfindpro(t,f,PG0):
+def tdmarg(rec2d):
     """
-    Transit Finder Profiler
+    tdur marginalize.
+
+    Marginalize over the transit duration.
 
     Parameters
     ----------
     t   : Time series
     f   : Flux
     PG0 : Initial Period Grid (actual periods are integer multiples of lc)
-    i   : The trial number
-    
+
     Returns
     -------
-    res : Dictionary of results for subsequent interpretation.
+    rec : Values corresponding to maximal s2n:
     
     """
-    res = tdpep(t,f,PG0)
+    # Marginalize over tdur
+    iMaTwd = np.argmax(rec2d['s2n'],axis=0)
+    x      = np.arange(rec2d.shape[1])
+    rec    = rec2d[iMaTwd,x]
 
-    epoch = res['epoch2d']
-    df    = res['df2d']
-    nT    = res['count2d']
-    PG    = res['PG']
-    twd   = res['twd']
+    return rec
 
-    noise2d = res['noise'].reshape(twd.size,1).repeat(df.shape[1],axis=1)
-    s2n = df/noise2d*sqrt(nT)
 
-    iMaTwd = np.argmax(s2n,axis=0)
-    x      = np.arange(PG0.size)
-
-    epoch = epoch[iMaTwd,x]
-    df    = df[iMaTwd,x]
-    noise = noise2d[iMaTwd,x]
-    nT    = nT[iMaTwd,x]
-    s2n   = s2n[iMaTwd,x]
-    twd   = np.array( [twd[i] for i in iMaTwd] )
-
-    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,
-           'twd':twd}
-
-    return res
 

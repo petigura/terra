@@ -16,11 +16,11 @@ import keptoy
 import keplerio
 
 def grid(t,f,Psmp=0.25):
-    PG0 = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
-    res = tfind.tfindpro(t,f,PG0)
-    tRES = qalg.dl2tab([res])
+    PG0   = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
+    rec2d = tfind.tdpep(t,f,PG0)
+    rec   = tfind.tdmarg(rec2d)
+    tRES  = qalg.rec2tab(rec)
     return tRES
-
 
 def val(tLC,tRES,nCheck=50,ver=True):
     dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)

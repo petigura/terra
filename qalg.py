@@ -104,6 +104,7 @@ def tab2dl(t):
         dl.append(d)
     return dl
 
+
 def dl2tab(dl):
     """
     Convert a list of dictionaries to an atpy table.
@@ -115,6 +116,17 @@ def dl2tab(dl):
         t.add_column(k,data)
 
     return t
+
+def rec2tab(rec):
+    """
+    Convert a list of dictionaries to an atpy table.
+    """
+    t = atpy.Table()
+    keys = rec.dtype.names
+    for k in keys:
+        t.add_column(k,rec[k])
+    return t
+
 
 def ROC(t):
     """
