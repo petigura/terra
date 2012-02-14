@@ -210,11 +210,14 @@ def diagFail(t):
     return balias,bwin
 
 
-def addFlag(t):
+def addFlag(tRED,tLC):
     """
     Adds a string description as to why the run failed'
     """
-    balias = map(qalg.alias,t.P,t.oP)
-    keplerio.update_column(t,'balias', )
-#    keplerio.update_column(t,'bwin',bwinL)
-    return t
+    balias = map(qalg.alias,tRED.P,tRED.oP)
+    keplerio.update_column(tRED,'balias',balias )
+
+    func = lambda P,epoch : qalg.window(tLC,P,epoch)
+    bwin   = map(func,tRED.P,tRED.epoch)
+    keplerio.update_column(tRED,'bwin',bwin)
+    return tRED

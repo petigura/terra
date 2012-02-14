@@ -10,7 +10,9 @@ import copy
 import ebls
 import detrend
 from keptoy import *
-
+import tfind
+import keptoy
+from scipy import ndimage as nd
 
 Plim =  0.001   # Periods must agree to this fractional amount
 epochlim =  0.1 # Epochs must agree to 0.1 days    
@@ -142,20 +144,28 @@ def bg(P,oP,epoch,oepoch):
     """
     return ( abs(P - oP)/P < Plim ) & ( abs(epoch - oepoch) < epochlim )
 
-def alias(P,oP)
+def alias(P,oP):
     Palias = P * np.array([0.5,2])
     return (abs( oP / Palias - 1) < Plim).any()
 
+def window(tLC,P,epoch):
+    f = tLC.f
 
+    bK,boxK,tK,aK,dK = tfind.GenK( 20 )
+    dM = nd.convolve1d(f,dK)
 
-def window():
-#    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
-#    pknown = qalg.tab2dl(t)[0]
-#    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
-#    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-#    Pcad = round(pknown['P']/keptoy.lc)
-#    res = tfind.ep(tLC.t,dM,Pcad)
-#    win = res['win']
-#    # Likely explaination for failure : window function.
-#    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
-    
+    # Discard cadences that are too high.
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
+    f = f.filled()
+    dM = nd.convolve1d(f,dK)
+
+    Pcad   = round(P/keptoy.lc)
+    res    = tfind.ep(tLC.t,dM,Pcad)
+    winG   = res['win']
+
+    # Find the first epoch after time = 0 .
+    epochG = np.remainder(res['epoch'],P)
+    idnn   = np.argmin( abs(epochG - epoch) )
+    bwin   = winG[idnn].astype(bool)
+    return bwin
