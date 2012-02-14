@@ -482,59 +482,51 @@ def inspSim():
 
 
 def inspVAL(tLC,tRES,*pL):
-    f = tLC.f # - tLC.fcbv
+#    if cbv :
+    f = tLC.fdtm - tLC.fcbv
+#    else:
+#        f = tLC.f
     t = tLC.t
 
     nrows = 4 + 2*len(pL)
-
-    colors = ['r']
 
     fig = gcf()
     fig.clf()
     ax0 = fig.add_subplot(nrows,1,1)
     ax1 = fig.add_subplot(nrows,1,2,sharex = ax0)
-    axL = [ax0,ax1]
-    axL[0].plot(t,f)
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    axL[1].plot(t,dM)
+    ax0.plot(t,f)
+    dM,bM,aM,DfDt,f0 = tfind.MF(f,14)
+    ax1.plot(t,dM)
 
-    for i in range(3,nrows+1):
-        axL.append( fig.add_subplot(nrows,1,i) )
+    ax2 = fig.add_subplot(nrows,1,3)
+    ax3 = fig.add_subplot(nrows,1,4,sharex = ax2)
 
-    sca(axL[2])
+    sca(ax2)
     periodogram(tRES)
 
-    sca(axL[3])
+    sca(ax3)
     pep(tRES)
+
+    axL = [ax0,ax1,ax2,ax3]
+    for i in range(5,nrows+1):
+        axL.append( fig.add_subplot(nrows,1,i) )
 
 
     for i in range(len(pL)):
         p = pL[i]
-        c = colors[i]
 
-#        ms = tval.midTransId( t ,  p)
-#        sL = [tval.getSlice(m,100) for m in ms]
-#        [axL[0].plot(t[s],f[s],c) for s in sL]
-#        [axL[1].plot(t[s],dM[s],c) for s in sL]
-
-        ifom = 3+2*i
-        ildt = 4+2*i
+        ifom = 4+2*i
+        ildt = 5+2*i
 
         sca( axL[ifom] )
         FOM(tLC.t,dM,p['P'])
 
         try:
-            axvline(p['epoch']/lc)
+            axvline((p['epoch']-tLC.t[0])/lc)
             sca( axL[ildt] )
             LDT(t,f,p)
         except:
             pass
-
-#    for ax in axL:
-#        xa = ax.get_xaxis()
-#        ya = ax.get_yaxis()
-#        xa.set_visible(False)
-##        ya.set_visible(False)
 
     plt.subplots_adjust(hspace=0.16)
     
