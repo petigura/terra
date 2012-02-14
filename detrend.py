@@ -1,24 +1,19 @@
-from numpy import *
-import glob
-import pyfits
-import atpy
-import sys
-from scipy import weave
-from scipy.weave import converters
-import os
-from numpy.polynomial import Legendre
-from keptoy import * 
+import numpy as np
+from numpy import ma
 from scipy import ndimage as nd
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline,LSQUnivariateSpline
 from scipy.optimize import fmin 
+import os
 
-cad = 30./60./24.
+import keptoy
+
+
 dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
-cbvdir = os.path.join(kepdir,'CBV/')
+
 
 def stitch(fl,tl,swd = 0.5):
     """
@@ -31,8 +26,8 @@ def stitch(fl,tl,swd = 0.5):
         fleft,tleft = fl[i],tl[i]
         fright,tright = fl[i+1],tl[i+1]
 
-        lid = where(tleft > tleft[-1] - swd)[0]
-        rid = where(tright < tright[0] + swd)[0]
+        lid = np.where(tleft > tleft[-1] - swd)[0]
+        rid = np.where(tright < tright[0] + swd)[0]
 
         medleft = median(fleft[lid])
         medright = median(fright[rid])
@@ -41,13 +36,6 @@ def stitch(fl,tl,swd = 0.5):
         fright *= factor
 
     return fl,tl
-
-def larr(iL):
-    oL = array([])
-    for l in iL:
-        oL = append(oL,l)
-        
-    return oL
 
 def nanIntrp(x0,y0,nContig=3):
     """
@@ -74,86 +62,97 @@ def nanIntrp(x0,y0,nContig=3):
 
     return x.data,y.data
 
-def cbv(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
+def cbvdt(t,f,bv):
     """
-    Cotrending basis vectors.
-
-    My implimentation of CBV detrending.  Assumes the relavent
-    lightcurve has been detrended.
-
-    Paramaters
-    ----------
-
-    tQLC    : Table for single quarter.
-    fcol    : string.  name of the flux column
-    efol    : string.  name of the flux_err colunm
-    cadmask : Boolean array specifying a subregion
-    ver     : Verbose output (turn off for batch).
-
-    Returns
-    -------
-
-    ffit    : The CBV fit to the fluxes.
+    Detrend a quarters worth of light curve with CBVs
     """
-    cbv = [1,2,3,4,5,6] # Which CBVs to use.
-    ncbv = len(cbv)
-
-    kw = tQLC.keywords
-    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
-
-    cad   = tQLC['CADENCENO' ]
-    t     = tQLC['TIME'      ]
-    f     = tQLC[fcol        ]
-    ferr  = tQLC[efcol       ]
-
+    ncbv  = bv.shape[0]
+    
     tm = ma.masked_invalid(t)
     fm = ma.masked_invalid(f)
     mask  = tm.mask | fm.mask 
     tm.mask = fm.mask = mask
 
-    tBV = bvload(tQLC)
-    bv = vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
     bv = ma.masked_array(bv)
     bv.mask = np.tile(mask, (ncbv,1) )
     p1v = np.zeros(bv.shape)
 
-    sL = ma.notmasked_contiguous(tm)
-    sL = [s for s in sL if s.stop-s.start > 5 / lc]
-
     ffit  = np.zeros(fm.shape)
-    fdtm  = fm.copy()
-    
+    fdt  = np.zeros(fm.shape)
 
+    sL = cbvseg(t,f)
     for s in sL:
-        fdt = lsdt(tm[s].data,fm[s].data)
-        bvdt = [lsdt(tm[s].data,bv[i,s].data) for i in range(ncbv) ]
-        bvdt = vstack(bvdt)
-        p1 = np.linalg.lstsq(bvdt.T,fdt)[0]
-        ffit[s] = modelCBV(p1,bvdt)
-        fdtm[s] = fdt
-        p1v[:,s] = np.tile( p1,(s.stop-s.start,1) ).T
+        print s
+        # Some of the values here could be masked.
 
+        idfit = np.where(~mask[s])[0]
+        tseg = tm[s].compressed() 
+        fseg = fm[s].compressed()
 
-    return fdtm,ffit,p1v
+        # compress returns 1d array so we need to reshape
+        bvseg = bv[:,s].compressed() 
+        bvseg = bvseg.reshape(ncbv,bvseg.size/ncbv)
 
-def lsdt(t,f):
+        fdtseg,ffitseg,p1seg = segfit(tseg,fseg,bvseg)
+        fdt[s][idfit]  = fdtseg 
+        ffit[s][idfit] = ffitseg
+
+    return fdt,ffit
+
+def segfit(tseg,fseg,bvseg):
     """
-    Long/short timescale detrending.
+    Segment fit.
+
+    Fit a segment of data with CBVs.
+
+    Parameters
+    ----------
+    tseg  : time segment
+    fseg  : flux segment
+    bvseg : basis vector segments
+
+    """
+    ftnd  = spldt(tseg,fseg)
+    bvtnd = [spldt(tseg,bvseg[i,:]) for i in range(bvseg.shape[0]) ] 
+    bvtnd = np.vstack(bvtnd)
+
+    bvdt = bvseg - bvtnd
+    fdt = fseg - ftnd
+    p1 = np.linalg.lstsq(bvdt.T,fdt)[0]
+
+    ffit = modelCBV(p1,bvdt)
+    return fdt,ffit,p1
+
+def cbvseg(t,f,segsep=1):
+    """
+    CBV Segmentation
+
+    Split time series into segments for CBV fitting.  Sections are
+    considered distinct if they are seperated by more than segsep days
+
+    """
+    nsep = segsep / keptoy.lc
+
+    tm,fm = t,f
+    tm,fm = nanIntrp(tm,fm,nContig=nsep)
+    fm = ma.masked_invalid(fm)
+    return ma.notmasked_contiguous(fm)
+
+def spldt(t,f,lendt=10):
+    """
+    Spline detrending
     """
 
-    tlong  = 10 # Cut out timescales longer than tlong days.
-    tshort = 2./24 # Cut out timescales shorter than tshort days. 
-    
-    # Require that data is contiguous.
-    assert max(t[1:]-t[0:-1]) < 1.2*lc
+    fm = ma.masked_invalid(f)
+    assert fm.count() == fm.size,"No nans allowed."
 
-    sp = UnivariateSpline(t,f)
-    fdt = f - sp(t)
+    tbase = t.ptp()
+    nknots = np.floor(tbase / lendt) + 1
+    tk = np.linspace(t[0],t[-1],nknots)
+    tk = tk[1:-1]
+    sp = LSQUnivariateSpline(t,f,tk)
+    return sp(t)
 
-    wid = tshort / lc
-    fdt = nd.uniform_filter(fdt,size=4)
-    return fdt
-    
 def bvfit(t,f,ferr,bv):
     """
     Fit basis vectors:
@@ -178,19 +177,3 @@ def modelCBV(p,bv):
    return np.dot(p,bv)
    
 
-def bvload(tQLC):
-    """
-    Load basis vector.
-
-    """    
-    kw = tQLC.keywords
-    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
-
-    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % kw['QUARTER'])
-    bvfile = glob.glob(bvfile)[0]
-    bvhdu  = pyfits.open(bvfile)
-    bvkw   = bvhdu[0].header
-    bvcolname = 'MODOUT_%i_%i' % (kw['MODULE'],kw['OUTPUT'])
-    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
-    assert bvkw['QUARTER'] == kw['QUARTER']," BV must be from the same quater"
-    return tBV

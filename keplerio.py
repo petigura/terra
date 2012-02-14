@@ -17,6 +17,7 @@ import tfind
 
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
+cbvdir = os.path.join(kepdir,'CBV/')
 
 def KICPath(KIC,basedir):
     """
@@ -71,6 +72,20 @@ def qload(file):
 
     t.table_name = 'Q%i' % t.keywords['QUARTER']
     return t
+
+
+def bvload(quarter,module,output):
+    """
+    Load basis vector.
+
+    """    
+    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % quarter)
+    bvfile = glob.glob(bvfile)[0]
+    bvhdu  = pyfits.open(bvfile)
+    bvkw   = bvhdu[0].header
+    bvcolname = 'MODOUT_%i_%i' % (module,output)
+    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
+    return tBV
 
     
 def nQ(t0):
@@ -157,7 +172,7 @@ def sQ(tLCset0):
 
     # Figure out which cadences are missing and fill them in.
     cad       = [tab.CADENCENO for tab in tLCset]
-    cad       = detrend.larr(cad)       # Convert the list to an array 
+    cad       = np.hstack(cad)       # Convert the list to an array 
     cad,iFill = cadFill(cad)
     nFill     = cad.size
     update_column(tLC,'cad',cad)
@@ -174,7 +189,7 @@ def sQ(tLCset0):
         ctemp[::] = np.nan      # default value is nan
 
         col = [tab[fn] for tab in tLCset] # Column in list form
-        col =  detrend.larr(col)       # Convert the list to an array 
+        col =  np.hstack(col)       # Convert the list to an array 
 
         ctemp[iFill] = col
         update_column(tLC,fn,ctemp)
@@ -223,6 +238,47 @@ def toutReg(tLC0,outregcol=['f','fpdc']):
     tLC.keywords['OUTREG'] = True
     return tLC
 
+def tcbvdt(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
+    """
+    Table CBV Detrending
+
+    My implimentation of CBV detrending.  Assumes the relavent
+    lightcurve has been detrended.
+
+    Paramaters
+    ----------
+
+    tQLC    : Table for single quarter.
+    fcol    : string.  name of the flux column
+    efol    : string.  name of the flux_err colunm
+    cadmask : Boolean array specifying a subregion
+    ver     : Verbose output (turn off for batch).
+
+    Returns
+    -------
+
+    ffit    : The CBV fit to the fluxes.
+    """
+    cbv = [1,2,3,4,5,6] # Which CBVs to use.
+    ncbv = len(cbv)
+
+    kw = tQLC.keywords
+    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
+
+    cad   = tQLC['CADENCENO' ]
+    t     = tQLC['TIME'      ]
+    f     = tQLC[fcol        ]
+    ferr  = tQLC[efcol       ]
+
+    tBV = bvload(kw['QUARTER'],kw['MODULE'],kw['OUTPUT'])
+    bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
+
+    fdt,ffit = detrend.cbvdt(t,f,bv)
+    update_column(tQLC,'fdt',fdt)
+    update_column(tQLC,'fcbv',ffit)
+
+    return tQLC
+
 def fillnans(t0):
     t = copy.deepcopy(t0)
     for k in ['f','ef','fpdc','efpdc']:        
@@ -239,10 +295,8 @@ def ppQ(t0,ver=True):
     t.data = cut(t).data
     t.data = toutReg(t).data
     t.data = fillnans(t).data
+    t.data = tcbvdt(t,'f','ef').data
 
-    fdtm,ffit,p1v = detrend.cbv(t,'f','ef',ver=ver)
-    update_column(t,'fdtm',fdtm)
-    update_column(t,'fcbv',ffit)
     return t
 
 def prepLC(tLCset,ver=True):
