@@ -173,7 +173,7 @@ def window(tLC,P,epoch):
     dM = nd.convolve1d(f,dK)
 
     Pcad   = round(P/keptoy.lc)
-    res    = tfind.ep(tLC.t,dM,Pcad)
+    res    = tfind.ep(tLC.t[0],dM,Pcad)
     winG   = res['win']
 
     # Find the first epoch after time = 0 .

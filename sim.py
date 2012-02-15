@@ -97,11 +97,11 @@ def bfitRES(file):
     """
     tRES = atpy.Table(file,type='fits')
     
-    idMa = np.argmax(tRES.s2n[0])
+    idMa = np.argmax(tRES.s2n)
     d = dict(
         oP     = tRES.PG[idMa],
         oepoch = tRES.epoch[idMa],
-        odf    = tRES.df[idMa],
+#        odf    = tRES.df[idMa],
         os2n   = tRES.s2n[idMa],
         otwd   = tRES.twd[idMa],
         seed   = tRES.keywords['SEED']
