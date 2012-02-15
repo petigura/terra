@@ -23,7 +23,9 @@ def grid(t,f,Psmp=0.25):
     return tRES
 
 def val(tLC,tRES,nCheck=50,ver=True):
-    dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)
+    # Work around since I made tRES the proper dimensions.  Fix later.
+    res = dict(PG=tRES.PG,s2n=tRES.s2n,epoch=tRES.epoch,twd=tRES.twd)
+    dL = tval.parGuess(res,nCheck=nCheck)
     resL = tval.fitcandW(tLC.t,tLC.f,dL,ver=ver)
 
     # Alias Lodgic.

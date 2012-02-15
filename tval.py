@@ -258,7 +258,7 @@ def parGuess(res,nCheck=50):
     res - Dictionary with the following keys:
 
         s2n   : Array of s2n
-        P     : Period grid
+        PG    : Period grid
         epoch : Array of epochs
         twd   : Array of epochs
     
