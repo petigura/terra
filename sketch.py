@@ -250,10 +250,10 @@ def FOM(t0,dM,P):
     step = np.nanmax(dM.data)
     Pcad = int(round(P/lc))
     dMW = tfind.XWrap(dM.filled(),Pcad,fill_value=nan)
-    XWrap(dMW, step = step  )
     res = tfind.ep(t0,dM,Pcad)
     fom = res['fom']
-    plot(fom -step )
+    [plt.plot(res['epoch'],dMW[i,:]+i*step) for i in range(dMW.shape[0])]    
+    plot(res['epoch'],res['fom'] -step )
     return dMW
 
 
@@ -526,9 +526,9 @@ def inspVAL(tLC,tRES,*pL):
 
         FOM(tLC.t[0],dM,p['P'])
 
-        ecad = np.remainder(p['epoch']+tLC.t[0],p['P'])/keptoy.lc
         try:
-            axvline(ecad)
+            epoch = p['epoch']+np.ceil((tLC.t[0]-p['epoch'])/p['P'])*p['P']
+            axvline(epoch)
             sca( axL[ildt] )
             LDT(t,f,p)
         except:
