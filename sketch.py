@@ -242,18 +242,18 @@ def XWrap(XW,step=1):
     ncad = XW.shape[1]
     [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
-def FOM(t,dM,P):
+def FOM(t0,dM,P):
     """
     Plot the figure of merit
 
     """
-    step = np.nanmax(dM)
+    step = np.nanmax(dM.data)
     Pcad = int(round(P/lc))
-    dMW = tfind.XWrap(dM,Pcad,fill_value=nan)
-    XWrap(dMW, step = step  )
-    res = tfind.ep(t,dM,Pcad)
+    dMW = tfind.XWrap(dM.filled(),Pcad,fill_value=nan)
+    res = tfind.ep(t0,dM,Pcad)
     fom = res['fom']
-    plot(fom -step )
+    [plt.plot(res['epoch'],dMW[i,:]+i*step) for i in range(dMW.shape[0])]    
+    plot(res['epoch'],res['fom'] -step )
     return dMW
 
 
@@ -412,7 +412,7 @@ def hist(tres):
     KIC = unique(tres.KIC)[0]
     dfL = unique(tres.df)
 
-    fig,axL = subplots(nrows=len(dfL),sharex=True,figsize=( 11,  12))
+    fig,axL = subplots(nrows=len(dfL),sharex=True,figsize=( 5,  12))
     for df,ax in zip(dfL,axL):
         tg = tres.where( (tres.df == df) & tres.bg)
         tb = tres.where( (tres.df == df) & ~tres.bg)
@@ -452,89 +452,6 @@ def simplots(tres):
         fig.savefig('%02d.png' % fcount )
         fcount +=1
         fig.clf()
-    
-def inspFail(tPAR,tLC,tRES):
-    """
-
-    """
-
-    assert tPAR.data.size == 1, "Must be length 1 tables"
-
-    # Generate the lightcurve.
-    f = keptoy.genEmpLC( qalg.tab2dl(tPAR)[0] ,tLC.t,tLC.f   )
-    t = tLC.t
-
-    # Find the parameters:
-    pkwn   = dict(P = tPAR.P, epoch=tPAR.epoch, tdur=0.3 )
-    
-    iclose = argmin( abs(tRES.PG - tPAR.P) )
-    pclose = dict(
-        P     = tRES.PG[0][iclose], 
-        epoch = tRES.epoch[0][iclose],
-        tdur  = 0.3 
-        )
-
-    phigh = dict(
-        P     = tPAR.oP, 
-        epoch = tPAR.oepoch,
-        tdur  = 0.3 ,
-        df    = tPAR.df,
-        )
-
-    
-    fig,axL = subplots(nrows=5,figsize=( 11, 12))
-
-    iax = 0
-    axL[iax].axvline( pkwn['P'],label='Input Period' )
-    axL[iax].plot( tRES.PG[0],tRES.s2n[0] )
-    axL[iax].legend()
-    iax += 1
-
-    sca(axL[iax])
-#    axes(sharex=axL[0])
-    axL[iax].scatter(tRES[0]['PG'],tRES[0]['epoch'],c=tRES[0]['s2n'],
-                     cmap=cm.gray_r,edgecolors='none',vmin=7)
-    iax += 1
-
-    axL[iax].set_title('Known site of transit')
-    sca(axL[iax])
-    try:
-        LDT(t,f,pkwn)
-    except ValueError:
-        pass
-
-    iax += 1
-
-    axL[iax].set_title('Closest Peak')
-    sca(axL[iax])
-    try:
-        LDT(t,f,pclose)
-    except ValueError:
-        pass
-
-    iax += 1
-
-    axL[iax].set_title('Highest Peak')
-    sca(axL[iax])
-
-    LDT(t,f,phigh)
-    X2,X2A,pA,fTransitA , mTransit, mTransitA = tval.alias(t,f,phigh)
-
-    label = r"""
-$\chi^2 $ Input  = %(X2)e
-$\chi^2 $ Alias  = %(X2A)e 
-""" % { 'X2':X2 , 'X2A':X2A }
-    ax = gca()
-    ax.annotate(label,xy=(.8,.1),xycoords='axes fraction',
-                bbox=dict(boxstyle="round", fc="w", ec="k"))
-
-
-
-    iax += 1
-
-    return #X2,X2A,fTransitA , mTransit, mTransitA
-
-
 
 def inspSim():
 
@@ -565,59 +482,57 @@ def inspSim():
 
 
 def inspVAL(tLC,tRES,*pL):
-    f = tLC.f # - tLC.fcbv
+    f = tLC.fdt - tLC.fcbv
     t = tLC.t
 
     nrows = 4 + 2*len(pL)
-
-    colors = ['r']
 
     fig = gcf()
     fig.clf()
     ax0 = fig.add_subplot(nrows,1,1)
     ax1 = fig.add_subplot(nrows,1,2,sharex = ax0)
-    axL = [ax0,ax1]
-    axL[0].plot(t,f)
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    axL[1].plot(t,dM)
+    ax0.plot(t,f)
 
-    for i in range(3,nrows+1):
-        axL.append( fig.add_subplot(nrows,1,i) )
+    fm = ma.masked_invalid(f)
+    fm.fill_value=0
 
-    sca(axL[2])
+    dM = tfind.mtd(t,fm.filled(),14)
+    dM.fill_value = np.nan
+    dM.mask = fm.mask | ~tfind.isfilled(t,f,14)
+    
+    ax1.plot(t,dM)
+
+    ax2 = fig.add_subplot(nrows,1,3)
+    ax3 = fig.add_subplot(nrows,1,4,sharex = ax2)
+
+    sca(ax2)
     periodogram(tRES)
 
-    sca(axL[4])
+    sca(ax3)
     pep(tRES)
+
+    axL = [ax0,ax1,ax2,ax3]
+    for i in range(5,nrows+1):
+        axL.append( fig.add_subplot(nrows,1,i) )
 
 
     for i in range(len(pL)):
         p = pL[i]
-        c = colors[i]
 
-#        ms = tval.midTransId( t ,  p)
-#        sL = [tval.getSlice(m,100) for m in ms]
-#        [axL[0].plot(t[s],f[s],c) for s in sL]
-#        [axL[1].plot(t[s],dM[s],c) for s in sL]
-
-        ifom = 3+2*i
-        ildt = 4+2*i
+        ifom = 4+2*i
+        ildt = 5+2*i
 
         sca( axL[ifom] )
-        FOM(tLC.t,dM,p['P'])
+
+        FOM(tLC.t[0],dM,p['P'])
 
         try:
-            axvline(p['epoch']/lc)
+            epoch = p['epoch']+np.ceil((tLC.t[0]-p['epoch'])/p['P'])*p['P']
+            axvline(epoch)
             sca( axL[ildt] )
             LDT(t,f,p)
         except:
             pass
-
-#    for ax in axL:
-#        xa = ax.get_xaxis()
-#        ya = ax.get_yaxis()
-#        xa.set_visible(False)
-##        ya.set_visible(False)
 
     plt.subplots_adjust(hspace=0.16)
     
@@ -630,9 +545,9 @@ def pep(tRES):
     """
     ax = gca()
 
-    x = tRES.PG[0]
-    y = tRES.epoch[0]
-    c = tRES.s2n[0]
+    x = tRES.PG
+    y = tRES.epoch
+    c = tRES.s2n
     sid = argsort(c)
 
     x = x[sid]
@@ -642,8 +557,8 @@ def pep(tRES):
 
 def periodogram(tRES):
     ax = gca()
-    x = tRES.PG[0]
-    y = tRES.s2n[0]
+    x = tRES.PG
+    y = tRES.s2n
     ax.plot(x,y)
 
 

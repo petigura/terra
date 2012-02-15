@@ -1,7 +1,3 @@
-"""
-"""
-
-
 import itertools
 import cPickle as pickle
 from numpy import *
@@ -14,6 +10,12 @@ import copy
 import ebls
 import detrend
 from keptoy import *
+import tfind
+import keptoy
+from scipy import ndimage as nd
+
+Plim =  0.001   # Periods must agree to this fractional amount
+epochlim =  0.1 # Epochs must agree to 0.1 days    
 
 def init(**kwargs):
     """
@@ -102,6 +104,7 @@ def tab2dl(t):
         dl.append(d)
     return dl
 
+
 def dl2tab(dl):
     """
     Convert a list of dictionaries to an atpy table.
@@ -113,6 +116,17 @@ def dl2tab(dl):
         t.add_column(k,data)
 
     return t
+
+def rec2tab(rec):
+    """
+    Convert a list of dictionaries to an atpy table.
+    """
+    t = atpy.Table()
+    keys = rec.dtype.names
+    for k in keys:
+        t.add_column(k,rec[k])
+    return t
+
 
 def ROC(t):
     """
@@ -135,3 +149,35 @@ def ROC(t):
         fapL.append(fap)
                
     return fapL,etaL
+
+def bg(P,oP,epoch,oepoch):
+    """
+    Did we correctly identify period
+    """
+    return ( abs(P - oP)/P < Plim ) & ( abs(epoch - oepoch) < epochlim )
+
+def alias(P,oP):
+    Palias = P * np.array([0.5,2])
+    return (abs( oP / Palias - 1) < Plim).any()
+
+def window(tLC,P,epoch):
+    f = tLC.f
+
+    bK,boxK,tK,aK,dK = tfind.GenK( 20 )
+    dM = nd.convolve1d(f,dK)
+
+    # Discard cadences that are too high.
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
+    f = f.filled()
+    dM = nd.convolve1d(f,dK)
+
+    Pcad   = round(P/keptoy.lc)
+    res    = tfind.ep(tLC.t[0],dM,Pcad)
+    winG   = res['win']
+
+    # Find the first epoch after time = 0 .
+    epochG = np.remainder(res['epoch'],P)
+    idnn   = np.argmin( abs(epochG - epoch) )
+    bwin   = winG[idnn].astype(bool)
+    return bwin

@@ -16,14 +16,16 @@ import keptoy
 import keplerio
 
 def grid(t,f,Psmp=0.25):
-    PG0 = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
-    res = tfind.tfindpro(t,f,PG0)
-    tRES = qalg.dl2tab([res])
+    PG0   = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
+    rec2d = tfind.tdpep(t,f,PG0)
+    rec   = tfind.tdmarg(rec2d)
+    tRES  = qalg.rec2tab(rec)
     return tRES
 
-
 def val(tLC,tRES,nCheck=50,ver=True):
-    dL = tval.parGuess(qalg.tab2dl(tRES)[0],nCheck=nCheck)
+    # Work around since I made tRES the proper dimensions.  Fix later.
+    res = dict(PG=tRES.PG,s2n=tRES.s2n,epoch=tRES.epoch,twd=tRES.twd)
+    dL = tval.parGuess(res,nCheck=nCheck)
     resL = tval.fitcandW(tLC.t,tLC.f,dL,ver=ver)
 
     # Alias Lodgic.
@@ -40,41 +42,6 @@ def val(tLC,tRES,nCheck=50,ver=True):
 
 
 
-def diagFail(t):
-    """
-    Why did a particular run fail?
-    """
-    kepdir = os.environ['KEPDIR']
-    Palias = t.P[0] * np.array([0.5,2])
-
-    # Likely explaination for failure : alias function.
-    balias = (abs( t.oP[0] / Palias - 1) < 1e-3).any()
-    tLC  = atpy.Table(t.keywords['LCFILE'],type='fits')
-    pknown = qalg.tab2dl(t)[0]
-    f = keptoy.genEmpLC(pknown , tLC.t,tLC.f  )
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,20)
-    Pcad = round(pknown['P']/keptoy.lc)
-    res = tfind.ep(dM,Pcad)
-    win = res['win']
-    # Likely explaination for failure : window function.
-    bwin = ~(win[np.floor(t.epoch[0]/keptoy.lc)]).astype(bool)
-    
-    return balias,bwin
-
-
-def addFlag(t):
-    """
-    Adds a string description as to why the run failed'
-    """
-
-    baliasL,bwinL = [],[]
-    for i in range(len(t.data)):
-        balias,bwin = diagFail(t.rows([i]))
-        baliasL.append(balias)
-        bwinL.append(bwin)
-    keplerio.update_column(t,'balias',baliasL)
-    keplerio.update_column(t,'bwin',bwinL)
-    return t
 
 
 def kwUnique(kwL,key):
@@ -96,10 +63,6 @@ def convEpoch(epoch0,P,t0):
     
     return np.remainder(epoch0 + t0,P)
 
-def addbg(t):    
-    bg = ( abs(t.P - t.oP)/t.P < 0.001 ) & ( abs(t.epoch - t.oepoch) < 0.1 )
-    keplerio.update_column(t,'bg',bg)    
-    return t
 
 def getkw(file):
     """
@@ -134,14 +97,14 @@ def bfitRES(file):
     """
     tRES = atpy.Table(file,type='fits')
     
-    idMa = np.argmax(tRES.s2n[0])
+    idMa = np.argmax(tRES.s2n)
     d = dict(
-        oP     = tRES.PG[0][idMa],
-        oepoch = tRES.epoch[0][idMa],
-        odf    = tRES.df[0][idMa],
-        os2n   = tRES.s2n[0][idMa],
-        otwd   = tRES.twd[0][idMa],
-        seed  = tRES.keywords['SEED']
+        oP     = tRES.PG[idMa],
+        oepoch = tRES.epoch[idMa],
+#        odf    = tRES.df[idMa],
+        os2n   = tRES.s2n[idMa],
+        otwd   = tRES.twd[idMa],
+        seed   = tRES.keywords['SEED']
         )
     return d
 
@@ -163,8 +126,6 @@ def bfitVAL(file):
         seed   = tVAL.keywords['SEED']
         )
     return d
-
-
 
 def name2seed(file):
     """
@@ -194,7 +155,6 @@ def addVALkw(files):
             t.keywords[c] = tROW.data[c][0]
         t.write(f,overwrite=True,type='fits')
 
-
 def inject(tLCbase,tPAR):
     """
     Inject transit signal into lightcurve.
@@ -219,3 +179,47 @@ def tinject(t0,d0):
     f = keptoy.genEmpLC(d0,t.TIME,t.f)
     keplerio.update_column(t,'f',f)
     return t
+
+def PARRES(tPAR0,tRED0):
+    """
+
+    """
+    tPAR = copy.deepcopy(tPAR0)
+    tRED = copy.deepcopy(tRED0)
+
+    tPAR.set_primary_key('seed')
+    tRED.set_primary_key('seed')
+    tRED = join.join(tPAR,tRED)
+
+    # Convert epochs back into input
+    tRED.data['oepoch'] = np.remainder(tRED.oepoch,tRED.P)
+    addbg(tRED)
+    addFlag(tRED)
+    return tRED
+
+
+def addbg(t):    
+    bg = qalg.bg(t.P,t.oP,t.epoch,t.oepoch)
+    keplerio.update_column(t,'bg',bg)    
+    return t
+
+def diagFail(t):
+    """
+    Why did a particular run fail?
+    """
+    kepdir = os.environ['KEPDIR']
+
+    return balias,bwin
+
+
+def addFlag(tRED,tLC):
+    """
+    Adds a string description as to why the run failed'
+    """
+    balias = map(qalg.alias,tRED.P,tRED.oP)
+    keplerio.update_column(tRED,'balias',balias )
+
+    func = lambda P,epoch : qalg.window(tLC,P,epoch)
+    bwin   = map(func,tRED.P,tRED.epoch)
+    keplerio.update_column(tRED,'bwin',bwin)
+    return tRED

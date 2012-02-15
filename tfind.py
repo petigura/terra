@@ -8,10 +8,12 @@ import scipy
 import sys
 import numpy as np
 from numpy import ma
+from matplotlib import mlab
+
 from keptoy import *
 from keptoy import lc 
 import keplerio
-
+import detrend
 def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
@@ -80,7 +82,6 @@ def isfilled(t,f,twd):
     assert keplerio.iscadFill(t,f),'Series might not be evenly sampled'
 
     bK,boxK,tK,aK,dK = GenK(twd ) 
-    dM,bM,aM,DfDt,f0 = MF(f,20)
     fn = ma.masked_invalid(f)
     bgood = (~fn.mask).astype(float) 
 
@@ -156,23 +157,55 @@ def P2Pcad(PG0):
 
     return PcadG,PG
 
+def mtd(t,f,twd):
+    """
+    Mean Transit Depth
+
+    Convolve time series with our locally detrended matched filter.  
+
+    Parameters
+    ----------
+    t   :  time series 
+    f   :  flux series.  f can contain no nans.  nans screw up
+    convolution. Interpolate through them.  Mask will be copied to dM.
+    twd :  Width of kernel in cadances
+
+    Notes
+    -----
+    Since a single nan in the convolution kernel will return a nan, we
+    interpolate the entire time series.  We see some edge effects
+
+    """
+    assert np.where(np.isnan(f))[0].size == 0,\
+        "f must contain no nans (screws up convolution)"
+
+    bK,boxK,tK,aK,dK = GenK( twd )
+    dM = nd.convolve1d(f,dK)
+    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    dM.fill_value=0
+    return dM
+
 def tdpep(t,f,PG0):
     """
     Transit-duration - Period - Epoch
 
     Parameters
     ----------
-    f - Flux time series.  It is assumed that elements of f are
+    f    : Flux time series.  It is assumed that elements of f are
            evenly spaced in time.
 
-    PG0  - Initial period grid.
+    PG0  : Initial period grid.
 
     Returns
     -------
-    eee - epoch of maximum depth for a paticular (twd,P)
-    ddd - depth of maximum depth for a paticular (twd,P)
-    sss - typical scatter for a paticular (twd,P)
-    ccc - number of filled data for particular (twd,P)
+
+    epoch2d : Grid (twd,P) of best epoch 
+    df2d    : Grid (twd,P) of depth epoch 
+    count2d : number of filled data for particular (twd,P)
+    noise   : Grid (twd) typical scatter 
+    PG      : The Period grid
+    twd     : Grid of trial transit widths.
+
     """
 
     # Determine the grid of periods that corresponds to integer
@@ -185,84 +218,82 @@ def tdpep(t,f,PG0):
 
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
 
-    func = lambda twd: pep(t,f,twd,PcadG)
-    resL = map(func,twdG)
+    rec2d = []
+    noise = []
+    for twd in twdG:
+        fm = ma.masked_array(f,copy=True,mask=False)
+        fm = ma.masked_invalid(fm)
+        fm.fill_value = 0 #  ma.masked_invalid resets default fill_value.
 
-    eee = [ r['ee'] for r in resL ]
-    ddd = [ r['dd' ] for r in resL ]
-    ccc = [ r['cc' ] for r in resL ]
+        dM = mtd(t,fm.filled(),twd)
+        dM.mask = fm.mask | ~isfilled(t,f,twd)
+        rec2d.append( pep(t[0],dM,PcadG) )
 
-    noise = array([ r['noise' ] for r in resL ])
+        # Noise per transit 
+        mad = ma.masked_invalid(dM)
+        mad = ma.abs(mad)
+        mad = ma.median(mad)
+        noise.append(mad)
 
-    eee = np.vstack( [np.array(ee) for ee in eee] )
-    ddd = np.vstack( [np.array(dd) for dd in ddd] )
-    ccc = np.vstack( [np.array(cc) for cc in ccc] )
+    rec2d = np.vstack(rec2d)
 
-    res = {'epoch2d':eee,
-           'df2d':ddd,
-           'count2d':ccc,
-           'PG':PG,
-           'twd':twdG,
-           'noise':noise
-           }
-    return res
+    make2d = lambda x : np.tile( np.vstack(x), (1,rec2d.shape[1] ))
+    rec2d = mlab.rec_append_fields(rec2d,'noise',make2d(noise))
+    rec2d = mlab.rec_append_fields(rec2d,'twd',  make2d(twdG))
 
-def pep(t,f,twd,PcadG):
+    PG = np.tile( PG, (rec2d.shape[0],1 ))
+    rec2d = mlab.rec_append_fields(rec2d,'PG',PG)
+
+    s2n   = rec2d['fom']/rec2d['noise']*rec2d['count']
+    rec2d = mlab.rec_append_fields(rec2d,'s2n',  s2n )
+    return rec2d
+
+def pep(t0,dM,PcadG):
     """
-    Search in period then epoch:
+    Period-Epoch
+
+    Wraps ep over a grid of periods.  It marginalizes over epoch.
+
+    Parameters
+    ----------
+    t0    : time of first dM[0].
+    dM    : depth statistic
+    PcadG : Grid of periods (units of cadance)
     """
-    bK,boxK,tK,aK,dK = GenK( twd )
-    dM = nd.convolve1d(f,dK)
 
-    # Noise per transit 
-    mad = ma.masked_invalid(dM)
-    mad = ma.abs(mad)
-    mad = ma.median(mad)
-
-    # Discard cadences that are too high.
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
-    f = f.filled()
-    dM = nd.convolve1d(f,dK)
-
-    filled = isfilled(t,f,twd)
-
-    func = lambda Pcad: ep(t,dM,Pcad)
+    func = lambda Pcad: ep(t0,dM,Pcad)
     resL = map(func,PcadG)
 
-    ee = array([ r['mepoch'] for r in resL ])
-    dd = array([ r['mdf'   ] for r in resL ])
-    cc = array([ r['count' ] for r in resL ])
-    noise = mad
+    # Marginalize over epoch.
+    func = lambda r,i : (r['epoch'][i],r['fom'][i],r['count'][i])
+    iMa = [ np.argmax(r['fom']) for r in resL ]
+    res = map(func,resL,iMa)
+    res = array(res,dtype=[('epoch',float),('fom',float),('count',int)])
 
-    res = {
-        'ee'    : ee   ,
-        'dd'    : dd   ,
-        'cc'    : cc   ,       
-        'noise' : noise,
-        }
     return res
 
-def ep(t,dM,Pcad):
+def ep(t0,dM,Pcad):
     """
     Search in Epoch.
 
+    Parameters
+    ----------
+    t0   : Time of first cadance.  This is needed to set the epoch.
+    dM   : Transit depth estimator
+    Pcad : Number of cadances to foldon
 
     Returns the following information:
-    - 'mfom'   : Maximal figure of merit
-    - 'sfom'   : Scatter in the fom
-    - 'mepoch' : Corresponding Epoch
-    - 'mdf'    : Corresponding transit depth.
-    - 'count'  : Number of valid regions
-    - 'epoch'  : Array corresponding to epochs
+    - 'fom'    : Figure of merit for each trial epoch
+    - 'count'  : 
+    - 'epoch'  : Trial 
     - 'win'    : Which epochs passed (window function)
     """
     
     dMW = XWrap(dM,Pcad,fill_value=np.nan)
     dMW = ma.masked_invalid(dMW)
-
+    dMW.fill_value=0
     nt,ne = dMW.shape
-    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t[0]
+    epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t0
 
     vcount = (~dMW.mask).astype(int).sum(axis=0)
     win = (vcount >= 3).astype(float)
@@ -276,59 +307,39 @@ def ep(t,dM,Pcad):
     d = bsig*win*dMW.mean(axis=0)
     
     fom = d
-    iMax = fom.argmax()
 
     res = {
         'fom'    : fom         ,
-        'mfom'   : fom[iMax]   ,
-        'mepoch' : epoch[iMax] ,       
-        'mdf'    : d[iMax]     ,
-        'count'  : vcount[iMax] ,       
         'epoch'  : epoch       ,
         'win'    : win         ,
+        'count'  : vcount        ,
         }
 
     return res
 
-def tfindpro(t,f,PG0):
+def tdmarg(rec2d):
     """
-    Transit Finder Profiler
+    tdur marginalize.
+
+    Marginalize over the transit duration.
 
     Parameters
     ----------
     t   : Time series
     f   : Flux
     PG0 : Initial Period Grid (actual periods are integer multiples of lc)
-    i   : The trial number
-    
+
     Returns
     -------
-    res : Dictionary of results for subsequent interpretation.
+    rec : Values corresponding to maximal s2n:
     
     """
-    res = tdpep(t,f,PG0)
+    # Marginalize over tdur
+    iMaTwd = np.argmax(rec2d['s2n'],axis=0)
+    x      = np.arange(rec2d.shape[1])
+    rec    = rec2d[iMaTwd,x]
 
-    epoch = res['epoch2d']
-    df    = res['df2d']
-    nT    = res['count2d']
-    PG    = res['PG']
-    twd   = res['twd']
+    return rec
 
-    noise2d = res['noise'].reshape(twd.size,1).repeat(df.shape[1],axis=1)
-    s2n = df/noise2d*sqrt(nT)
 
-    iMaTwd = np.argmax(s2n,axis=0)
-    x      = np.arange(PG0.size)
-
-    epoch = epoch[iMaTwd,x]
-    df    = df[iMaTwd,x]
-    noise = noise2d[iMaTwd,x]
-    nT    = nT[iMaTwd,x]
-    s2n   = s2n[iMaTwd,x]
-    twd   = np.array( [twd[i] for i in iMaTwd] )
-
-    res = {'epoch':epoch,'df':df,'noise':noise,'nT':nT,'PG':PG,'s2n':s2n,
-           'twd':twd}
-
-    return res
 
