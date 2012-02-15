@@ -242,16 +242,16 @@ def XWrap(XW,step=1):
     ncad = XW.shape[1]
     [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
-def FOM(t,dM,P):
+def FOM(t0,dM,P):
     """
     Plot the figure of merit
 
     """
-    step = np.nanmax(dM)
+    step = np.nanmax(dM.data)
     Pcad = int(round(P/lc))
-    dMW = tfind.XWrap(dM,Pcad,fill_value=nan)
+    dMW = tfind.XWrap(dM.filled(),Pcad,fill_value=nan)
     XWrap(dMW, step = step  )
-    res = tfind.ep(t,dM,Pcad)
+    res = tfind.ep(t0,dM,Pcad)
     fom = res['fom']
     plot(fom -step )
     return dMW
@@ -482,10 +482,7 @@ def inspSim():
 
 
 def inspVAL(tLC,tRES,*pL):
-#    if cbv :
-    f = tLC.fdtm - tLC.fcbv
-#    else:
-#        f = tLC.f
+    f = tLC.fdt - tLC.fcbv
     t = tLC.t
 
     nrows = 4 + 2*len(pL)
@@ -495,7 +492,14 @@ def inspVAL(tLC,tRES,*pL):
     ax0 = fig.add_subplot(nrows,1,1)
     ax1 = fig.add_subplot(nrows,1,2,sharex = ax0)
     ax0.plot(t,f)
-    dM,bM,aM,DfDt,f0 = tfind.MF(f,14)
+
+    fm = ma.masked_invalid(f)
+    fm.fill_value=0
+
+    dM = tfind.mtd(t,fm.filled(),14)
+    dM.fill_value = np.nan
+    dM.mask = fm.mask | ~tfind.isfilled(t,f,14)
+    
     ax1.plot(t,dM)
 
     ax2 = fig.add_subplot(nrows,1,3)
@@ -519,10 +523,12 @@ def inspVAL(tLC,tRES,*pL):
         ildt = 5+2*i
 
         sca( axL[ifom] )
-        FOM(tLC.t,dM,p['P'])
 
+        FOM(tLC.t[0],dM,p['P'])
+
+        ecad = np.remainder(p['epoch']+tLC.t[0],p['P'])/keptoy.lc
         try:
-            axvline((p['epoch']-tLC.t[0])/lc)
+            axvline(ecad)
             sca( axL[ildt] )
             LDT(t,f,p)
         except:
@@ -539,9 +545,9 @@ def pep(tRES):
     """
     ax = gca()
 
-    x = tRES.PG[0]
-    y = tRES.epoch[0]
-    c = tRES.s2n[0]
+    x = tRES.PG
+    y = tRES.epoch
+    c = tRES.s2n
     sid = argsort(c)
 
     x = x[sid]
@@ -551,8 +557,8 @@ def pep(tRES):
 
 def periodogram(tRES):
     ax = gca()
-    x = tRES.PG[0]
-    y = tRES.s2n[0]
+    x = tRES.PG
+    y = tRES.s2n
     ax.plot(x,y)
 
 

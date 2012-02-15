@@ -99,12 +99,12 @@ def bfitRES(file):
     
     idMa = np.argmax(tRES.s2n[0])
     d = dict(
-        oP     = tRES.PG[0][idMa],
-        oepoch = tRES.epoch[0][idMa],
-        odf    = tRES.df[0][idMa],
-        os2n   = tRES.s2n[0][idMa],
-        otwd   = tRES.twd[0][idMa],
-        seed  = tRES.keywords['SEED']
+        oP     = tRES.PG[idMa],
+        oepoch = tRES.epoch[idMa],
+        odf    = tRES.df[idMa],
+        os2n   = tRES.s2n[idMa],
+        otwd   = tRES.twd[idMa],
+        seed   = tRES.keywords['SEED']
         )
     return d
 
