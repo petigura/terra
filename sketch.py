@@ -224,6 +224,9 @@ def DM(dM,P):
     plt.clf()
     Pcad = int(round(P/lc))
     dMW = tfind.XWrap(dM,Pcad,fill_value=nan)
+    dMW = ma.masked_invalid(dMW)
+    dMW.fill_value=0
+
     nT = dMW.shape[0]
     ncad = dMW.shape[1]
     t = arange(ncad)*lc
@@ -249,10 +252,18 @@ def FOM(t0,dM,P):
     """
     step = np.nanmax(dM.data)
     Pcad = int(round(P/lc))
-    dMW = tfind.XWrap(dM.filled(),Pcad,fill_value=nan)
+
+    dMW = tfind.XWrap(dM,Pcad,fill_value=np.nan)
+    dMW = ma.masked_invalid(dMW)
+    dMW.fill_value=np.nan
+
     res = tfind.ep(t0,dM,Pcad)
     fom = res['fom']
-    [plt.plot(res['epoch'],dMW[i,:]+i*step) for i in range(dMW.shape[0])]    
+    for i in range(dMW.shape[0]):
+        x = ma.masked_array(res['epoch'],mask=dMW[i,:].mask).compressed()
+        y = dMW[i,:].compressed()
+        plt.plot(x,y+i*step,',')
+
     plot(res['epoch'],res['fom'] -step )
     return dMW
 

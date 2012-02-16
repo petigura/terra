@@ -118,10 +118,15 @@ def XWrap(x,ifold,fill_value=0):
     ncad = x.size # Number of cadences
     nrow = int(np.floor(ncad/ifold) + 1)
     nExtend = nrow * ifold - ncad # Pad out remainder of array with 0s.
- 
-    pad = np.empty(nExtend) 
-    pad[:] = fill_value
-    x = np.append( x ,pad )
+
+    if type(x) is np.ma.core.MaskedArray:
+        pad = ma.empty(nExtend)
+        pad.mask = True
+        x = ma.hstack( (x ,pad) )
+    else:    
+        pad = np.empty(nExtend) 
+        pad[:] = fill_value
+        x = np.hstack( (x ,pad) )
     xwrap = x.reshape( nrow,-1 )
 
     return xwrap
@@ -289,9 +294,7 @@ def ep(t0,dM,Pcad):
     - 'win'    : Which epochs passed (window function)
     """
     
-    dMW = XWrap(dM,Pcad,fill_value=np.nan)
-    dMW = ma.masked_invalid(dMW)
-    dMW.fill_value=0
+    dMW = XWrap(dM,Pcad)
     nt,ne = dMW.shape
     epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t0
 
@@ -302,12 +305,8 @@ def ep(t0,dM,Pcad):
     sigW = XWrap(sig,Pcad,fill_value=0)
     nsig = sigW.sum(axis=0)
     bsig = (nsig == vcount).astype(float)
-
-
-    d = bsig*win*dMW.mean(axis=0)
+    fom = bsig*win*dMW.mean(axis=0)
     
-    fom = d
-
     res = {
         'fom'    : fom         ,
         'epoch'  : epoch       ,

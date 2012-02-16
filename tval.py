@@ -1,8 +1,8 @@
 """
 Transit Validation
 
-After the brute force period search yeilds candidate periods, functions in this module will check for transit-like signature.
-
+After the brute force period search yeilds candidate periods,
+functions in this module will check for transit-like signature.
 """
 import numpy as np
 from numpy import ma
@@ -17,7 +17,6 @@ import copy
 import atpy
 import qalg
 import keptoy
-from keptoy import lc
 import tfind
 
 def trsh(P,tbase):
@@ -54,7 +53,12 @@ def linfit1T(p,t,f):
     """
     Linear fit to 1 Transit.
 
-    Depth and the trend parameters are linear, epoch and width are not.
+    Depth and polynomial cofficents are linear
+
+    Parameters
+    ----------
+
+
     """
     
     ndeg=3
@@ -95,13 +99,13 @@ def LDT(t,f,p,wd=2.):
     epoch = p['epoch']
     tdur  = p['tdur']
 
-    Pcad     = int(round(P/lc))
-    epochcad = int(round(epoch/lc))
+    Pcad     = int(round(P/keptoy.lc))
+    epochcad = int(round(epoch/keptoy.lc))
 
-    twd = round(tdur/lc)
+    twd = round(tdur/keptoy.lc)
 
-    wdcad    = int(round(wd/lc))
-    tIntrp,fIntrp = detrend.nanIntrp(t,f,nContig=100/lc)
+    wdcad    = int(round(wd/keptoy.lc))
+    tIntrp,fIntrp = detrend.nanIntrp(t,f,nContig=100/keptoy.lc)
 
     bK,boxK,tK,aK,dK = tfind.GenK( twd ) 
     dM,bM,aM,DfDt,f0 = tfind.MF(fIntrp,twd)
@@ -177,7 +181,7 @@ def fitcand(t,f,p0,ver=True):
     p0     : Dictionary {'P':Period,'epoch':Trial epoch,'tdur':Transit Duration}
 
     """
-    twdcad = 2./lc
+    twdcad = 2./keptoy.lc
     P = p0['P']
     epoch = p0['epoch']
     tdur = p0['tdur']
@@ -393,8 +397,8 @@ def midTransId(t,p):
     P     = p['P']
     epoch = p['epoch']
 
-    Pcad     = int(round(P/lc))
-    epochcad = int(round( (epoch-t[0])/lc )  )
+    Pcad     = int(round(P/keptoy.lc))
+    epochcad = int(round( (epoch-t[0])/keptoy.lc )  )
 
     nT = t.size/Pcad + 1  # maximum number of transits
 
