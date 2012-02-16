@@ -131,35 +131,25 @@ def nQ(t0):
 
     return t
 
-def cut(t0, cutk=['f','ef','fpdc','efpdc'] ):
+def isBadReg(t):
     """
     Cut out the bad regions.
 
     Paramters
     ---------
-
-    t0   : Input table
-    cutk : Cut columns
+    t : time
 
     Returns
     -------
-
-    Table with regions cut out.
+    mask : mask indicating bad values. True is bad.
     """
-
-    t = copy.deepcopy(t0)
     cutpath = os.path.join(os.environ['KEPDIR'],'ranges/cut_time.txt')
     rec = atpy.Table(cutpath,type='ascii').data
-
-    tm = ma.masked_array(t.TIME,copy=True)
+    tm = ma.masked_array(t,copy=True)
     for r in rec:
         tm = ma.masked_inside(tm,r['start'],r['stop'])
-
-    for k in cutk:
-        t.data[k][np.where(tm.mask)] = np.nan
-
-    t.keywords['CUT'] = True
-    return t
+    mask = tm.mask
+    return mask
 
 def sQ(tLCset0):
     """
@@ -222,16 +212,19 @@ def sQ(tLCset0):
 
     return tLC
 
-def outReg(f):
+def isOutlier(f):
     """
-    Outlier rejection.
+    Is Outlier
 
-    Reject single outliers based on a median & percentile filter.  sQ
-    need to be run.
+    Identifies single outliers based on a median & percentile filter.
 
     Parameters
     ----------
     f : Column to perform outlier rejection.
+
+    Returns
+    -------
+    mask : Boolean array. True is outlier.
     """
 
     medf = nd.median_filter(f,size=4)
@@ -239,24 +232,11 @@ def outReg(f):
     resf = ma.masked_invalid(resf)
     resfcomp = resf.compressed()
     lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)
-    out = ma.masked_outside(resf,lo,up,copy=True)
-    f[np.where(out.mask)] = np.nan
+    resf = ma.masked_outside(resf,lo,up,copy=True)
+    mask = resf.mask
+    return mask
 
-    return f
-
-def toutReg(tLC0,outregcol=['f','fpdc']):
-    tLC = copy.deepcopy(tLC0)
-    for orc in outregcol:
-        x = outReg( tLC.data[orc] )
-        eorc = 'e'+orc
-        ex = outReg( tLC.data[orc] )
-        tLC.data[orc] = x
-        tLC.data[eorc] = ex
-
-    tLC.keywords['OUTREG'] = True
-    return tLC
-
-def tcbvdt(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
+def tcbvdt(tQLC0,fcol,efcol,cadmask=None,dt=False,ver=True):
     """
     Table CBV Detrending
 
@@ -277,6 +257,7 @@ def tcbvdt(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
 
     ffit    : The CBV fit to the fluxes.
     """
+    tQLC = copy.deepcopy(tQLC0)
     cbv = [1,2,3,4,5,6] # Which CBVs to use.
     ncbv = len(cbv)
 
@@ -291,17 +272,23 @@ def tcbvdt(tQLC,fcol,efcol,cadmask=None,dt=False,ver=True):
     tBV = bvload(kw['QUARTER'],kw['MODULE'],kw['OUTPUT'])
     bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
 
-    fdt,ffit = detrend.cbvdt(t,f,bv)
-    update_column(tQLC,'fdt',fdt)
-    update_column(tQLC,'fcbv',ffit)
+    # Remove the bad values of f by setting them to nan.
+    fm   = ma.masked_array(f,mask=tQLC.fmask,copy=True)
+    fdt  = ma.masked_array(f,mask=tQLC.fmask,copy=True)
+    fcbv = ma.masked_array(f,mask=tQLC.fmask,copy=True)
+
+    tm = ma.masked_array(t,mask=tQLC.fmask,copy=True)
+    sL = detrend.cbvseg(tm)
+
+    for s in sL:
+        idnm = np.where(~fm[s].mask)
+        a1,a2= detrend.segfitm(t[s],fm[s],bv[:,s])
+        fdt[s][idnm]  = a1.astype('>f4') 
+        fcbv[s][idnm] = a2.astype('>f4')
+    update_column(tQLC,'fdt',fdt.data)
+    update_column(tQLC,'fcbv',fcbv.data)
 
     return tQLC
-
-def fillnans(t0):
-    t = copy.deepcopy(t0)
-    for k in ['f','ef','fpdc','efpdc']:        
-        cad,t.data[k] = detrend.nanIntrp(t['CADENCENO'],t.data[k],nContig=4)
-    return t
 
 def ppQ(t0,ver=True):
     """
@@ -310,9 +297,13 @@ def ppQ(t0,ver=True):
     Apply the following functions to every quarter.
     """
     t = copy.deepcopy(t0)
-    t.data = cut(t).data
-    t.data = toutReg(t).data
-    t.data = fillnans(t).data
+
+    t.fmask = t.fmask | isBadReg(t.TIME)
+    t.keywords['CUT'] = True
+
+    t.fmask = t.fmask | isOutlier(t.f)
+    t.keywords['OUTREG'] = True
+
     t.data = tcbvdt(t,'f','ef').data
 
     return t

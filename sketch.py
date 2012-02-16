@@ -245,7 +245,7 @@ def XWrap(XW,step=1):
     ncad = XW.shape[1]
     [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
-def FOM(t0,dM,P):
+def FOM(t0,dM,P,**kwargs):
     """
     Plot the figure of merit
 
@@ -262,7 +262,7 @@ def FOM(t0,dM,P):
     for i in range(dMW.shape[0]):
         x = ma.masked_array(res['epoch'],mask=dMW[i,:].mask).compressed()
         y = dMW[i,:].compressed()
-        plt.plot(x,y+i*step,',')
+        plt.plot(x,y+i*step,**kwargs)
 
     plot(res['epoch'],res['fom'] -step )
     return dMW

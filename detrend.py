@@ -62,42 +62,34 @@ def nanIntrp(x0,y0,nContig=3):
 
     return x.data,y.data
 
-def cbvdt(t,f,bv):
+def segfitm(t,fm,bv):
     """
-    Detrend a quarters worth of light curve with CBVs
+    Segment fit masked
+    
+    Parameters
+    ----------
+    t   : time 
+    fm  : flux for a particular segment
+    bv  : vstack of basis vectors
+    
     """
     ncbv  = bv.shape[0]
     
-    tm = ma.masked_invalid(t)
-    fm = ma.masked_invalid(f)
-    mask  = tm.mask | fm.mask 
-    tm.mask = fm.mask = mask
+    tm = ma.masked_array(t,copy=True,mask=fm.mask)
+    mask  = fm.mask 
 
     bv = ma.masked_array(bv)
     bv.mask = np.tile(mask, (ncbv,1) )
-    p1v = np.zeros(bv.shape)
 
-    ffit  = np.zeros(fm.shape)
-    fdt  = np.zeros(fm.shape)
+    # Eliminate masked elements
+    tseg = tm.compressed() 
+    fseg = fm.compressed()
+    bvseg = bv.compressed() 
+    bvseg = bvseg.reshape(ncbv,bvseg.size/ncbv)
 
-    sL = cbvseg(t,f)
-    for s in sL:
-        print s
-        # Some of the values here could be masked.
+    fdtseg,ffitseg,p1seg = segfit(tseg,fseg,bvseg)
 
-        idfit = np.where(~mask[s])[0]
-        tseg = tm[s].compressed() 
-        fseg = fm[s].compressed()
-
-        # compress returns 1d array so we need to reshape
-        bvseg = bv[:,s].compressed() 
-        bvseg = bvseg.reshape(ncbv,bvseg.size/ncbv)
-
-        fdtseg,ffitseg,p1seg = segfit(tseg,fseg,bvseg)
-        fdt[s][idfit]  = fdtseg 
-        ffit[s][idfit] = ffitseg
-
-    return fdt,ffit
+    return fdtseg,ffitseg
 
 def segfit(tseg,fseg,bvseg):
     """
@@ -123,7 +115,7 @@ def segfit(tseg,fseg,bvseg):
     ffit = modelCBV(p1,bvdt)
     return fdt,ffit,p1
 
-def cbvseg(t,f,segsep=1):
+def cbvseg(tm,segsep=1):
     """
     CBV Segmentation
 
@@ -133,10 +125,14 @@ def cbvseg(t,f,segsep=1):
     """
     nsep = segsep / keptoy.lc
 
-    tm,fm = t,f
-    tm,fm = nanIntrp(tm,fm,nContig=nsep)
-    fm = ma.masked_invalid(fm)
-    return ma.notmasked_contiguous(fm)
+    gap = ma.masked_array(tm.data,mask=~tm.mask,copy=True)
+    nsep = segsep / keptoy.lc
+    gapSlice = ma.notmasked_contiguous(gap)
+    for g in gapSlice:
+        if g.stop-g.start < nsep:
+            tm.mask[g] = False
+
+    return ma.notmasked_contiguous(tm)
 
 def spldt(t,f,lendt=10):
     """
