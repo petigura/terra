@@ -11,7 +11,7 @@ from numpy import ma
 from matplotlib import mlab
 
 from keptoy import *
-from keptoy import lc 
+import keptoy
 import keplerio
 import detrend
 def GenK(twdcad,fcwd=1):
@@ -73,17 +73,16 @@ def MF(fsig,twd,fcwd=1):
 
     return dM,bM,aM,DfDt,f0
 
-def isfilled(t,f,twd):
+def isfilled(t,fm,twd):
     """
     Is putative transit filled?  This means:
     1 - Transit > 25% filled
     2 - L & R wings are both > 25% filled
     """
-    assert keplerio.iscadFill(t,f),'Series might not be evenly sampled'
+    assert keplerio.iscadFill(t,fm.data),'Series might not be evenly sampled'
 
     bK,boxK,tK,aK,dK = GenK(twd ) 
-    fn = ma.masked_invalid(f)
-    bgood = (~fn.mask).astype(float) 
+    bgood = (~fm.mask).astype(float) 
 
     bfl = nd.convolve(bgood,bK) # Compute the filled fraction.
     afl = nd.convolve(bgood,aK)
@@ -190,16 +189,15 @@ def mtd(t,f,twd):
     dM.fill_value=0
     return dM
 
-def tdpep(t,f,PG0):
+def tdpep(t,fm,PG0):
     """
     Transit-duration - Period - Epoch
 
-    Parameters
-    ----------
-    f    : Flux time series.  It is assumed that elements of f are
-           evenly spaced in time.
-
-    PG0  : Initial period grid.
+    Parameters 
+    ---------- 
+    fm  : Flux with bad data points masked out.  It is assumed that
+          elements of f are evenly spaced in time.
+    PG0 : Initial period grid.
 
     Returns
     -------
@@ -212,31 +210,25 @@ def tdpep(t,f,PG0):
     twd     : Grid of trial transit widths.
 
     """
-
+    assert fm.fill_value ==0
     # Determine the grid of periods that corresponds to integer
     # multiples of cadence values
     PcadG,PG = P2Pcad(PG0)
        
     # Initialize tdur grid.  
-    twdMi = a2tdur( P2a( PG[0 ] ) ) /lc
-    twdMa = a2tdur( P2a( PG[-1] ) ) /lc
-
+    twdMi = a2tdur( P2a( PG[0 ] ) ) /keptoy.lc
+    twdMa = a2tdur( P2a( PG[-1] ) ) /keptoy.lc
     twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
 
     rec2d = []
     noise = []
     for twd in twdG:
-        fm = ma.masked_array(f,copy=True,mask=False)
-        fm = ma.masked_invalid(fm)
-        fm.fill_value = 0 #  ma.masked_invalid resets default fill_value.
-
         dM = mtd(t,fm.filled(),twd)
-        dM.mask = fm.mask | ~isfilled(t,f,twd)
+        dM.mask = fm.mask | ~isfilled(t,fm,twd)
         rec2d.append( pep(t[0],dM,PcadG) )
 
         # Noise per transit 
-        mad = ma.masked_invalid(dM)
-        mad = ma.abs(mad)
+        mad = ma.abs(dM)
         mad = ma.median(mad)
         noise.append(mad)
 

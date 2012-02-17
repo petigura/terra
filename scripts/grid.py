@@ -4,6 +4,7 @@ import os
 import sim
 import argparse
 import atpy
+from numpy import ma
 
 parser = argparse.ArgumentParser(description='Create tRES from tLC/tPAR')
 parser.add_argument('LCfile',type=str)
@@ -17,8 +18,9 @@ if args.cbv:
     f = tLC.fdt - tLC.fcbv
 else:
     f = tLC.f
-    
-tRES = sim.grid(t,f,Psmp = 0.25)
+
+fm = ma.masked_array(f,mask=tLC.fmask,fill_value=0)    
+tRES = sim.grid(t,fm,Psmp = 0.25)
 tRES.comments = "Table with the simulation results"
 tRES.table_name = "RES"
 tRES.keywords = tLC.keywords
