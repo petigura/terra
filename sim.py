@@ -26,14 +26,16 @@ def val(tLC,tRES,nCheck=50,ver=True):
     # Work around since I made tRES the proper dimensions.  Fix later.
     res = dict(PG=tRES.PG,s2n=tRES.s2n,epoch=tRES.epoch,twd=tRES.twd)
     dL = tval.parGuess(res,nCheck=nCheck)
-    resL = tval.fitcandW(tLC.t,tLC.f,dL,ver=ver)
+    fm = ma.masked_array(tLC.f-tLC.fcbv,mask=tLC.fmask)
+    func = lambda d: tval.fitcand(tLC.t,fm,d,ver=ver)
+    resL = map(func, dL)
 
     # Alias Lodgic.
     # Check the following periods for aliases.
     resLHigh = [r for r in resL if  r['s2n'] > 5]
     resLLow  = [r for r in resL if  r['s2n'] < 5] 	
     
-    resLHigh = tval.aliasW(tLC.t,tLC.f,resLHigh)
+    resLHigh = tval.aliasW(tLC.t,fm,resLHigh)
             
     # Combine the high and low S/N 
     resL = resLHigh + resLLow

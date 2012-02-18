@@ -279,66 +279,30 @@ def window(tRES,tLC):
 import tval
 import copy
 
-def LDT(t,f,p):
+def LDT(t,fm,p):
     """
     Visualize how the local detrender works
     """
 
     ax = gca()
 
-    d  = tval.LDT(t,f,p,wd=2)
-    p1L = d['p1L']
-    sL = ma.notmasked_contiguous( d['tdt'] )
+    p1L,idL  = tval.LDT(t,fm,p,wd=2)
 
     twd = 2./lc
-
+    step = 3
     for i in range(len(p1L)):
-        s = sL[i]
-        x = xarr(t,s, p['P'] ,twd=150)
-        const = mean(f[s])
+        id = idL[i]
+        p1 = p1L[i]
+        trend = keptoy.trend(p1[3:],t[id])
+        ffit  = keptoy.P051T(p1,t[id])
+        ho = np.mean(t[id]) 
+        ho -= step*np.floor(ho/p['P'])
+        vo = np.mean(fm[id])
+        plot(t[id]-ho,fm[id]-vo,',')
+        plot(t[id]-ho,ffit-vo,'r',lw=2)
+        plot(t[id]-ho,trend-vo,'c',lw=2)
+
         color = rcParams['axes.color_cycle'][mod(i,4)]
-        ax.plot(x,f[s]-const,'.',color=color)
-        ax.plot(x,d['trend'][s] -const,'r',lw=2)
-        ax.plot(x,d['ffit'][s] -const,'c',lw=2)
-
-    ymin,ymax = plt.ylim()
-    disp = 2*ymin
-    fdt = d['fdt']
-    res = tval.fitcand(t,f,p)
-    pl = [res['P'],res['epoch'],res['df'],res['tdur'] ] # This is the global fit.
-    for i in range(len(p1L)):
-        s = sL[i]
-        x = xarr(t , s , res['P'] ,twd=150)
-        color = rcParams['axes.color_cycle'][mod(i,4)]
-        ax.plot(x,d['fdt'][s] +disp,'.',lw=2,color=color)
-        y = keptoy.P05( pl, d['tdt'][s] ) + disp
-        ax.plot(x,y,'c',lw=2)
-
-
-def xarr(t,s,P,twd=20):
-    iT =  round(mean(t[s]) - mean( t[0]) ) /P
-    return t[s]-mean(t[s])+twd*iT*lc
-
-def xarrL(t,sL,P,twd=20):
-    out = []
-    for i in range(len(sL)):
-        s = sL[i]
-        out.append( xarr(t,s,P,twd=twd) )
-    return xarrL
-
-
-
-def LDTW(t,f,pL):
-    i = 0 
-    for p in pL:
-        fig = plt.gcf() 
-        fig.clf()
-        try:
-            LDT(t,f,p) 
-        except:
-            pass
-        fig.savefig("LDTW%03i.png" % i)
-        i +=1 
 
 def tfit(tsim,tfit):
     plot(tset.RES.PG[0],tset.RES.ddd[1]/tset.RES.sss[1],'o')

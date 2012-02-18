@@ -9,13 +9,9 @@ from numpy import ma
 
 from scipy import optimize
 import scipy.ndimage as nd
-import detrend
-import sys
 
 import glob
 import copy
-import atpy
-import qalg
 import keptoy
 import tfind
 
@@ -64,7 +60,7 @@ def obj1Tlin(pNL,t,f):
     pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
     model = keptoy.P051T(pFULL,t)
 
-    resid  = (model - f)/1e-4
+    resid  = ((model - f)/1e-4 )
     obj = (resid**2).sum() 
     return obj
 
@@ -112,9 +108,15 @@ def fit1T(pNL0,t,f):
     """
     Fit Single transit
     """
-    pNL = optimize.fmin(obj1Tlin,pNL0,args=(t,f))
+    dpNL0 = np.array([0.2,0.2])
+
+    objp = lambda p,t,f : obj1Tlin(p,t,f) + (((p-pNL0)/dpNL0)**2).sum()
+    pNL = optimize.fmin(objp,pNL0,args=(t,f),disp=False)
     pL = linfit1T(pNL,t,f)
     pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
+    if pFULL[1] < 0:
+        pFULL[1] = 0
+
     return pFULL
 
 def LDT(t,fm,p,wd=2.):
@@ -126,7 +128,7 @@ def LDT(t,fm,p,wd=2.):
     ----------
 
     t  : Times (complete data string)
-    f  : Flux (complete data string)
+    fm : Flux. bad values masked out.
     p  : Parameters {'P': , 'epoch': , 'tdur': }
 
     """
@@ -154,26 +156,9 @@ def LDT(t,fm,p,wd=2.):
     func = lambda m,id : fit1T( [t[m],tdur], tm[id].data , fm[id].data) 
     p1L = map(func,ms,idL)
 
-    fdt   = ma.masked_array(fm,copy=True,mask=True)
-    tdt   = ma.masked_array(tm,copy=True,mask=True)
-    trend = ma.masked_array(fm,copy=True,mask=True)
-    ffit  = ma.masked_array(fm,copy=True,mask=True)
+    return p1L,idL
 
-
-    for p1,id in zip(p1L,idL):
-        trend[id] = keptoy.trend(p1[3:], t[id]).astype('>f4')
-        ffit[id]  = keptoy.P051T(p1, t[id]).astype('>f4')
-        fdt[id]   = fm[id] - trend[id] 
-
-        trend[id].mask = False
-        ffit[id].mask  = False
-        fdt[id].mask   = False
-        tdt[id].mask   = False
-
-    ret = dict(tdt=tdt,fdt=fdt,trend=trend,ffit=ffit,p1L=p1L,idL=idL)        
-    return ret
-
-def fitcand(t,f,p0,ver=True):
+def fitcand(t,fm,p0,ver=True):
     """
     Fit Candidate Transits
 
@@ -184,52 +169,36 @@ def fitcand(t,f,p0,ver=True):
     ----------
 
     t      : Time series  
-    f      : Flux
+    fm     : Flux
     p0     : Dictionary {'P':Period,'epoch':Trial epoch,'tdur':Transit Duration}
 
     """
     twdcad = 2./keptoy.lc
-    P = p0['P']
+    P     = p0['P']
     epoch = p0['epoch']
-    tdur = p0['tdur']
+    tdur  = p0['tdur']
 
-    try:
-        dLDT = LDT(t,f,p0)
-        tdt,fdt,p1L = dLDT['tdt'],dLDT['fdt'],dLDT['p1L']
-        nT = len(p1L)
-        dtpass = True
-    except:
-        print sys.exc_info()[1]
-        nT = 0 
-        dtpass = False
-                
+    p1L,idL = LDT(t,fm,p0)
+    nT = len(p1L)
+    tdt,fdt = dt1T(t,fm,p1L,idL)
+
     p0 = np.array([P,epoch,0.e-4,tdur])
     fitpass = False
-    if (nT >= 3) and dtpass :
-        try:
-            tfit = tdt.compressed() # Time series to fit 
-            ffit = fdt.compressed() # Flux series to fit.
-
-            tbase = t.ptp()
-            dp0 =  trsh(P,tbase)
-            dp0 = [dp0['dP'],dp0['depoch']]
-            p1 , fopt ,iter ,funcalls, warnflag = \
-                optimize.fmin(objMT,p0,args=(tfit,ffit,p0,dp0) ,disp=False,full_output=True)
-
-            tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
-            fdt2 = ma.masked_array(fdt,mask=tfold.mask)
-            if fdt2.count() > 20:
-                s2n = - ma.mean(fdt2)/ma.std(fdt2)*np.sqrt( fdt2.count() )
-
-                fitpass = True
-            else: 
-                fitpass = False
-                s2n = 0
-            if ver:
-                print "%7.02f %7.02f %7.02f" % (p1[0] , p1[1] , s2n )
-
-        except:
-            print sys.exc_info()[1]
+    if (nT >= 3) :
+        tbase = t.ptp()
+        dp0 =  trsh(P,tbase)
+        dp0 = [dp0['dP'],dp0['depoch']]
+        p1  = optimize.fmin(objMT,p0,args=(tdt,fdt,p0,dp0) ,disp=False)
+        tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
+        fdt2 = ma.masked_array(fdt,mask=tfold.mask)
+        if fdt2.count() > 20:
+            s2n = - ma.mean(fdt2)/ma.std(fdt2)*np.sqrt( fdt2.count() )
+            fitpass = True
+        else: 
+            fitpass = False
+            s2n = 0
+        if ver:
+            print "%7.02f %7.02f %7.02f" % (p1[0] , p1[1] , s2n )
 
     # To combine tables everythin must be a float.
     if fitpass:
@@ -238,51 +207,29 @@ def fitcand(t,f,p0,ver=True):
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
 
-def fitcandW(t,f,dL,view=None,ver=True):
+
+def dt1T(t,fm,p1L,idL):
+    """
+    Detrend based on single transit.
+    """
+    fdt = np.empty(t.size)
+    for p1,id in zip(p1L,idL):
+        fdt[id] = fm.data[id] - keptoy.trend(p1[3:],t[id])    
+
+    id  = np.hstack(idL)
+    tdt = t[id]
+    fdt = fdt[id]
+
+    return tdt,fdt
+
+
+def fitcandW(t,fm,dL,view=None,ver=True):
     """
     """
     n = len(dL)
-    func = lambda d: fitcand(t,f,d,ver=ver)
 
-    if view != None:
-        resL = view.map(func, dL,block=True)
-    else:
-        resL = map(func, dL)
- 
     return resL
 
-
-def tabval(file,view=None):
-    """
-    
-    """
-    tset = atpy.TableSet(file)
-    nsim = len(tset.PAR.P)
-    tres = tset.RES
-    
-    # Check the 50 highest s/n peaks in the MF spectrum
-    tabval = atpy.TableSet()
-
-    f = keptoy.genEmpLC( qalg.tab2dl(tset.PAR)[0] , tset.LC.t , tset.LC.f)
-    t = tset.LC.t
-
-
-    for isim in range(nsim):
-        dL = parGuess(qalg.tab2dl(tres)[isim],nCheck=50)
-        resL = fitcandW(tl[isim],fl[isim],dL,view=view)
-
-        print 21*"-" + " %d" % (isim)
-        print "   iP      oP      s2n    "
-        for d,r in zip(dL,resL):
-            print "%7.02f %7.02f %7.02f" % (d['P'],r['P'],r['s2n'])
-
-        tab = qalg.dl2tab(resL)
-        tab.table_name = 'SIM%03d' % (isim)
-        tabval.append(tab)
-
-    fileL = file.split('.')
-    tabval.write(fileL[0]+'_val'+'.fits',overwrite=True)
-    return tabval
 
 def parGuess(res,nCheck=50):
     """
@@ -324,52 +271,8 @@ def parGuess(res,nCheck=50):
 
     return dL
 
-
 thresh = 0.001
 
-
-def iPoP(tset,tabval):
-    """
-    """
-    nsim = len(tset.PAR.P)
-    print "sim, iP    ,   oP   ,  eP , iepoch,oepoch,eepoch, s2n"
-    tres = copy.deepcopy(tset.PAR)
-    tres.add_empty_column('oP',np.float)
-    tres.add_empty_column('oepoch',np.float)
-    tres.add_empty_column('odf',np.float)
-    tres.add_empty_column('os2n',np.float)
-
-    tres.add_empty_column('KIC',np.int)
-
-    for isim in range(nsim):
-        s2n = ma.masked_invalid(tabval[isim].s2n)
-        iMax = s2n.argmax()
-
-        s2n  = tabval[isim].s2n[iMax]
-        df  = tabval[isim].df[iMax]
-
-        iP =  tset.PAR.P[isim]
-        oP =  tabval[isim].P[iMax]
-        
-        iepoch = tset.PAR.epoch[isim]
-        oepoch = tabval[isim].epoch[iMax]
-
-        if s2n > 5:
-            print "%03i %.2f  %.2f  %+.2f  %.2f  %.2f  %+.2f  %.2f" % \
-                (isim,iP,oP,100*(iP-oP)/iP, iepoch,oepoch,iepoch-oepoch ,s2n)
-        else:
-            print "%03i ------  ------  -----  -----  -----  -----  %.2f" % \
-                (isim,s2n)
-
-        tres.oP[isim] = oP
-        tres.oepoch[isim] = oepoch
-        tres.KIC[isim] = tset.LC.keywords['KEPLERID']
-
-        tres.os2n[isim] = s2n
-        tres.odf[isim] = df
-
-
-    return tres
 
 def window(fl,PcadG):
     """
@@ -433,7 +336,7 @@ def aliasW(t,f,resL0):
 
     return resL
 
-def alias(t,f,p):
+def alias(t,fm,p):
     """
     Evaluate the Bayes Ratio between signal with P and 2 *P
 
@@ -449,9 +352,8 @@ def alias(t,f,p):
     pA = copy.deepcopy(p)
     pA['P'] = 0.5 * pA['P']
     
-    res = LDT(t,f,pA)
-    tdt = res['tdt']
-    fdt = res['fdt']
+    p1L,idL = LDT(t,fm,pA)
+    tdt,fdt = dt1T(t,fm,p1L,idL)           
     
     pl  = [p['P'],p['epoch'],p['df'],p['tdur']]
     plA = [pA['P'],pA['epoch'],pA['df'],pA['tdur']]
@@ -459,12 +361,12 @@ def alias(t,f,p):
     model  = keptoy.P05(pl  , tdt )
     modelA = keptoy.P05(plA , tdt )
 
-    tTransitA = tfind.getT(tdt.data,pA['P'],pA['epoch'],pA['tdur'])
+    tTransitA = tfind.getT(tdt,pA['P'],pA['epoch'],pA['tdur'])
     
-    mTransit  = ma.masked_array(model.data,copy=True,mask=tTransitA.mask)
-    mTransitA = ma.masked_array(modelA.data,copy=True,mask=tTransitA.mask)
+    mTransit  = ma.masked_array(model,copy=True,mask=tTransitA.mask)
+    mTransitA = ma.masked_array(modelA,copy=True,mask=tTransitA.mask)
 
-    fTransitA = ma.masked_array(fdt.data,copy=True,mask=tTransitA.mask)
+    fTransitA = ma.masked_array(fdt,copy=True,mask=tTransitA.mask)
 
     X2  = ma.sum( (fTransitA - mTransit)**2 )
     X2A = ma.sum( (fTransitA - mTransitA)**2 )
