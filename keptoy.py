@@ -192,7 +192,7 @@ def trend(p,t):
     domain = [t.min(),t.max()]
     return Legendre(p,domain=domain)(t)
     
-def P051T(p,t,P):
+def P051T(p,t):
     """
     Protopapas single transit
 
@@ -213,7 +213,7 @@ def P051T(p,t,P):
     sense to specify period and epoch
 
     """
-    
+    P = 100
     pP05 = [P , p[0] , p[1] , p[2] ]
     sig = P05(pP05,t)
 

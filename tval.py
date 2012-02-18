@@ -49,6 +49,26 @@ def obj1T(p,t,f,P,p0,dp0):
     obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
     return obj
 
+
+def obj1Tlin(pNL,t,f):
+    """
+    Single Transit Objective Function.  For each trial value of epoch
+    and width, we determine the best fit by linear fitting.
+
+    Parameters
+    ----------
+    pNL  - The non-linear parameters [epoch,tdur]
+   
+    """
+    pL = linfit1T(pNL,t,f)
+    pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
+    model = keptoy.P051T(pFULL,t)
+
+    resid  = (model - f)/1e-4
+    obj = (resid**2).sum() 
+    return obj
+
+
 def linfit1T(p,t,f):
     """
     Linear fit to 1 Transit.
@@ -57,32 +77,47 @@ def linfit1T(p,t,f):
 
     Parameters
     ----------
+    p : [epoch,tdur]
+    t : time
+    f : flux
 
-
+    Returns
+    -------
+    p1 : Best fit [df,pleg0,pleg1...] from linear fitting.
     """
     
     ndeg=3
 
-    P      = p[0]
-    epoch  = p[1]
-    tdur   = p[2]
+    epoch  = p[0]
+    tdur   = p[1]
 
-    trendDS = []
+    # Construct polynomial design matrix
+    trendDS = [] 
     for i in range(ndeg+1):
         pleg = np.zeros(ndeg+1)
         pleg[i] = 1
         trendDS.append( keptoy.trend(pleg,t) )
     trendDS = np.vstack(trendDS)
 
-    plc = [epoch,1.,tdur]+list(np.zeros(ndeg+1))
+    # Construct lightcurve design matrix
+    plc = np.hstack(( epoch,1.,tdur,list(np.zeros(ndeg+1)) ))
+    lcDS = keptoy.P051T(plc,t)
 
-    lcDS = keptoy.P051T(plc,t,P)
     DS = np.vstack((lcDS,trendDS))
     p1 = np.linalg.lstsq(DS.T,f)[0]
+
     return p1
 
+def fit1T(pNL0,t,f):
+    """
+    Fit Single transit
+    """
+    pNL = optimize.fmin(obj1Tlin,pNL0,args=(t,f))
+    pL = linfit1T(pNL,t,f)
+    pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
+    return pFULL
 
-def LDT(t,f,p,wd=2.):
+def LDT(t,fm,p,wd=2.):
     """
     Local detrending.  
     At each putative transit, fit a model transit and continuum lightcurve.
@@ -99,71 +134,43 @@ def LDT(t,f,p,wd=2.):
     epoch = p['epoch']
     tdur  = p['tdur']
 
-    Pcad     = int(round(P/keptoy.lc))
-    epochcad = int(round(epoch/keptoy.lc))
+    Pcad     = round(P/keptoy.lc)
+    epochcad = round(epoch/keptoy.lc)
+    tdurcad  = round(tdur/keptoy.lc)
+    wdcad    = round(wd/keptoy.lc)
 
-    twd = round(tdur/keptoy.lc)
+    dM = tfind.mtd(t,fm.filled(),tdurcad)
+    dM.mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
 
-    wdcad    = int(round(wd/keptoy.lc))
-    tIntrp,fIntrp = detrend.nanIntrp(t,f,nContig=100/keptoy.lc)
-
-    bK,boxK,tK,aK,dK = tfind.GenK( twd ) 
-    dM,bM,aM,DfDt,f0 = tfind.MF(fIntrp,twd)
-
-    fl = tfind.isfilled(t,f,twd) 
-
-    f0W = tfind.XWrap(f0,Pcad,fill_value=np.nan)
-    dMW = tfind.XWrap(dM,Pcad,fill_value=np.nan)
-
+    tm   = ma.masked_array(t,copy=True,mask=fm.mask)
     ### Determine the indecies of the points to fit. ###
     # Exclude regions where the convolution returned a nan.
     ms   = midTransId(t,p)
-    ms   = [m for m in ms if fl[m] ]
-    sLDT = [ getSlice(m,wdcad) for m in ms]
+    ms   = [m for m in ms if ~dM.mask[m] ]
+    sLDT = [ getSlice(m,wdcad) for m in ms ]
+    x = np.arange(dM.size)
+    idL  = [ x[s][np.where(~fm[s].mask)] for s in sLDT ]
 
-    # Detrended time and flux arrays.  The only unmasked points
-    # correspond to viable transits
-    tdt   = ma.masked_array(t,mask=True)
-    fdt   = ma.masked_array(f,copy=True,mask=True)
-    trend = ma.masked_array(f,copy=True,mask=True)
-    ffit  = ma.masked_array(f,copy=True,mask=True)
+    func = lambda m,id : fit1T( [t[m],tdur], tm[id].data , fm[id].data) 
+    p1L = map(func,ms,idL)
 
-    p1L = []
-    # Fit each segment individually and store best fit parameters.
-    for s,m in zip(sLDT,ms):
-        y = ma.masked_invalid(f[s]) 
-        x = ma.masked_array( t[s] , mask =y.mask)
+    fdt   = ma.masked_array(fm,copy=True,mask=True)
+    tdt   = ma.masked_array(tm,copy=True,mask=True)
+    trend = ma.masked_array(fm,copy=True,mask=True)
+    ffit  = ma.masked_array(fm,copy=True,mask=True)
 
-        x = x.compressed()
-        y = y.compressed()
 
-        df0 = dMW.flatten()[m] # Guess for transit depth
-        
-        p0 = [epoch, df0, tdur, f0[m], DfDt[m] , 0 ,0]
+    for p1,id in zip(p1L,idL):
+        trend[id] = keptoy.trend(p1[3:], t[id]).astype('>f4')
+        ffit[id]  = keptoy.P051T(p1, t[id]).astype('>f4')
+        fdt[id]   = fm[id] - trend[id] 
 
-        tbase = t.ptp()
-        dp0 =  trsh(P,tbase)
-        dp0 = [dp0['dP'],dp0['depoch']]
+        trend[id].mask = False
+        ffit[id].mask  = False
+        fdt[id].mask   = False
+        tdt[id].mask   = False
 
-        p1, fopt ,iter ,funcalls, warnflag = \
-            optimize.fmin(obj1T,p0,args=(x,y,P,p0,dp0),maxiter=10000,maxfun=10000,
-                          full_output=True,disp=False)
-
-        trend[s] = keptoy.trend(p1[3:], t[s])
-        ffit[s] =  keptoy.P051T(p1, t[s],P)
-        
-        trend.mask[s]  = False # Unmask the transit segments
-        tdt.mask[s]    = False
-        fdt.mask[s]    = False
-        ffit.mask[s]   = False
-
-        fdt[s] = f[s] - trend[s]    
-        p1L.append(p1)
-
-    fdt = ma.masked_invalid(fdt)
-    tdt.mask = fdt.mask
-    
-    ret = dict(tdt=tdt,fdt=fdt,trend=trend,ffit=ffit,p1L=p1L)
+    ret = dict(tdt=tdt,fdt=fdt,trend=trend,ffit=ffit,p1L=p1L,idL=idL)        
     return ret
 
 def fitcand(t,f,p0,ver=True):
@@ -404,7 +411,7 @@ def midTransId(t,p):
 
     ### Determine the indecies of the points to fit. ###
     ms = np.arange(nT) * Pcad + epochcad
-    ms = [m for m in  ms if m < t.size]
+    ms = [m for m in  ms if (m < t.size) & (m > 0) ]
     return ms
 
 def aliasW(t,f,resL0):
@@ -478,7 +485,7 @@ def getSlice(m,wdcad):
 
     """
 
-    return slice( max(0,m-wdcad/2) , m+wdcad/2 )
+    return slice( m-wdcad/2 , m+wdcad/2 )
 
 
 
