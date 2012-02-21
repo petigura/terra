@@ -18,6 +18,8 @@ from scipy import ndimage as nd
 import copy
 import atpy
 import os
+import sys
+import tarfile
 import glob
 import pyfits
 
@@ -28,24 +30,47 @@ import tfind
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
+kepfiles = os.path.join(os.environ['KEPBASE'],'files')
+qsfx = atpy.Table( os.path.join(kepfiles,'qsuffix.txt'),type='ascii' )
 
-def KICPath(KIC,basedir):
-    """
-    KIC     - Target star identifier.
-    basedir - Directory leading to files.
-              'orig' - prestine kepler data
-              'clip' - clipped data
-              'dt'   - detrended data.
-    """
-    if basedir is 'orig':
-        basedir = os.path.join(kepdat,'EX/Q*/')
-    if basedir is 'clip':
-        basedir = 'tempfits/clip/'
-    if basedir is 'dt':
-        basedir = os.path.join(kepdat,'DT/')
+def KICPath(KIC, QL=range(1,9) ):
+    pathL = []
+    for Q in QL:
+        tQ = qsfx.where(qsfx.Q == Q)
+        path = 'Q%i/kplr%09d-%i_llc.fits' % ( Q,KIC,tQ.Suffix[0] ) 
+        path = 'archive/data3/privkep/EX/' + path
+        pathL.append(path)
+    return pathL
 
-    g = glob.glob(basedir+'*%09i*.fits' % KIC)
-    return g
+def tarXL(filesL):
+    """
+    Extract List of files from tar archive.
+    """
+    qfunc = lambda s : int(s.split('Q')[1].split('/kplr')[0])
+    QL = map(qfunc,filesL)
+    t = atpy.Table()
+    t.add_column('file',filesL)
+    t.add_column('Q',QL)
+    for q in np.unique(QL):
+        tQ = t.where(t.Q == q)
+        tar  = os.path.join(kepdat,'EX_Q%i.tar' % q)
+        nload = 0
+        nfail = 0
+
+        try:
+            tar  = tarfile.open(tar)
+            for file in tQ.data['file']:
+                try:
+                    tar.extract(file)
+                    print "Extracted %s" % file
+                    nload +=1 
+                except KeyError:
+                    print sys.exc_info()[1]
+                    nfail +=1
+            tar.close()
+            print "Loaded %i, Failed %i" %(nload,nfail)
+        except IOError:
+            print sys.exc_info()[1]
 
 def qload(file):
     """
@@ -55,7 +80,7 @@ def qload(file):
 
     Parameters
     ----------
-    file : path to the fits file.
+    file : 
 
     Returns
     -------
@@ -63,7 +88,7 @@ def qload(file):
 
     """
     hdu = pyfits.open(file)
-    t = atpy.Table(file,type='fits')    
+    t = atpy.Table(file,type='fits')  
 
     fm = ma.masked_invalid(t.SAP_FLUX)
     update_column(t,'fmask',fm.mask)
