@@ -37,7 +37,7 @@ def KICPath(KIC, QL=range(1,9) ):
     pathL = []
     for Q in QL:
         tQ = qsfx.where(qsfx.Q == Q)
-        path = 'Q%i/kplr%09d-%i_llc.fits' % ( Q,KIC,tQ.Suffix[0] ) 
+        path = 'Q%i/kplr%09d-%s_llc.fits' % ( Q,KIC,tQ.Suffix[0] ) 
         path = 'archive/data3/privkep/EX/' + path
         pathL.append(path)
     return pathL
