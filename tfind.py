@@ -185,7 +185,7 @@ def mtd(t,f,twd):
 
     bK,boxK,tK,aK,dK = GenK( twd )
     dM = nd.convolve1d(f,dK)
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
+    dM = ma.masked_array(dM)
     dM.fill_value=0
     return dM
 

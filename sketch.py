@@ -501,13 +501,11 @@ def inspVAL(tLC,tRES,*pL):
 
         FOM(tLC.t[0],dM,p['P'])
 
-        try:
-            epoch = p['epoch']+np.ceil((tLC.t[0]-p['epoch'])/p['P'])*p['P']
-            axvline(epoch)
-            sca( axL[ildt] )
-            LDT(t,f,p)
-        except:
-            pass
+        epoch = p['epoch']+np.ceil((tLC.t[0]-p['epoch'])/p['P'])*p['P']
+        axvline(epoch)
+        sca( axL[ildt] )
+        LDT(t,f,p)
+
 
     plt.subplots_adjust(hspace=0.16)
     
