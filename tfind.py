@@ -14,6 +14,17 @@ from keptoy import *
 import keptoy
 import keplerio
 import detrend
+
+#
+#
+#
+#
+#
+#
+#
+#
+
+
 def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
