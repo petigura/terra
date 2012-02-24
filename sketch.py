@@ -245,12 +245,13 @@ def XWrap(XW,step=1):
     ncad = XW.shape[1]
     [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
-def FOM(t0,dM,P,**kwargs):
+def FOM(t0,dM,P,step=None,**kwargs):
     """
     Plot the figure of merit
 
     """
-    step = np.nanmax(dM.data)
+    if step is None:
+        step = np.nanmax(dM.data)
     Pcad = int(round(P/lc))
 
     dMW = tfind.XWrap(dM,Pcad,fill_value=np.nan)
@@ -259,13 +260,30 @@ def FOM(t0,dM,P,**kwargs):
 
     res = tfind.ep(t0,dM,Pcad)
     fom = res['fom']
+    color = ['black','red']
+    ncolor = len(['black','red'])
     for i in range(dMW.shape[0]):
         x = ma.masked_array(res['epoch'],mask=dMW[i,:].mask).compressed()
         y = dMW[i,:].compressed()
-        plt.plot(x,y+i*step,**kwargs)
+        plt.plot(x,y+i*step,color=color[mod(i,ncolor)] ,)
 
     plot(res['epoch'],res['fom'] -step )
     return dMW
+
+
+def FOMblock(t0,dM,P,**kwargs):
+    nt = int(dM.size *keptoy.lc / P)
+    tpb = 20
+    nblock = nt / tpb
+    print nblock
+    Pcad = int(P / keptoy.lc)
+    if nblock >2 :
+        for i in range(nblock):
+            dMp = dM[Pcad*i*tpb:Pcad*(i+1)*tpb]
+            print dMp.size
+            FOM(t0 + i *( P+0.5),dMp,P,**kwargs)
+    else:
+        FOM(t0,dM,P,**kwargs)
 
 
 def window(tRES,tLC):
@@ -604,3 +622,14 @@ def waterfall(t,f,**kwargs):
            origin='left',vmin=per,**kwargs)
 
     
+def phfold(t,fm,p):
+    """
+
+    """
+    p1L,idL =  tval.LDT(t,fm,p)
+    for p1,id in zip(p1L,idL):
+        trend = keptoy.trend(p1[3:],t[id])
+        ffit  = keptoy.P051T(p1,t[id])
+        tmod = mod(t[id]-t[0],p['P'])+t[0]
+        plot(tmod,fm[id]-trend,'.')
+    plot(tmod,ffit-trend,'--',lw=2)
