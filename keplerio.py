@@ -23,6 +23,7 @@ import tarfile
 import glob
 import pyfits
 
+from matplotlib.mlab import csv2rec
 import keptoy
 import detrend
 import tfind
@@ -31,13 +32,13 @@ kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
-qsfx = atpy.Table( os.path.join(kepfiles,'qsuffix.txt'),type='ascii' )
+qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
 
 def KICPath(KIC, QL=range(1,9) ):
     pathL = []
     for Q in QL:
-        tQ = qsfx.where(qsfx.Q == Q)
-        path = 'Q%i/kplr%09d-%s_llc.fits' % ( Q,KIC,tQ.Suffix[0] ) 
+        tQ = qsfx[ np.where(qsfx['q'] == Q) ]
+        path = 'Q%i/kplr%09d-%s_llc.fits' % ( Q,KIC,tQ.suffix[0] ) 
         path = 'archive/data3/privkep/EX/' + path
         pathL.append(path)
     return pathL
@@ -99,7 +100,7 @@ def qload(file):
     remcol = []
 
     # Strip abs path from the file.
-    file = file.split(kepdat)[1]
+#    file = file.split(kepdat)[1]
     t.add_keyword('PATH',file)
 
     for k in kw:
