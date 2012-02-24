@@ -82,27 +82,28 @@ def linfit1T(p,t,f):
     p1 : Best fit [df,pleg0,pleg1...] from linear fitting.
     """
     
-    ndeg=3
-
     epoch  = p[0]
     tdur   = p[1]
-
-    # Construct polynomial design matrix
-    trendDS = [] 
-    for i in range(ndeg+1):
-        pleg = np.zeros(ndeg+1)
-        pleg[i] = 1
-        trendDS.append( keptoy.trend(pleg,t) )
-    trendDS = np.vstack(trendDS)
+    tDS = trendDS(t)
 
     # Construct lightcurve design matrix
     plc = np.hstack(( epoch,1.,tdur,list(np.zeros(ndeg+1)) ))
     lcDS = keptoy.P051T(plc,t)
 
-    DS = np.vstack((lcDS,trendDS))
+    DS = np.vstack((lcDS,tDS))
     p1 = np.linalg.lstsq(DS.T,f)[0]
-
     return p1
+
+def trendDS(t):
+    ndeg=3
+    # Construct polynomial design matrix
+    tDS = [] 
+    for i in range(ndeg+1):
+        pleg = np.zeros(ndeg+1)
+        pleg[i] = 1
+        tDS.append( keptoy.trend(pleg,t) )
+    tDS = np.vstack(tDS)
+    return tDS
 
 def fit1T(pNL0,t,f):
     """
@@ -118,6 +119,11 @@ def fit1T(pNL0,t,f):
         pFULL[1] = 0
 
     return pFULL
+
+def fittrend(t,f,):
+    """
+
+    """
 
 def LDT(t,fm,p,wd=2.):
     """
@@ -222,6 +228,19 @@ def dt1T(t,fm,p1L,idL):
 
     return tdt,fdt
 
+def modelL(t,fm,p1L,idL):
+    resL = []
+    
+    for p,id in zip(p1L,idL):
+        trend = keptoy.trend(p[3:],t[id])
+        fit   = keptoy.P051T(p,t[id]) 
+        f     = fm[id]
+        res = np.array(zip(trend,fit,f),
+                       dtype=[('trend',float),('fit',float),('f',float) ]  )
+
+        resL.append(res)
+    return resL
+                       
 
 def fitcandW(t,fm,dL,view=None,ver=True):
     """
@@ -408,11 +427,26 @@ def tdict(d,prefix=''):
 
     return outd
 
+def nT(t,mask,p):
+    """
+    Simple helper function.  Given the transit ephemeris, how many
+    transit do I expect in my data?
+    """
+    
+    trng = np.floor( 
+        np.array([p['epoch'] - t[0],
+                  t[-1] - p['epoch']]
+                 ) / p['P']).astype(int)
 
+    nt = np.arange(trng[0],trng[1]+1)
+    tbool = np.zeros(nt.size).astype(bool)
+    for i in range(nt.size):
+        it = nt[i]
+        tt = p['epoch'] + it*p['P']
+        # Find closest time.
+        dt = abs(t - tt)
+        imin = np.argmin(dt)
+        if (dt[imin] < 0.3) & ~mask[imin]:
+            tbool[i] = True
 
-
-
-
-
-
-
+    return tbool
