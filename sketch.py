@@ -622,7 +622,7 @@ def waterfall(t,f,**kwargs):
            origin='left',vmin=per,**kwargs)
 
     
-def phfold(t,fm,p):
+def phfold(t,fm,p,**kwargs):
     """
 
     """
@@ -631,5 +631,5 @@ def phfold(t,fm,p):
         trend = keptoy.trend(p1[3:],t[id])
         ffit  = keptoy.P051T(p1,t[id])
         tmod = mod(t[id]-t[0],p['P'])+t[0]
-        plot(tmod,fm[id]-trend,'.')
+        scatter(tmod,fm[id]-trend,**kwargs)
     plot(tmod,ffit-trend,'--',lw=2)

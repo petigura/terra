@@ -268,3 +268,4 @@ def genSynLC(darr):
         tl.append(t)
         
     return tl,fl
+
