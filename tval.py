@@ -14,8 +14,9 @@ import glob
 import copy
 import keptoy
 import tfind
+from numpy.polynomial import Legendre
 
-from lmfit import minimize,Parameters
+
 
 def trsh(P,tbase):
     ftdurmi = 0.5
@@ -67,42 +68,8 @@ def obj1Tlin(pNL,t,f):
     return obj
 
 
-def fit1T(t,f,epoch,tdur):
-    """
 
 
-    """
-    de = .5
-    model = keptoy.P051T
-
-    p = Parameters()
-    p.add_many(('epoch',   epoch ,  True , epoch-de, epoch+de, None),
-               ('df'   ,   0     ,  False, None,     None,     None),
-               ('tdur' ,   tdur  ,  False, None,     None,     None),
-               ('pleg0',   0     ,  False, None,     None,     None),
-               ('pleg1',   0     ,  False, None,     None,     None))
-
-
-    blin = np.array([False,True,False,True,True])
-    def residual(params,t,data):
-        epoch = params['epoch'].value
-        tdur  = params['tdur'].value
-        pNL = np.hstack([epoch,tdur])
-
-        pblin = llsqfit(pNL,blin,t,data,model)
-        
-        params['df'].value = pblin[0]
-        params['pleg0'].value = pblin[1]
-        params['pleg1'].value = pblin[2]
-
-        p = np.array([par.value for name,par in params.items() ])
-        print epoch,tdur
-        return (data-model(p,t))/1e-4
-    
-
-    result = minimize(residual, p, args=(t,f) ,engine='lbfgsb')
-    pb = np.array([par.value for name,par in p.items() ])
-    return pb
 
 def llsqfit(pfixed,blin,x,data,model):
     """
@@ -145,6 +112,12 @@ def llsqfit(pfixed,blin,x,data,model):
     return plin 
 
 def id1T(t,fm,p,wd=2.):
+    """
+    Grab the indecies and midpoint of a putative transit. 
+
+
+    """
+
     P     = p['P']
     epoch = p['epoch']
     tdur  = p['tdur']
@@ -168,45 +141,34 @@ def id1T(t,fm,p,wd=2.):
 
     return ms,idL
 
-
-def LDT(t,fm,p,wd=2.):
+def LDT(epoch,tdur,t,f,pad=0.2,deg=1):
     """
-    Local detrending.  
-    At each putative transit, fit a model transit and continuum lightcurve.
+    Local detrending.
 
-    Parameters
-    ----------
+    A simple function that subtracts a poly nomial trend from the
+    lightcurve excluding a region around the transit.
 
-    t  : Times (complete data string)
-    fm : Flux. bad values masked out.
-    p  : Parameters {'P': , 'epoch': , 'tdur': }
-
+    pad : Extra number of days to notch out of the of the transit region.
     """
-    P     = p['P']
-    epoch = p['epoch']
+    pad = 0.2 # give a 2 day pad 
+    bcont = abs(t - epoch) > tdur/2 + pad
+    fcont = f[bcont]
+    tcont = t[bcont]
+
+    legtrend = Legendre.fit(tcont,fcont,deg,domain=[t.min(),t.max()])
+    trend    = legtrend(t)
+    return trend 
+
+def LDTwrap(t,fm,p):
+    ms,idL = id1T(t,fm,p,wd=2.)
     tdur  = p['tdur']
 
-    Pcad     = round(P/keptoy.lc)
-    epochcad = round(epoch/keptoy.lc)
-    tdurcad  = round(tdur/keptoy.lc)
-    wdcad    = round(wd/keptoy.lc)
+    func = lambda m,id : LDT( t[m],tdur, t[id] , fm[id].data) 
+    trendL = map(func,ms,idL)
 
-    dM = tfind.mtd(t,fm.filled(),tdurcad)
-    dM.mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
+    return trendL
 
-    tm   = ma.masked_array(t,copy=True,mask=fm.mask)
-    ### Determine the indecies of the points to fit. ###
-    # Exclude regions where the convolution returned a nan.
-    ms   = midTransId(t,p)
-    ms   = [m for m in ms if ~dM.mask[m] ]
-    sLDT = [ getSlice(m,wdcad) for m in ms ]
-    x = np.arange(dM.size)
-    idL  = [ x[s][np.where(~fm[s].mask)] for s in sLDT ]
 
-    func = lambda m,id : fit1T( [t[m],tdur], tm[id].data , fm[id].data) 
-    p1L = map(func,ms,idL)
-
-    return p1L,idL
 
 def fitcand(t,fm,p0,ver=True):
     """
@@ -257,20 +219,6 @@ def fitcand(t,fm,p0,ver=True):
     else:
         return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
 
-
-def dt1T(t,fm,p1L,idL):
-    """
-    Detrend based on single transit.
-    """
-    fdt = np.empty(t.size)
-    for p1,id in zip(p1L,idL):
-        fdt[id] = fm.data[id] - keptoy.trend(p1[3:],t[id])    
-
-    id  = np.hstack(idL)
-    tdt = t[id]
-    fdt = fdt[id]
-
-    return tdt,fdt
 
 def modelL(t,fm,p1L,idL):
     resL = []
