@@ -15,6 +15,8 @@ import copy
 import keptoy
 import tfind
 
+from lmfit import minimize,Parameters
+
 def trsh(P,tbase):
     ftdurmi = 0.5
     tdur = keptoy.a2tdur( keptoy.P2a(P) ) 
@@ -64,37 +66,42 @@ def obj1Tlin(pNL,t,f):
     obj = (resid**2).sum() 
     return obj
 
-def PLfit(p0,blin,x,data,model,engine=optimize.fmin_powell,err=1):
-    """
-    Partial Linear Model Fitting.
 
-    Parameters
-    ----------
-    p0     : Intial parametersx
-    bfixed : Boolean array specifying which model parameters are fixed 
+def fit1T(t,f,epoch,tdur):
+    """
+
+
+    """
+    de = .5
+    model = keptoy.P051T
+
+    p = Parameters()
+    p.add_many(('epoch',   epoch ,  True , epoch-de, epoch+de, None),
+               ('df'   ,   0     ,  False, None,     None,     None),
+               ('tdur' ,   tdur  ,  False, None,     None,     None),
+               ('pleg0',   0     ,  False, None,     None,     None),
+               ('pleg1',   0     ,  False, None,     None,     None))
+
+
+    blin = np.array([False,True,False,True,True])
+    def residual(params,t,data):
+        epoch = params['epoch'].value
+        tdur  = params['tdur'].value
+        pNL = np.hstack([epoch,tdur])
+
+        pblin = llsqfit(pNL,blin,t,data,model)
+        
+        params['df'].value = pblin[0]
+        params['pleg0'].value = pblin[1]
+        params['pleg1'].value = pblin[2]
+
+        p = np.array([par.value for name,par in params.items() ])
+        print epoch,tdur
+        return (data-model(p,t))/1e-4
     
-    """
 
-    pNL0 = p0[~blin]
-    def obj(pNL):
-        p = np.zeros(p0.size)
-        p[~blin] = pNL
-        p[blin]  = llsqfit(pNL,blin,x,data,model)
-        resid = (data - model(p,x)) / err
-        cost = (abs(resid)).sum()
-        if dPNL != None:
-            penalty = (((pNL0 - pNL) / dPNL)**2).sum()
-            print penalty
-            cost += penalty
-            if p[1] < 0 :
-                cost += 1000.
-            
-        return cost
-                
-    pNLb = engine(obj,pNL0)
-    pb   = np.zeros(p0.size)
-    pb[~blin] = pNLb
-    pb[blin]  = llsqfit(pNLb,blin,x,data,model)
+    result = minimize(residual, p, args=(t,f) ,engine='lbfgsb')
+    pb = np.array([par.value for name,par in p.items() ])
     return pb
 
 def llsqfit(pfixed,blin,x,data,model):
