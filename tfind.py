@@ -294,7 +294,7 @@ def ep(t0,dM,Pcad):
     vcount = (~dMW.mask).astype(int).sum(axis=0)
     win = (vcount >= 3).astype(float)
 
-    sig = (dM > 50e-6).astype(int)
+    sig = (dM > 0e-6).astype(int)
     sigW = XWrap(sig,Pcad,fill_value=0)
     nsig = sigW.sum(axis=0)
     bsig = (nsig == vcount).astype(float)

@@ -64,66 +64,103 @@ def obj1Tlin(pNL,t,f):
     obj = (resid**2).sum() 
     return obj
 
-
-def linfit1T(p,t,f):
+def PLfit(p0,blin,x,data,model,engine=optimize.fmin_powell,err=1):
     """
-    Linear fit to 1 Transit.
-
-    Depth and polynomial cofficents are linear
+    Partial Linear Model Fitting.
 
     Parameters
     ----------
-    p : [epoch,tdur]
-    t : time
-    f : flux
+    p0     : Intial parametersx
+    bfixed : Boolean array specifying which model parameters are fixed 
+    
+    """
+
+    pNL0 = p0[~blin]
+    def obj(pNL):
+        p = np.zeros(p0.size)
+        p[~blin] = pNL
+        p[blin]  = llsqfit(pNL,blin,x,data,model)
+        resid = (data - model(p,x)) / err
+        cost = (abs(resid)).sum()
+        if dPNL != None:
+            penalty = (((pNL0 - pNL) / dPNL)**2).sum()
+            print penalty
+            cost += penalty
+            if p[1] < 0 :
+                cost += 1000.
+            
+        return cost
+                
+    pNLb = engine(obj,pNL0)
+    pb   = np.zeros(p0.size)
+    pb[~blin] = pNLb
+    pb[blin]  = llsqfit(pNLb,blin,x,data,model)
+    return pb
+
+def llsqfit(pfixed,blin,x,data,model):
+    """
+    Linear Least Squares Fit
+
+    Fit model(p,x) to data by linear least squares.
+
+    Parameters
+    ----------
+
+    pfixed : These parameters are fixed during the linear fitting.
+             This is the first argument so that this function can be used with
+             the scipy.optimize suite of optimizers
+    blin   : vector of length p
+             [False,True] = [NL param, linear param]
+    x      : Independent variable
+    data   : Data we are trying to fit.
+    model  : Callable.  must have the following signature model(p,x).
 
     Returns
     -------
-    p1 : Best fit [df,pleg0,pleg1...] from linear fitting.
+    p1     : Best fit plin from linear least squares
+
     """
     
-    epoch  = p[0]
-    tdur   = p[1]
-    tDS = trendDS(t)
+    nlin = blin.size - pfixed.size
 
-    # Construct lightcurve design matrix
-    plc = np.hstack(( epoch,1.,tdur,list(np.zeros(ndeg+1)) ))
-    lcDS = keptoy.P051T(plc,t)
+    # Parameter matrix:
+    pmat         = np.zeros(blin.size)
+    pmat[~blin]  = pfixed
+    pmat         = np.tile(pmat,(nlin,1))
+    pmat[:,blin] = np.eye(nlin)
 
-    DS = np.vstack((lcDS,tDS))
-    p1 = np.linalg.lstsq(DS.T,f)[0]
-    return p1
+    # Construct design matrix
+    DS = [model(p[0],x) for p in np.vsplit(pmat,nlin)]
+    DS = np.vstack(DS)
+    DS = DS.T
+    
+    plin = np.linalg.lstsq(DS,data)[0]
+    return plin 
 
-def trendDS(t):
-    ndeg=3
-    # Construct polynomial design matrix
-    tDS = [] 
-    for i in range(ndeg+1):
-        pleg = np.zeros(ndeg+1)
-        pleg[i] = 1
-        tDS.append( keptoy.trend(pleg,t) )
-    tDS = np.vstack(tDS)
-    return tDS
+def id1T(t,fm,p,wd=2.):
+    P     = p['P']
+    epoch = p['epoch']
+    tdur  = p['tdur']
 
-def fit1T(pNL0,t,f):
-    """
-    Fit Single transit
-    """
-    dpNL0 = np.array([0.2,0.2])
+    Pcad     = round(P/keptoy.lc)
+    epochcad = round(epoch/keptoy.lc)
+    tdurcad  = round(tdur/keptoy.lc)
+    wdcad    = round(wd/keptoy.lc)
 
-    objp = lambda p,t,f : obj1Tlin(p,t,f) + (((p-pNL0)/dpNL0)**2).sum()
-    pNL = optimize.fmin(objp,pNL0,args=(t,f),disp=False)
-    pL = linfit1T(pNL,t,f)
-    pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
-    if pFULL[1] < 0:
-        pFULL[1] = 0
+    dM = tfind.mtd(t,fm.filled(),tdurcad)
+    dM.mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
 
-    return pFULL
+    tm   = ma.masked_array(t,copy=True,mask=fm.mask)
+    ### Determine the indecies of the points to fit. ###
+    # Exclude regions where the convolution returned a nan.
+    ms   = midTransId(t,p)
+    ms   = [m for m in ms if ~dM.mask[m] ]
+    sLDT = [ getSlice(m,wdcad) for m in ms ]
+    x = np.arange(dM.size)
+    idL  = [ x[s][np.where(~fm[s].mask)] for s in sLDT ]
 
-def fittrend(t,f,):
-    """
+    return ms,idL
 
-    """
 
 def LDT(t,fm,p,wd=2.):
     """
@@ -260,12 +297,11 @@ def parGuess(res,nCheck=50):
     Parameters
     ----------
 
-    res - Dictionary with the following keys:
-
-        s2n   : Array of s2n
-        PG    : Period grid
-        epoch : Array of epochs
-        twd   : Array of epochs
+    res : record array output of tdpep
+          s2n    
+          PG     
+          epoch  
+          twd    
     
     Optional Parameters
     -------------------

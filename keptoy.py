@@ -222,6 +222,12 @@ def P051T(p,t):
 
     return sig + tr
 
+def P05d2arr(p):
+    """
+    Convert dictionary to array
+    """
+
+
 def genEmpLC(d0,tdt,fdt):
     """
     Generate Synthetic Lightcurves

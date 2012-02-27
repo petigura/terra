@@ -15,8 +15,8 @@ import tval
 import keptoy
 import keplerio
 
-def grid(t,fm,Psmp=0.25):
-    PG0   = ebls.grid( t.ptp() , 0.5, Pmin=50.0, Psmp=Psmp)
+def grid(t,fm,**kwargs):
+    PG0   = ebls.grid( t.ptp() , 0.5, **kwargs)
     rec2d = tfind.tdpep(t,fm,PG0)
     rec   = tfind.tdmarg(rec2d)
     tRES  = qalg.rec2tab(rec)
