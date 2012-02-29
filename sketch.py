@@ -148,7 +148,7 @@ def inspectT(t0,f0,P,ph,darr=None):
         
 
 
-def stack(axL,xmin,size,pad=0.1):
+def stack(axL,xmin,size,pad=0.1,lfsize='small'):
     """
     Given a list of axis, we'll adjust the x limits so we can fit a very long
     data string on the computer screen.
@@ -160,10 +160,10 @@ def stack(axL,xmin,size,pad=0.1):
         offset = xmin + i*size
 
         ax.set_xlim(offset-pad*size,offset+(1+pad)*size)
-        ax.axvline(offset,ls='--',lw=1,label='Padded')
-        ax.axvline(offset+size,ls='--',lw=1)
-        ax.annotate('Offset = %i' % offset,xy=(.01,.1),
-                    xycoords='axes fraction')
+        ax.axvline(offset,ls='--',label='Padded')
+        ax.axvline(offset+size,ls='--')
+        ax.annotate(r'$\Delta$ T = %i' % (i*size) ,xy=(.01,.1),
+                    xycoords='axes fraction',fontsize=lfsize)
         
         xa = ax.get_xaxis()
         ya = ax.get_yaxis()
