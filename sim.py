@@ -1,3 +1,11 @@
+"""
+This module implements the transit search pipeline.  The idea is to
+keep the interface to the base functions fairly stable, even as the
+data structures change.
+
+"""
+
+
 import atpy
 import platform
 import os
@@ -14,6 +22,7 @@ import ebls
 import tval
 import keptoy
 import keplerio
+from matplotlib import mlab
 
 def grid(t,fm,**kwargs):
     PG0   = ebls.grid( t.ptp() , 0.5, **kwargs)
@@ -23,26 +32,20 @@ def grid(t,fm,**kwargs):
     return tRES
 
 def val(tLC,tRES,nCheck=50,ver=True):
-    # Work around since I made tRES the proper dimensions.  Fix later.
-    res = dict(PG=tRES.PG,s2n=tRES.s2n,epoch=tRES.epoch,twd=tRES.twd)
-    dL = tval.parGuess(res,nCheck=nCheck)
+    # Unpack array from table.
+
+    t  = tLC.t
     fm = ma.masked_array(tLC.f-tLC.fcbv,mask=tLC.fmask)
-    func = lambda d: tval.fitcand(tLC.t,fm,d,ver=ver)
-    resL = map(func, dL)
 
-    # Alias Lodgic.
-    # Check the following periods for aliases.
-    resLHigh = [r for r in resL if  r['s2n'] > 5]
-    resLLow  = [r for r in resL if  r['s2n'] < 5] 	
+    tres = tRES.data    
+    tres = mlab.rec_append_fields(tres,['P','tdur','df'], \
+        [tres['PG'],tres['twd']*keptoy.lc,tres['fom']])
     
-    resLHigh = tval.aliasW(tLC.t,fm,resLHigh)
-            
-    # Combine the high and low S/N 
-    resL = resLHigh + resLLow
-    tVAL = qalg.dl2tab(resL)
+    sid  = np.argsort(-tres['s2n'])
+    tres = tres[sid][:nCheck]
+    rval = tval.val(t,fm,tres)
+    tVAL = qalg.rec2tab(rval)
     return tVAL
-
-
 
 
 
