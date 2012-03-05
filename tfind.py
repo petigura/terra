@@ -131,25 +131,6 @@ def XWrap(x,ifold,fill_value=0):
 
     return xwrap
 
-def getT(time,P,epoch,wd):
-    """
-    Get Transits
-
-    time : Time series
-    P    : Period
-    epoch: epoch
-    wd   : How much data to return for each slice.
-
-    Returns
-    -------
-    Time series phase folded with everything but the transits masked out.
-
-    """
-    tfold = time - epoch # Slide transits to 0, P, 2P
-    tfold = np.mod(tfold,P)
-    tfold = ma.masked_inside(tfold,wd/2,P-wd/2)
-    tfold = ma.masked_invalid(tfold)
-    return tfold
 
 def P2Pcad(PG0):
     """
