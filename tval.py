@@ -6,17 +6,88 @@ functions in this module will check for transit-like signature.
 """
 import numpy as np
 from numpy import ma
-
 from scipy import optimize
-import scipy.ndimage as nd
 
-import glob
 import copy
 import keptoy
 import tfind
 from numpy.polynomial import Legendre
 
+dP     = 0.5
+depoch = 0.5
 
+def val(t,fm,tres):
+    """
+    Validate promising transits.
+
+    Parameters
+    ----------
+    t    : time
+    fm   : flux 
+    tres : a record array with the parameters of the putative transit.
+           - P
+           - epoch
+           - tdur
+           - df
+           
+    Returns
+    -------
+    rval : a record array with following fields:
+           - P     <- From best fit
+           - epoch
+           - tdur
+           - df
+           - s2n
+    """
+
+    r2d = lambda r : dict(P=r['P'],epoch=r['epoch'],tdur=r['tdur'],df=r['df'])
+    dL = map(r2d,tres)
+
+    fcand = lambda d : fitcand(t,fm,d)
+    resL = map(fcand,dL)
+
+    # Cut out crazy fits.
+    resL = [r for r in resL if r['stbl'] ]
+
+    ### Alias Lodgic ###
+    # Check the following periods for aliases.
+    resL = [r for r in resL if  r['s2n'] > 5]
+
+
+    falias = lambda r : aliasW(t,fm,r)
+    resL = map(falias,resL)            
+
+    dtype = [('P',float),('epoch',float),('tdur',float),('df',float),
+             ('s2n',float)]
+    
+    d2l = lambda d : tuple([ d[ k[0] ] for k in dtype ])
+    d2r = lambda d : np.array( d2l(d) ,dtype=dtype)
+
+    rval = map(d2r,resL)
+    rval = np.hstack(rval)
+
+    return rval
+
+
+def getT(time,P,epoch,wd):
+    """
+    Get Transits
+
+    time : Time series
+    P    : Period
+    epoch: epoch
+    wd   : How much data to return for each slice.
+
+    Returns
+    -------
+    Time series phase folded with everything but the transits masked out.
+
+    """
+    tfold = time - epoch # Slide transits to 0, P, 2P
+    tfold = np.mod(tfold,P)
+    tfold = ma.masked_inside(tfold,wd/2,P-wd/2)
+    tfold = ma.masked_invalid(tfold)
+    return tfold
 
 def trsh(P,tbase):
     ftdurmi = 0.5
@@ -26,8 +97,8 @@ def trsh(P,tbase):
     depoch = tdurmi
 
     return dict(dP=dP,depoch=depoch)
-
-def objMT(p,time,fdt,p0,dp0):
+    
+def objMT(p,time,fdt):
     """
     Multitransit Objective Function
 
@@ -36,16 +107,16 @@ def objMT(p,time,fdt,p0,dp0):
     """
     fmod = keptoy.P05(p,time)
     resid = (fmod - fdt)/1e-4
-    obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
+    obj = (resid**2).sum() 
     return obj
 
-def obj1T(p,t,f,P,p0,dp0):
+def obj1T(p,t,f):
     """
     Single Transit Objective Function
     """
-    model = keptoy.P051T(p,t,P)
+    model = keptoy.P051T(p,t)
     resid  = (model - f)/1e-4
-    obj = (resid**2).sum() + (((p0[0:2] - p[0:2])/dp0[0:2])**2 ).sum()
+    obj = (resid**2).sum()
     return obj
 
 
@@ -66,10 +137,6 @@ def obj1Tlin(pNL,t,f):
     resid  = ((model - f)/1e-4 )
     obj = (resid**2).sum() 
     return obj
-
-
-
-
 
 def llsqfit(pfixed,blin,x,data,model):
     """
@@ -94,7 +161,6 @@ def llsqfit(pfixed,blin,x,data,model):
     p1     : Best fit plin from linear least squares
 
     """
-    
     nlin = blin.size - pfixed.size
 
     # Parameter matrix:
@@ -114,16 +180,9 @@ def llsqfit(pfixed,blin,x,data,model):
 def id1T(t,fm,p,wd=2.):
     """
     Grab the indecies and midpoint of a putative transit. 
-
-
     """
-
-    P     = p['P']
-    epoch = p['epoch']
     tdur  = p['tdur']
 
-    Pcad     = round(P/keptoy.lc)
-    epochcad = round(epoch/keptoy.lc)
     tdurcad  = round(tdur/keptoy.lc)
     wdcad    = round(wd/keptoy.lc)
 
@@ -143,7 +202,7 @@ def id1T(t,fm,p,wd=2.):
 
 def LDT(epoch,tdur,t,f,pad=0.2,deg=1):
     """
-    Local detrending.
+    Local detrending
 
     A simple function that subtracts a poly nomial trend from the
     lightcurve excluding a region around the transit.
@@ -163,126 +222,82 @@ def LDTwrap(t,fm,p):
     ms,idL = id1T(t,fm,p,wd=2.)
     tdur  = p['tdur']
 
-    func = lambda m,id : LDT( t[m],tdur, t[id] , fm[id].data) 
-    trendL = map(func,ms,idL)
-
-    return trendL
-
-
-
-def fitcand(t,fm,p0,ver=True):
-    """
-    Fit Candidate Transits
-
-    Starting from the promising (P,epoch,tdur) combinations returned by the
-    brute force search, perform a non-linear fit for the transit.
-
-    Parameters
-    ----------
-
-    t      : Time series  
-    fm     : Flux
-    p0     : Dictionary {'P':Period,'epoch':Trial epoch,'tdur':Transit Duration}
-
-    """
-    twdcad = 2./keptoy.lc
-    P     = p0['P']
-    epoch = p0['epoch']
-    tdur  = p0['tdur']
-
-    p1L,idL = LDT(t,fm,p0)
-    nT = len(p1L)
-    tdt,fdt = dt1T(t,fm,p1L,idL)
-
-    p0 = np.array([P,epoch,0.e-4,tdur])
-    fitpass = False
-    if (nT >= 3) :
-        tbase = t.ptp()
-        dp0 =  trsh(P,tbase)
-        dp0 = [dp0['dP'],dp0['depoch']]
-        p1  = optimize.fmin(objMT,p0,args=(tdt,fdt,p0,dp0) ,disp=False)
-        tfold = tfind.getT(tdt,p1[0],p1[1],p1[3])
-        fdt2 = ma.masked_array(fdt,mask=tfold.mask)
-        if fdt2.count() > 20:
-            s2n = - ma.mean(fdt2)/ma.std(fdt2)*np.sqrt( fdt2.count() )
-            fitpass = True
-        else: 
-            fitpass = False
-            s2n = 0
-        if ver:
-            print "%7.02f %7.02f %7.02f" % (p1[0] , p1[1] , s2n )
-
-    # To combine tables everythin must be a float.
-    if fitpass:
-        res = dict( P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n )
-        return res
-    else:
-        return dict( P=p0[0],epoch=p0[1],df=p0[2],tdur=p0[3],s2n=0. )
-
-
-def modelL(t,fm,p1L,idL):
+    dtype=[('trend',float),('fdt',float),('tdt',float) ]
     resL = []
-    
-    for p,id in zip(p1L,idL):
-        trend = keptoy.trend(p[3:],t[id])
-        fit   = keptoy.P051T(p,t[id]) 
-        f     = fm[id]
-        res = np.array(zip(trend,fit,f),
-                       dtype=[('trend',float),('fit',float),('f',float) ]  )
-
+    for m,id in zip(ms,idL):
+        trend = LDT( t[m],tdur, t[id] , fm[id].data)
+        fdt   = fm[id]-trend
+        tdt   = t[id]
+        res = np.array(zip(trend,fdt,tdt),dtype=dtype)
         resL.append(res)
     return resL
-                       
 
-def fitcandW(t,fm,dL,view=None,ver=True):
+def fitcand(t,fm,p,full=False):
     """
-    """
-    n = len(dL)
-
-    return resL
-
-
-def parGuess(res,nCheck=50):
-    """
-    Parameter guess
-
-    Given the results of the matched filter approach, return the guess
-    values for the non-linear fitter.
+    Perform a non-linear fit to a putative transit.
 
     Parameters
     ----------
-
-    res : record array output of tdpep
-          s2n    
-          PG     
-          epoch  
-          twd    
+    t  : time
+    fm : flux
+    p  : trial parameter (dictionary)
+    full : Retrun tdt and fdt
+    Returns
+    -------
+    res : result dictionary.
     
-    Optional Parameters
-    -------------------
-
-    nCheck : How many s2n points to look at?
-
-    Notes
-    -----
-
-    Right now the transit duration is hardwired at 0.3 days.  This it
-    should take the output value of the matched filter.
-
     """
+    dtL  = LDTwrap(t,fm,p)
+    dt   = np.hstack(dtL)
 
-    idCand = np.argsort(-res['s2n'])
-    dL = []
-    for i in range(nCheck):
-        idx = idCand[i]
-        d = dict(P=res['PG'][idx],epoch=res['epoch'][idx],
-                 tdur=res['twd'][idx]*keptoy.lc)
-        dL.append(d)
+    fdt = dt['fdt']
+    tdt = dt['tdt']
 
-    return dL
+    p0  = np.array([p['P'],p['epoch'],p['df'],p['tdur']])
+    p1  = optimize.fmin_powell(objMT,p0,args=(tdt,fdt),disp=False)
+
+    dp = (p0[:2]-p1[:2])
+    if (abs(dp) > np.array([dP,depoch])).any():
+        stbl = False
+    elif (p1[0] < 0) | (p1[3] < 0):
+        stbl = False
+    else:
+        stbl = True
+
+    tfold = getT(tdt,p['P'],p['epoch'],p['tdur'])
+    fdt   = ma.masked_array(fdt,mask=tfold.mask)
+    tdt   = ma.masked_array(tdt,mask=tfold.mask)
+
+    s2n = s2n_fit(fdt,tdt,p1)
+    res = dict(P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n,stbl=stbl)
+
+    if full:
+        res['fdt'] = fdt
+        res['tdt'] = tdt
+
+    return res
+
+def s2n_mean(fdt):
+    return -ma.mean(fdt)/ma.std(fdt)*np.sqrt(fdt.count())
+
+def s2n_med(fdt):
+    sig = ma.median(fdt)
+    noise = ma.median(abs(fdt-sig))
+    return -sig/noise*np.sqrt(fdt.count())
+
+def s2n_fit(fdt,tdt,p):
+    """
+    Evaluate S/N taking the best fit depth as signal and the scatter
+    about the residuals as the noise.
+    """
+    model = keptoy.P05(p,tdt)
+    sig   = p[2]
+    resid = fdt-model
+    noise = ma.median(abs(resid))
+    s2n = sig/noise*np.sqrt(fdt.count() )
+    return s2n
 
 thresh = 0.001
-
 
 def window(fl,PcadG):
     """
@@ -327,64 +342,51 @@ def midTransId(t,p):
     ms = [m for m in  ms if (m < t.size) & (m > 0) ]
     return ms
 
-def aliasW(t,f,resL0):
+def aliasW(t,fm,p0):
     """
     Alias Wrap
-
     """
+    p = copy.deepcopy(p0)
 
-    s2n = np.array([ r['s2n'] for r in resL0])
-    assert ( s2n > 0).all(),"Cut out failed fits"
-
-    resL = copy.deepcopy(resL0)
-
-    for i in range(len(resL0)):
-        X2,X2A,pA,fTransitA,mTransit,mTransitA = alias(t,f,resL0[i])
-        if X2A < X2:
-            res = fitcand(t,f,pA)
-            resL[i] = res
-
-    return resL
+    X2,X2A = alias(t,fm,p)
+    if X2A < X2:
+        p['P'] = p['P']*0.5
+        return p
+    else:
+        return p
 
 def alias(t,fm,p):
     """
-    Evaluate the Bayes Ratio between signal with P and 2 *P
+    Evaluate the Bayes Ratio between signal with P and 0.5*P
 
     Parameters
     ----------
 
-    t : Time series
-    f : Flux series
-    p : Parameter dictionary.
+    t  : Time series
+    fm : Flux series
+    p  : Parameter dictionary.
     
     """
-
     pA = copy.deepcopy(p)
     pA['P'] = 0.5 * pA['P']
+    resL = LDTwrap(t,fm,pA)
+    res  = np.hstack(resL)
+
+    # Masked array corresponding to P = 2 P
+    tfold  = getT(res['tdt'],pA['P'],pA['epoch'],pA['tdur'])
+
+    tT     = ma.masked_array(res['tdt'],copy=True,mask=tfold.mask)
+    fT     = ma.masked_array(res['fdt'],copy=True,mask=tfold.mask)
     
-    p1L,idL = LDT(t,fm,pA)
-    tdt,fdt = dt1T(t,fm,p1L,idL)           
-    
-    pl  = [p['P'],p['epoch'],p['df'],p['tdur']]
-    plA = [pA['P'],pA['epoch'],pA['df'],pA['tdur']]
+    X2 = lambda par : ma.sum( (fT - keptoy.P05(pd2a(par),tT))**2 )
+    return X2(p),X2(pA)
 
-    model  = keptoy.P05(pl  , tdt )
-    modelA = keptoy.P05(plA , tdt )
 
-    tTransitA = tfind.getT(tdt,pA['P'],pA['epoch'],pA['tdur'])
-    
-    mTransit  = ma.masked_array(model,copy=True,mask=tTransitA.mask)
-    mTransitA = ma.masked_array(modelA,copy=True,mask=tTransitA.mask)
+def pd2a(d):
+    return np.array([d['P'],d['epoch'],d['df'],d['tdur']])
 
-    fTransitA = ma.masked_array(fdt,copy=True,mask=tTransitA.mask)
-
-    X2  = ma.sum( (fTransitA - mTransit)**2 )
-    X2A = ma.sum( (fTransitA - mTransitA)**2 )
-
-    print "Input Period Chi2 = %e, Alias Chi2 = %e " % (X2, X2A)
-
-    return X2,X2A,pA,fTransitA,mTransit,mTransitA
-    
+def pa2d(a):
+    return dict(P=a[0],epoch=a[1],df=a[2],tdur=a[3])
 
 def getSlice(m,wdcad):
     """
