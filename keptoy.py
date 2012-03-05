@@ -196,37 +196,13 @@ def P051T(p,t):
     """
     Protopapas single transit
 
-    Single transit + trend
-
-    Parameters
-    ----------
-
-    p : List of parameters.
-        p[0]   epoch
-        p[1]   df
-        p[2]   tdur 
-        p[3:]  passed to trend
-
-    P : period
-
     Period is held fixed since for a single transit, it doesnot make
     sense to specify period and epoch
 
     """
     P = 100
     pP05 = [P , p[0] , p[1] , p[2] ]
-    sig = P05(pP05,t)
-
-    ptrend = p[3:]
-    tr     = trend(ptrend,t)
-
-    return sig + tr
-
-def P05d2arr(p):
-    """
-    Convert dictionary to array
-    """
-
+    return  P05(pP05,t)
 
 def genEmpLC(d0,tdt,fdt):
     """
