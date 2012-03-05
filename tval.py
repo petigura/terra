@@ -120,63 +120,6 @@ def obj1T(p,t,f):
     return obj
 
 
-def obj1Tlin(pNL,t,f):
-    """
-    Single Transit Objective Function.  For each trial value of epoch
-    and width, we determine the best fit by linear fitting.
-
-    Parameters
-    ----------
-    pNL  - The non-linear parameters [epoch,tdur]
-   
-    """
-    pL = linfit1T(pNL,t,f)
-    pFULL = np.hstack( (pNL[0],pL[0],pNL[1],pL[1:]) )
-    model = keptoy.P051T(pFULL,t)
-
-    resid  = ((model - f)/1e-4 )
-    obj = (resid**2).sum() 
-    return obj
-
-def llsqfit(pfixed,blin,x,data,model):
-    """
-    Linear Least Squares Fit
-
-    Fit model(p,x) to data by linear least squares.
-
-    Parameters
-    ----------
-
-    pfixed : These parameters are fixed during the linear fitting.
-             This is the first argument so that this function can be used with
-             the scipy.optimize suite of optimizers
-    blin   : vector of length p
-             [False,True] = [NL param, linear param]
-    x      : Independent variable
-    data   : Data we are trying to fit.
-    model  : Callable.  must have the following signature model(p,x).
-
-    Returns
-    -------
-    p1     : Best fit plin from linear least squares
-
-    """
-    nlin = blin.size - pfixed.size
-
-    # Parameter matrix:
-    pmat         = np.zeros(blin.size)
-    pmat[~blin]  = pfixed
-    pmat         = np.tile(pmat,(nlin,1))
-    pmat[:,blin] = np.eye(nlin)
-
-    # Construct design matrix
-    DS = [model(p[0],x) for p in np.vsplit(pmat,nlin)]
-    DS = np.vstack(DS)
-    DS = DS.T
-    
-    plin = np.linalg.lstsq(DS,data)[0]
-    return plin 
-
 def id1T(t,fm,p,wd=2.):
     """
     Grab the indecies and midpoint of a putative transit. 
