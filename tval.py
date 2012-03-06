@@ -120,7 +120,7 @@ def obj1T(p,t,f):
     return obj
 
 
-def id1T(t,fm,p,wd=2.):
+def id1T(t,fm,p,wd=2.,usemask=True):
     """
     Grab the indecies and midpoint of a putative transit. 
     """
@@ -132,14 +132,16 @@ def id1T(t,fm,p,wd=2.):
     dM = tfind.mtd(t,fm.filled(),tdurcad)
     dM.mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
 
-    tm   = ma.masked_array(t,copy=True,mask=fm.mask)
     ### Determine the indecies of the points to fit. ###
     # Exclude regions where the convolution returned a nan.
     ms   = midTransId(t,p)
-    ms   = [m for m in ms if ~dM.mask[m] ]
+    if usemask:
+        ms   = [m for m in ms if ~dM.mask[m] ]
+
     sLDT = [ getSlice(m,wdcad) for m in ms ]
     x = np.arange(dM.size)
-    idL  = [ x[s][np.where(~fm[s].mask)] for s in sLDT ]
+    idL  = [ x[s][~fm[s].mask] for s in sLDT ]
+    idL  = [ id for id in idL if id.size > 10 ]
 
     return ms,idL
 
@@ -147,12 +149,11 @@ def LDT(epoch,tdur,t,f,pad=0.2,deg=1):
     """
     Local detrending
 
-    A simple function that subtracts a poly nomial trend from the
+    A simple function that subtracts a polynomial trend from the
     lightcurve excluding a region around the transit.
 
     pad : Extra number of days to notch out of the of the transit region.
     """
-    pad = 0.2 # give a 2 day pad 
     bcont = abs(t - epoch) > tdur/2 + pad
     fcont = f[bcont]
     tcont = t[bcont]
@@ -275,15 +276,14 @@ def midTransId(t,p):
     P     = p['P']
     epoch = p['epoch']
 
-    Pcad     = int(round(P/keptoy.lc))
-    epochcad = int(round( (epoch-t[0])/keptoy.lc )  )
-
-    nT = t.size/Pcad + 1  # maximum number of transits
-
-    ### Determine the indecies of the points to fit. ###
-    ms = np.arange(nT) * Pcad + epochcad
-    ms = [m for m in  ms if (m < t.size) & (m > 0) ]
+    epoch = np.mod(epoch,P)
+    tfold = np.mod(t,P)
+    
+    ms = np.where(np.abs(tfold-epoch) < 0.5 * keptoy.lc)[0]
+    ms = list(ms)
     return ms
+
+
 
 def aliasW(t,fm,p0):
     """
@@ -343,8 +343,6 @@ def getSlice(m,wdcad):
     """
 
     return slice( m-wdcad/2 , m+wdcad/2 )
-
-
 
 def tdict(d,prefix=''):
     """

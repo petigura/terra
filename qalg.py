@@ -127,6 +127,13 @@ def rec2tab(rec):
         t.add_column(k,rec[k])
     return t
 
+def rec2d(rec):
+    keys = rec.dtype.names
+    d = {}
+    for k in keys:
+        d[k] = rec[k]
+    return d
+
 
 def ROC(t):
     """
