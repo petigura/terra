@@ -2,6 +2,9 @@
 Transit finder.
 
 Evaluate a figure of merit at each point in P,epoch,tdur space.
+
+
+
 """
 from scipy import ndimage as nd
 import scipy
