@@ -101,9 +101,6 @@ def trsh(P,tbase):
 def objMT(p,time,fdt):
     """
     Multitransit Objective Function
-
-    With a prior on P and epoch
-
     """
     fmod = keptoy.P05(p,time)
     resid = (fmod - fdt)/1e-4
@@ -186,11 +183,18 @@ def fitcand(t,fm,p,full=False):
     fm : flux
     p  : trial parameter (dictionary)
     full : Retrun tdt and fdt
+
     Returns
     -------
     res : result dictionary.
-    
+
+
+    Todo
+    ----
+
+    Add priors in for P.  tdur goes negative, but the sign doesn't matter
     """
+#    import pdb;pdb.set_trace()
     dtL  = LDTwrap(t,fm,p)
     dt   = np.hstack(dtL)
 
@@ -200,10 +204,13 @@ def fitcand(t,fm,p,full=False):
     p0  = np.array([p['P'],p['epoch'],p['df'],p['tdur']])
     p1  = optimize.fmin_powell(objMT,p0,args=(tdt,fdt),disp=False)
 
+    # Hack to prevent negative transit duration.
+    p1[3] = np.abs(p1[3])
+
     dp = (p0[:2]-p1[:2])
     if (abs(dp) > np.array([dP,depoch])).any():
         stbl = False
-    elif (p1[0] < 0) | (p1[3] < 0):
+    elif p1[0] < 0:
         stbl = False
     else:
         stbl = True

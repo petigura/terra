@@ -4,8 +4,6 @@ keep the interface to the base functions fairly stable, even as the
 data structures change.
 
 """
-
-
 import atpy
 import platform
 import os
@@ -35,7 +33,7 @@ def val(tLC,tRES,nCheck=50,ver=True):
     # Unpack array from table.
 
     t  = tLC.t
-    fm = ma.masked_array(tLC.f-tLC.fcbv,mask=tLC.fmask)
+    fm = ma.masked_array(tLC.fdt-tLC.fcbv,mask=tLC.fmask)
 
     tres = tRES.data    
     tres = mlab.rec_append_fields(tres,['P','tdur','df'], \
