@@ -1,17 +1,15 @@
-import sys
-import os
-
 import sim
 import argparse
 import atpy
 from numpy import ma
 
-parser = argparse.ArgumentParser(description='Create tRES from tLC/tPAR')
-parser.add_argument('LCfile',type=str)
+parser = argparse.ArgumentParser(description='Run grid search')
+parser.add_argument('inp',  type=str   , help='input file')
+parser.add_argument('out',  type=str   , help='output file')
 parser.add_argument('--cbv',action='store_true',help='process with CBV')
 args = parser.parse_args()
 
-tLC = atpy.Table(args.LCfile,type='fits')
+tLC = atpy.Table(args.inp,type='fits')
 t = tLC.t
 
 if args.cbv:
@@ -24,11 +22,6 @@ tRES = sim.grid(t,fm,Psmp = 0.25)
 tRES.comments = "Table with the simulation results"
 tRES.table_name = "RES"
 tRES.keywords = tLC.keywords
-tRES.keywords['LCFILE'] = os.path.relpath(args.LCfile,os.environ['KEPSIM'] )
 
-tRESfile = 'tRES%04d.fits' % tLC.keywords['SEED']
-
-dir = os.path.dirname(args.LCfile)
-tRESfile = os.path.join(dir,tRESfile)
-tRES.write(tRESfile,type='fits',overwrite=True)
-print "grid: Created %s" % tRESfile
+tRES.write(args.out,type='fits',overwrite=True)
+print "grid: Created %s" % args.out
