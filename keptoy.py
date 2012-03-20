@@ -220,8 +220,6 @@ def genEmpLC(d0,tdt,fdt):
     f :  flux arrays
     """
     d = copy.deepcopy(d0)
-    d.pop('seed')
-    d.pop('t0')
     f = inject(tdt,fdt,**d)
     f = f.astype(np.float32)
     return f
