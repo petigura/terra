@@ -181,11 +181,14 @@ def sQ(tLCset0):
     """
     Stitch Quarters together.
 
-    Fills in missing times and cadences with their proper values
+    Fills in missing times and cadences with their proper values.  It
+    assigns placeholder values for other columns.
+    - floats --> nan
+    - bools  --> True
 
     Parameters
     ----------
-    tL : List of tables to stitch together.
+    tLCset0 : List of tables to stitch together.
     
     Returns
     -------
@@ -237,6 +240,24 @@ def sQ(tLCset0):
     tLC.data['TIME'] = sp(cad)
 
     return tLC
+
+
+def isStep(f):
+    """
+    isStep
+
+    Identify steps in the LC
+    """
+    stepThrsh = 1e-3 # Threshold steps must be larger than.  
+    wd = 4 # The number of cadences we use to determine the change in level.
+    medf = nd.median_filter(f,size=wd)
+
+    kern = np.zeros(wd)
+    kern[0] = 1
+    kern[-1] = -1
+
+    diff   = nd.convolve(medf,kern)
+    return np.abs(diff) > stepThrsh
 
 def isOutlier(f):
     """
@@ -299,12 +320,14 @@ def tcbvdt(tQLC0,fcol,efcol,cadmask=None,dt=False,ver=True):
     bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
 
     # Remove the bad values of f by setting them to nan.
-    fm   = ma.masked_array(f,mask=tQLC.fmask,copy=True)
-    fdt  = ma.masked_array(f,mask=tQLC.fmask,copy=True)
-    fcbv = ma.masked_array(f,mask=tQLC.fmask,copy=True)
+    mask = tQLC.fmask
 
-    tm = ma.masked_array(t,mask=tQLC.fmask,copy=True)
-    sL = detrend.cbvseg(tm)
+
+    fm   = ma.masked_array(f,mask=mask,copy=True)
+    fdt  = ma.masked_array(f,mask=mask,copy=True)
+    fcbv = ma.masked_array(f,mask=mask,copy=True)
+    tm   = ma.masked_array(t,mask=mask,copy=True)
+    sL   = detrend.cbvseg(tm)
 
     for s in sL:
         idnm = np.where(~fm[s].mask)
@@ -324,12 +347,10 @@ def ppQ(t0,ver=True):
     """
     t = copy.deepcopy(t0)
 
-    t.fmask = t.fmask | isBadReg(t.TIME)
-    t.keywords['CUT'] = True
-
-    t.fmask = t.fmask | isOutlier(t.f)
-    t.keywords['OUTREG'] = True
-
+    update_column(t,'isBadReg',  isBadReg(t.TIME) )
+    update_column(t,'isOutlier', isOutlier(t.f) )
+    update_column(t,'isStep',    isStep(t.f) )
+    t.fmask = t.fmask | t.isBadReg | t.isOutlier | t.isStep
     t.data = tcbvdt(t,'f','ef').data
 
     return t
@@ -349,12 +370,63 @@ def prepLC(tLCset,ver=True):
     tLCset = map(ppQlam,tLCset)
     tLC    = sQ(tLCset)
 
+    update_column(tLC,'t',tLC.TIME)
+
     for k in kw.keys():
         tLC.keywords[k] = kw[k]
 
-    update_column(tLC,'t',tLC.TIME)
-    return tLC
+    f = ma.masked_invalid(tLC.fdt-tLC.fcbv)
+    f.fill_value=0
+
+    dM6 = tfind.mtd(tLC.t,f.filled(),tLC.isStep,tLC.fmask,12)
+    update_column(tLC,'dM6',dM6)
+    update_column(tLC,'dM6mask',dM6.mask)
+
+    isNoisey = noiseyReg(tLC.t,dM6)
+    update_column(tLC,'isNoisey',isNoisey)
     
+    tLC.fmask = tLC.fmask | tLC.isNoisey
+
+    return tLC
+
+def noiseyReg(t,dM,thresh=2):
+    """
+    Noisey Region
+    
+    If certain regions are much noisier than others, we should remove
+    them.  A typical value of the noise is computed using a median
+    absolute deviation (MAD) on individual regions.  If certain regions are
+    noisuer by thresh, we mask them out.
+
+    Parameters
+    ----------
+
+    dM     : Single event statistic (masked array)
+    thresh : If region has MAD > thresh * typical MAD throw it out.
+    """
+
+    tm   = ma.masked_array(t,mask=dM.mask)    
+    sL   = detrend.cbvseg(tm)
+    
+    madseg  = np.array([ma.median(ma.abs( dM[s] ) ) for s in sL])
+    madLC   = np.median(madseg)  # Typical MAD of the light curve.
+
+    isNoisey = np.zeros( tm.size ).astype(bool)
+    sNL = [] # List to keep track of the noisey segments
+    for s,mads in zip(sL,madseg):
+        if mads > thresh * madLC:
+            isNoisey[s] = True
+            sNL.append(s)
+
+    if len(sNL) != 0:
+        print "Removed following time ranges because data is noisey"
+        print "----------------------------------------------------"
+
+    for s in sNL:
+        print "%.2f %.2f " % (t[s.start],t[s.stop-1])
+
+    return isNoisey
+
 def cadFill(cad0):
     """
     Cadence Fill
