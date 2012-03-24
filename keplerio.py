@@ -379,11 +379,12 @@ def prepLC(tLCset,ver=True):
     f.fill_value=0
 
     dM6 = tfind.mtd(tLC.t,f.filled(),tLC.isStep,tLC.fmask,12)
-    update_column(tLC,'dM6',dM6)
-    update_column(tLC,'dM6mask',dM6.mask)
-
     isNoisey = noiseyReg(tLC.t,dM6)
     update_column(tLC,'isNoisey',isNoisey)
+
+    dM6.mask = dM6.mask | isNoisey
+    update_column(tLC,'dM6',dM6)
+    update_column(tLC,'dM6mask',dM6.mask)
     
     tLC.fmask = tLC.fmask | tLC.isNoisey
 
