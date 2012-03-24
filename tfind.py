@@ -57,23 +57,6 @@ def GenK(twdcad,fcwd=1):
 
     return bK,boxK,tK,aK,dK
 
-def MF(fsig,twd,fcwd=1):
-    """
-    Matched filter.
-
-    """
-    cwd = fcwd*twd
-
-    bK,boxK,tK,aK,dK = GenK(twd,fcwd=fcwd)
-
-    dM     = nd.convolve1d(fsig,dK)
-    bM     = nd.convolve1d(fsig,bK)
-    aM     = nd.convolve1d(fsig,aK)
-    DfDt   = (aM-bM)/(cwd+twd)/lc
-    f0     = 0.5 * (aM + bM)    # Continuum value of fsig (mid transit)
-
-    return dM,bM,aM,DfDt,f0
-
 def isfilled(t,fm,twd):
     """
     Is putative transit filled?  This means:
@@ -143,7 +126,7 @@ def P2Pcad(PG0):
 
     return PcadG,PG
 
-def mtd(t,f,twd):
+def mtd(t,f,isStep,fmask,twd):
     """
     Mean Transit Depth
 
@@ -151,10 +134,13 @@ def mtd(t,f,twd):
 
     Parameters
     ----------
-    t   :  time series 
-    f   :  flux series.  f can contain no nans.  nans screw up
-    convolution. Interpolate through them.  Mask will be copied to dM.
-    twd :  Width of kernel in cadances
+    t      : time series 
+    f      : flux series.  f can contain no nans since invade good region 
+             during convolution.convolution. Interpolate through them. 
+    isStep : Boolean array specifying the step discontinuities in the data.  
+             They will be grown by the width of the convolution kernel
+    fmask  : mask specifying which points are valid.
+    twd    : Width of kernel in cadances
 
     Notes
     -----
@@ -162,16 +148,23 @@ def mtd(t,f,twd):
     interpolate the entire time series.  We see some edge effects
 
     """
-    assert np.where(np.isnan(f))[0].size == 0,\
+    assert (np.isnan(f) == False).all(),\
         "f must contain no nans (screws up convolution)"
 
     bK,boxK,tK,aK,dK = GenK( twd )
+    nK = dK.size
     dM = nd.convolve1d(f,dK)
-    dM = ma.masked_array(dM)
-    dM.fill_value=0
+
+    # Grow step mask.
+    isStep = nd.convolve( isStep.astype(int) , np.ones(nK) )
+    isStep = isStep > 0
+
+    fm   = ma.masked_array(f,mask=fmask) 
+    mask = ~isfilled(t,fm,twd) | isStep
+    dM = ma.masked_array(dM,mask=mask,fill_value=0)
     return dM
 
-def tdpep(t,fm,PG0):
+def tdpep(t,fm,isStep,PG0):
     """
     Transit-duration - Period - Epoch
 
@@ -205,8 +198,7 @@ def tdpep(t,fm,PG0):
     rec2d = []
     noise = []
     for twd in twdG:
-        dM = mtd(t,fm.filled(),twd)
-        dM.mask = fm.mask | ~isfilled(t,fm,twd)
+        dM = mtd(t,fm.filled(),isStep,fm.mask,twd)
         rec2d.append( pep(t[0],dM,PcadG) )
 
         # Noise per transit 

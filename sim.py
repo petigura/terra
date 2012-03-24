@@ -5,10 +5,8 @@ data structures change.
 
 """
 import atpy
-import platform
 import os
 from numpy import ma
-import glob
 import numpy as np
 import copy
 
@@ -23,13 +21,13 @@ from matplotlib import mlab
 
 blockSize = 1000
 
-def grid(t,fm,**kwargs):
+def grid(t,fm,isStep,**kwargs):
     PG0   = ebls.grid( t.ptp() , 0.5, **kwargs)
 
     # Chunck it up.
     PG0L = [ PG0[i:i+blockSize] for i in range(0, PG0.size, blockSize) ]
     def func(PG):
-        rec2d = tfind.tdpep(t,fm,PG)
+        rec2d = tfind.tdpep(t,fm,isStep,PG)
         rec   = tfind.tdmarg(rec2d)
         return rec
     recL = map(func,PG0L)
