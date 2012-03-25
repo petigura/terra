@@ -114,7 +114,6 @@ def bfitRES(file):
 #        odf    = tRES.df[idMa],
         os2n   = tRES.s2n[idMa],
         otwd   = tRES.twd[idMa],
-        seed   = tRES.keywords['SEED']
         )
     return d
 
@@ -133,7 +132,6 @@ def bfitVAL(file):
         odf    = tVAL.df[idMa],
         os2n   = tVAL.s2n[idMa],
         otwd   = tVAL.tdur[idMa],
-        seed   = tVAL.keywords['SEED']
         )
     return d
 
