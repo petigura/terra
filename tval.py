@@ -126,17 +126,16 @@ def id1T(t,fm,p,wd=2.,usemask=True):
     tdurcad  = round(tdur/keptoy.lc)
     wdcad    = round(wd/keptoy.lc)
 
-    dM = tfind.mtd(t,fm.filled(),tdurcad)
-    dM.mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
+    mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
 
     ### Determine the indecies of the points to fit. ###
     # Exclude regions where the convolution returned a nan.
     ms   = midTransId(t,p)
     if usemask:
-        ms   = [m for m in ms if ~dM.mask[m] ]
+        ms   = [m for m in ms if ~mask[m] ]
 
     sLDT = [ getSlice(m,wdcad) for m in ms ]
-    x = np.arange(dM.size)
+    x = np.arange(fm.size)
     idL  = [ x[s][~fm[s].mask] for s in sLDT ]
     idL  = [ id for id in idL if id.size > 10 ]
 
