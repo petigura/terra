@@ -126,7 +126,7 @@ def bfitVAL(file):
     s2n = ma.masked_invalid(tVAL.s2n)
     idMa = np.argmax(s2n)
 
-    seed   = int(a.split('_')[-1].split('.val.')[0])
+    seed   = int(file.split('_')[-1].split('.val.')[0])
     oP     = tVAL.P[idMa],
     oepoch = tVAL.epoch[idMa],
     odf    = tVAL.df[idMa],
