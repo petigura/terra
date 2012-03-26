@@ -126,14 +126,14 @@ def bfitVAL(file):
     s2n = ma.masked_invalid(tVAL.s2n)
     idMa = np.argmax(s2n)
 
-
+    seed   = int(a.split('_')[-1].split('.val.')[0])
     oP     = tVAL.P[idMa],
     oepoch = tVAL.epoch[idMa],
     odf    = tVAL.df[idMa],
     os2n   = tVAL.s2n[idMa],
     otwd   = tVAL.tdur[idMa],
 
-    print "%.3f %.3f %.1f %.2f %.3f" % (oP[0],oepoch[0],odf[0],os2n[0],otwd[0])
+    print "%i %.3f %.3f %.1f %.2f %.3f" % (seed,oP[0],oepoch[0],odf[0],os2n[0],otwd[0])
 
 def name2seed(file):
     """
