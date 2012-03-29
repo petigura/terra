@@ -77,11 +77,11 @@ def qload(file):
     """
     Quarter Load
 
-    Load up a quarter and append the proper keywords
+    Takes the fits file from the Kepler team and outputs an atpy table.
 
     Parameters
     ----------
-    file : 
+    file : Path to the .fits file.
 
     Returns
     -------
@@ -99,8 +99,6 @@ def qload(file):
 
     remcol = []
 
-    # Strip abs path from the file.
-#    file = file.split(kepdat)[1]
     t.add_keyword('PATH',file)
 
     for k in kw:
@@ -108,6 +106,9 @@ def qload(file):
 
     for k in hkw:
         t.keywords[k] = hdu[0].header[k]
+
+
+    t.keywords.pop('TIERABSO') # Problems with conversion
 
     t.table_name = 'Q%i' % t.keywords['QUARTER']
     return t
