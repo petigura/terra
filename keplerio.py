@@ -1,12 +1,20 @@
 """
 Functions for facilitating the reading and writing of Kepler files.
 
-Load up a lightcurve
---------------------
+Load a Quarter
+--------------
 
->>> files = keplerio.KICPath(8144222,'orig')
+>>> tQ = keplerio.qload(file)
+>>> tQ = keplerio.nQ(tQ)
+>>> tQ = keplerio.qmask(tQ)
+>>> tQ = keplerio.nanTime(tQ)
+
+Load mulitple quarters
+----------------------
 >>> tLCset = map(keplerio.qload,files)
 >>> tLCset = map(keplerio.nQ,tLCset)
+>>> tLCset = map(keplerio.qmask,tLCset)
+
 >>> tLCset = atpy.TableSet(tLCset)
 >>> tLC = keplerio.prepLC(tLCset)
 
@@ -33,6 +41,16 @@ kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
 qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+
+# Extra columns not needed in transit search.
+xtraCol = ['TIMECORR','SAP_BKG','SAP_BKG_ERR',
+           'PSF_CENTR1','PSF_CENTR1_ERR','PSF_CENTR2',
+           'PSF_CENTR2_ERR','MOM_CENTR1','MOM_CENTR1_ERR','MOM_CENTR2',
+           'MOM_CENTR2_ERR','POS_CORR1','POS_CORR2']
+
+###########
+# File IO #
+###########
 
 def KICPath(KIC, QL=range(1,9) ):
     pathL = []
@@ -73,7 +91,7 @@ def tarXL(filesL):
         except IOError:
             print sys.exc_info()[1]
 
-def qload(file):
+def qload(file,allCol=False):
     """
     Quarter Load
 
@@ -90,12 +108,28 @@ def qload(file):
     """
     hdu = pyfits.open(file)
     t = atpy.Table(file,type='fits')  
-
-    fm = ma.masked_invalid(t.SAP_FLUX)
-    update_column(t,'fmask',fm.mask)
+    if allCol is False:
+        t.remove_columns(xtraCol)
 
     kw = ['NQ','CUT','OUTREG']
-    hkw = ['QUARTER','MODULE','CHANNEL','OUTPUT']
+    
+    # Keywords to extract from the .fits header.
+    hkw = ['QUARTER','MODULE','CHANNEL','OUTPUT','SKYGROUP',
+           'RA_OBJ'  # [deg] right ascension                          
+           ,'DEC_OBJ' # [deg] declination                              
+           ,'EQUINOX' # equinox of celestial coordinate system         
+           ,'PMRA'    # [arcsec/yr] RA proper motion                   
+           ,'PMDEC'   # [arcsec/yr] Dec proper motion                  
+           ,'PMTOTAL' # [arcsec/yr] total proper motion                
+           ,'GLON'    # [deg] galactic longitude                       
+           ,'GLAT'    # [deg] galactic latitude                        
+           ,'GMAG'    # [mag] SDSS g band magnitude                    
+           ,'RMAG'    # [mag] SDSS r band magnitude                    
+           ,'JMAG'    # [mag] J band magnitude from 2MASS              
+           ,'HMAG'    # [mag] H band magnitude from 2MASS              
+           ,'KMAG'    # [mag] K band magnitude from 2MASS              
+           ,'KEPMAG'  # [mag] Kepler magnitude (Kp) 
+           ]
 
     remcol = []
 
@@ -110,23 +144,28 @@ def qload(file):
 
     t.keywords.pop('TIERABSO') # Problems with conversion
 
+    update_column(t,'q',np.zeros(t.data.size) + t.keywords['QUARTER'] )
     t.table_name = 'Q%i' % t.keywords['QUARTER']
     return t
 
-def bvload(quarter,module,output):
+############################
+# Quarter-level processing #
+############################
+
+def ppQ(t0):
     """
-    Load basis vector.
+    Preprocess Quarter
 
-    """    
-    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % quarter)
-    bvfile = glob.glob(bvfile)[0]
-    bvhdu  = pyfits.open(bvfile)
-    bvkw   = bvhdu[0].header
-    bvcolname = 'MODOUT_%i_%i' % (module,output)
-    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
-    return tBV
+    Apply the following functions to every quarter.
+    """
+    t = copy.deepcopy(t0)
+    t = nQ(t)
+    t = qmask(t)
+    t = nanTime(t)
+#    t.data = tcbvdt(t,'f','ef').data
+    return t
 
-    
+
 def nQ(t0):
     """
     Normalize lightcurve.
@@ -157,6 +196,56 @@ def nQ(t0):
     t.keywords['NQ'] = True
 
     return t
+
+def qmask(t0):
+    """
+    Quarter mask
+
+    Determine the masked regions for the quarter.
+    """
+    t = copy.deepcopy(t0)
+
+    update_column(t,'isBadReg',  isBadReg(t.TIME) )
+    update_column(t,'isOutlier', isOutlier(t.f) )
+    update_column(t,'isStep',    isStep(t.f) )
+
+    fm = ma.masked_invalid(t.SAP_FLUX)
+    fm.mask = fm.mask | t.isBadReg | t.isOutlier | t.isStep
+    update_column(t,'fmask',fm.mask)
+
+    return t
+
+def nanTime(t0):
+    """
+    Remove nans from the timeseries.
+
+    Parameters
+    ----------
+    t0 : input table.
+
+    Returns
+    -------
+    t  : Table with new, normalized columns.
+    
+    """
+    t = copy.deepcopy(t0)
+    tm = ma.masked_invalid(t.TIME)
+    cad,t.TIME = detrend.maskIntrp(t.CADENCENO,tm)
+
+    return t
+
+def bvload(quarter,module,output):
+    """
+    Load basis vector.
+
+    """    
+    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % quarter)
+    bvfile = glob.glob(bvfile)[0]
+    bvhdu  = pyfits.open(bvfile)
+    bvkw   = bvhdu[0].header
+    bvcolname = 'MODOUT_%i_%i' % (module,output)
+    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
+    return tBV
 
 def isBadReg(t):
     """
@@ -209,19 +298,14 @@ def sQ(tLCset0):
     nFill     = cad.size
     update_column(tLC,'cad',cad)
 
-    for t in tLCset:
-        update_column(t,'q',np.zeros(t.data.size) + 
-                      t.keywords['QUARTER'] )
-
-
     # Add all the columns from the FITS file.
     fitsname = tLCset[0].data.dtype.fields.keys()
     
     for fn in fitsname:
         col = [tab[fn] for tab in tLCset] # Column in list form
-        col =  np.hstack(col)       # Convert the list to an array 
+        col = np.hstack(col)       
 
-        # Fill Value
+        # Fill new array elements
         if col.dtype is np.dtype('bool'):
             fill_value = True
         else:
@@ -232,16 +316,13 @@ def sQ(tLCset0):
         ctemp[iFill] = col
         update_column(tLC,fn,ctemp)
 
-    # Fill in the missing times.
-    t        = ma.masked_invalid(tLC['TIME'])
-    cad      = ma.masked_array(cad)
-    cad.mask = t.mask
-    sp       = UnivariateSpline(cad.compressed(),t.compressed(),s=0,k=1)
-    cad      = cad.data
-    tLC.data['TIME'] = sp(cad)
+
+    # nanTime doesn't work here because I've update the "cad" field
+    tm = ma.masked_invalid(tLC.TIME)
+    cad,tLC.TIME = detrend.maskIntrp(tLC.cad,tm)
+    tLC.fmask = tLC.fmask | np.isnan(tLC.f)
 
     return tLC
-
 
 def isStep(f):
     """
@@ -312,7 +393,6 @@ def tcbvdt(tQLC0,fcol,efcol,cadmask=None,dt=False,ver=True):
     kw = tQLC.keywords
     assert kw['NQ'],'Assumes lightcurve has been normalized.' 
 
-    cad   = tQLC['CADENCENO' ]
     t     = tQLC['TIME'      ]
     f     = tQLC[fcol        ]
     ferr  = tQLC[efcol       ]
@@ -340,22 +420,15 @@ def tcbvdt(tQLC0,fcol,efcol,cadmask=None,dt=False,ver=True):
 
     return tQLC
 
-def ppQ(t0,ver=True):
-    """
-    Preprocess Quarter
 
-    Apply the following functions to every quarter.
-    """
-    t = copy.deepcopy(t0)
 
-    update_column(t,'isBadReg',  isBadReg(t.TIME) )
-    update_column(t,'isOutlier', isOutlier(t.f) )
-    update_column(t,'isStep',    isStep(t.f) )
-    t.fmask = t.fmask | t.isBadReg | t.isOutlier | t.isStep
-    t.data = tcbvdt(t,'f','ef').data
 
-    return t
 
+
+
+
+
+    
 def prepLC(tLCset,ver=True):
     """
     Prepare Lightcurve
@@ -398,7 +471,7 @@ def noiseyReg(t,dM,thresh=2):
     If certain regions are much noisier than others, we should remove
     them.  A typical value of the noise is computed using a median
     absolute deviation (MAD) on individual regions.  If certain regions are
-    noisuer by thresh, we mask them out.
+    noiser by thresh, we mask them out.
 
     Parameters
     ----------
