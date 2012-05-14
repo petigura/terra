@@ -89,6 +89,8 @@ def init(**kwargs):
 
     return darr
 
+### Quick converters for various formats ###
+
 def tab2dl(t):
     """
     Convert a table to a list of dictionaries
@@ -155,7 +157,7 @@ def ROC(t):
         etaL.append(eta)
         fapL.append(fap)
                
-    return fapL,etaL
+    return fapL,etaL,fomL
 
 def bg(P,oP,epoch,oepoch):
     """
@@ -167,17 +169,18 @@ def alias(P,oP):
     Palias = P * np.array([0.5,2])
     return (abs( oP / Palias - 1) < Plim).any()
 
-def window(tLC,P,epoch):
-    f = tLC.f
+def bwin(tLC,P,epoch):
+    """
+    Boolean Window
+    
+    Did a particular combination of (P,epoch) get excluded based on the window?
 
-    bK,boxK,tK,aK,dK = tfind.GenK( 20 )
-    dM = nd.convolve1d(f,dK)
+    Parameters
+    ----------
 
+    """
     # Discard cadences that are too high.
-    dM = ma.masked_outside(dM,-1e-3,1e-3)
-    f = ma.masked_array(f,mask=dM.mask,fill_value = np.nan)
-    f = f.filled()
-    dM = nd.convolve1d(f,dK)
+    dM     = ma.masked_array(tLC.dM6,mask=tLC.dM6mask)
 
     Pcad   = round(P/keptoy.lc)
     res    = tfind.ep(tLC.t[0],dM,Pcad)
