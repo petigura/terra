@@ -372,7 +372,7 @@ def markT(f,p,wd=2):
 
     return sLDT
 
-def ROC(tres):
+def ROC(tres,label=True):
     """
     
     """
@@ -384,16 +384,20 @@ def ROC(tres):
     
     for df in dfL:
         t = tres.where( tres.df == df)
-        fapL,etaL = qalg.ROC(t)
-        plot(fapL,etaL,lw=2,label='df  = %03d ' % (df) )
+        fapL,etaL,fom = qalg.ROC(t)
+        plot(fapL,etaL,lw=2,label='%03d' % (df) )
     
     x = linspace(0,1,100)
     plot(x,x)
 
-    legend(loc='best')
-    title( 'ROC for %i' % KIC ) 
-    xlabel('FAP' )
-    ylabel('Detection Efficiency' )
+    if label:
+        legend(loc='best')
+        title( 'ROC for %i' % KIC ) 
+        xlabel('FAP' )
+        ylabel('Detection Efficiency' )
+
+    pass
+
 
 def hist(tres):
     """
@@ -425,7 +429,6 @@ $\Delta F / F$  = %(df)i ppm
 
     xlabel('s2n')
     title('%d, %i days' % (KIC,tres.Pblock[0])  )
-
 
 def simplots(tres):
     PL = unique(tres.Pblock)
@@ -633,3 +636,48 @@ def phfold(t,fm,p,**kwargs):
         tmod = mod(t[id]-t[0],p['P'])+t[0]
         scatter(tmod,fm[id]-trend,**kwargs)
     plot(tmod,ffit-trend,'--',lw=2)
+
+
+def flux(tLC,step=100,type='flux'):
+    start = np.floor(tLC.t[0] / step) * step
+    stop  = np.ceil(tLC.t[-1] / step) * step
+    nstep = stop  / step 
+
+    fdt = ma.masked_array(tLC.fdt,tLC.fmask)
+    fcbv = ma.masked_array(tLC.fcbv,tLC.fmask)
+
+    fm = fdt - fcbv
+    dM = tfind.mtd(tLC.t,tLC.fdt-tLC.fcbv,tLC.isStep,tLC.fmask,20 )
+
+    lineL = ['isBadReg','isStep','isDis']
+    d = {}
+    for line in lineL:
+        x = tLC[line]
+        d[line] = ma.masked_array(zeros(x.size),~x)
+
+    vstep = ma.median(ma.abs(fdt))*10
+    rcParams['axes.color_cycle'] = ['c','m','green']
+
+    if type is 'flux':
+        for i in np.arange(nstep):
+            plot(tLC.t-i*step,fdt  - vstep*i,',k')
+            plot(tLC.t-i*step,fcbv - vstep*i,'r')
+            for line in lineL:
+                if i ==(nstep - 1):
+                    label=line
+                else: 
+                    label=None
+        
+                x = d[line]
+                plot(tLC.t-i*step,x - vstep*(i-0.3),lw=4,label=label)
+        legend()
+
+    elif type is 'dt':
+        for i in np.arange(nstep):
+            plot(tLC.t-i*step,fm  - vstep*i,',')
+            plot(tLC.t-i*step,dM - vstep*i)
+
+
+    xlim(-10,110)
+    axvline(0)
+    axvline(step)
