@@ -148,8 +148,10 @@ def mtd(t,f,isStep,fmask,twd):
     interpolate the entire time series.  We see some edge effects
 
     """
-    assert (np.isnan(f) == False).all(),\
-        "f must contain no nans (screws up convolution)"
+    
+    # If f contains nans, interpolate through them
+    if f[np.isnan(f)].size > 0:
+        t,f = detrend.maskIntrp( t , ma.masked_invalid(f) )
 
     bK,boxK,tK,aK,dK = GenK( twd )
     nK = dK.size
@@ -264,14 +266,22 @@ def ep(t0,dM,Pcad):
     nt,ne = dMW.shape
     epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t0
 
+    # Gives the cuts that all transits must pass to be included in the MES
     vcount = (~dMW.mask).astype(int).sum(axis=0)
-    win = (vcount >= 3).astype(float)
-
     sig = (dM > 50e-6).astype(int)
     sigW = XWrap(sig,Pcad,fill_value=0)
     nsig = sigW.sum(axis=0)
     bsig = (nsig == vcount).astype(float)
-    fom = bsig*win*dMW.mean(axis=0)
+
+    # The fact that we 
+    win = (vcount >= 3)  # Did we see at least 3 transits?
+
+    cut = win & (nsig == vcount) # The cuts themselves.
+
+    win = win.astype(float)
+    cut = cut.astype(float)
+
+    fom = cut*dMW.mean(axis=0)
     
     res = {
         'fom'    : fom         ,
