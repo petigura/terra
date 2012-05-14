@@ -5,18 +5,13 @@ Load a Quarter
 --------------
 
 >>> tQ = keplerio.qload(file)
->>> tQ = keplerio.nQ(tQ)
->>> tQ = keplerio.qmask(tQ)
->>> tQ = keplerio.nanTime(tQ)
+>>> tQ = keplerio.ppQ(tQ)
 
 Load mulitple quarters
 ----------------------
 >>> tLCset = map(keplerio.qload,files)
->>> tLCset = map(keplerio.nQ,tLCset)
->>> tLCset = map(keplerio.qmask,tLCset)
-
->>> tLCset = atpy.TableSet(tLCset)
->>> tLC = keplerio.prepLC(tLCset)
+>>> tLCset = map(keplerio.ppQ,files)
+>>> tLC    = keplerio.sQ(tLCset)
 
 """
 import numpy as np
@@ -30,6 +25,7 @@ import sys
 import tarfile
 import glob
 import pyfits
+import sqlite3
 
 from matplotlib.mlab import csv2rec
 import keptoy
@@ -41,6 +37,7 @@ kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
 qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+kicdb = os.path.join(kepfiles,'KIC.db')
 
 # Extra columns not needed in transit search.
 xtraCol = ['TIMECORR','SAP_BKG','SAP_BKG_ERR',
@@ -111,6 +108,10 @@ def qload(file,allCol=False):
     if allCol is False:
         t.remove_columns(xtraCol)
 
+
+    t.rename_column('TIME','t')
+    t.rename_column('CADENCENO','cad')
+
     kw = ['NQ','CUT','OUTREG']
     
     # Keywords to extract from the .fits header.
@@ -131,8 +132,6 @@ def qload(file,allCol=False):
            ,'KEPMAG'  # [mag] Kepler magnitude (Kp) 
            ]
 
-    remcol = []
-
     t.add_keyword('PATH',file)
 
     for k in kw:
@@ -146,25 +145,14 @@ def qload(file,allCol=False):
 
     update_column(t,'q',np.zeros(t.data.size) + t.keywords['QUARTER'] )
     t.table_name = 'Q%i' % t.keywords['QUARTER']
+
+    t = nQ(t)
+    t = nanTime(t)
     return t
 
 ############################
 # Quarter-level processing #
 ############################
-
-def ppQ(t0):
-    """
-    Preprocess Quarter
-
-    Apply the following functions to every quarter.
-    """
-    t = copy.deepcopy(t0)
-    t = nQ(t)
-    t = qmask(t)
-    t = nanTime(t)
-#    t.data = tcbvdt(t,'f','ef').data
-    return t
-
 
 def nQ(t0):
     """
@@ -197,24 +185,6 @@ def nQ(t0):
 
     return t
 
-def qmask(t0):
-    """
-    Quarter mask
-
-    Determine the masked regions for the quarter.
-    """
-    t = copy.deepcopy(t0)
-
-    update_column(t,'isBadReg',  isBadReg(t.TIME) )
-    update_column(t,'isOutlier', isOutlier(t.f) )
-    update_column(t,'isStep',    isStep(t.f) )
-
-    fm = ma.masked_invalid(t.SAP_FLUX)
-    fm.mask = fm.mask | t.isBadReg | t.isOutlier | t.isStep
-    update_column(t,'fmask',fm.mask)
-
-    return t
-
 def nanTime(t0):
     """
     Remove nans from the timeseries.
@@ -229,43 +199,10 @@ def nanTime(t0):
     
     """
     t = copy.deepcopy(t0)
-    tm = ma.masked_invalid(t.TIME)
-    cad,t.TIME = detrend.maskIntrp(t.CADENCENO,tm)
+    tm = ma.masked_invalid(t.t)
+    cad,t.t = detrend.maskIntrp(t.cad,tm)
 
     return t
-
-def bvload(quarter,module,output):
-    """
-    Load basis vector.
-
-    """    
-    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % quarter)
-    bvfile = glob.glob(bvfile)[0]
-    bvhdu  = pyfits.open(bvfile)
-    bvkw   = bvhdu[0].header
-    bvcolname = 'MODOUT_%i_%i' % (module,output)
-    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
-    return tBV
-
-def isBadReg(t):
-    """
-    Cut out the bad regions.
-
-    Paramters
-    ---------
-    t : time
-
-    Returns
-    -------
-    mask : mask indicating bad values. True is bad.
-    """
-    cutpath = os.path.join(os.environ['KEPDIR'],'ranges/cut_time.txt')
-    rec = atpy.Table(cutpath,type='ascii').data
-    tm = ma.masked_array(t,copy=True)
-    for r in rec:
-        tm = ma.masked_inside(tm,r['start'],r['stop'])
-    mask = tm.mask
-    return mask
 
 def sQ(tLCset0):
     """
@@ -292,7 +229,7 @@ def sQ(tLCset0):
     tLC.keywords = tLCset[0].keywords
 
     # Figure out which cadences are missing and fill them in.
-    cad       = [tab.CADENCENO for tab in tLCset]
+    cad       = [tab.cad for tab in tLCset]
     cad       = np.hstack(cad) 
     cad,iFill = cadFill(cad)
     nFill     = cad.size
@@ -300,7 +237,8 @@ def sQ(tLCset0):
 
     # Add all the columns from the FITS file.
     fitsname = tLCset[0].data.dtype.fields.keys()
-    
+    fitsname.remove('cad')
+
     for fn in fitsname:
         col = [tab[fn] for tab in tLCset] # Column in list form
         col = np.hstack(col)       
@@ -316,191 +254,11 @@ def sQ(tLCset0):
         ctemp[iFill] = col
         update_column(tLC,fn,ctemp)
 
-
     # nanTime doesn't work here because I've update the "cad" field
-    tm = ma.masked_invalid(tLC.TIME)
-    cad,tLC.TIME = detrend.maskIntrp(tLC.cad,tm)
-    tLC.fmask = tLC.fmask | np.isnan(tLC.f)
+    tm = ma.masked_invalid(tLC.t)
+    cad,tLC.t = detrend.maskIntrp(tLC.cad,tm)
 
     return tLC
-
-def isStep(f):
-    """
-    isStep
-
-    Identify steps in the LC
-    """
-    stepThrsh = 1e-3 # Threshold steps must be larger than.  
-    wd = 4 # The number of cadences we use to determine the change in level.
-    medf = nd.median_filter(f,size=wd)
-
-    kern = np.zeros(wd)
-    kern[0] = 1
-    kern[-1] = -1
-
-    diff   = nd.convolve(medf,kern)
-    return np.abs(diff) > stepThrsh
-
-def isOutlier(f):
-    """
-    Is Outlier
-
-    Identifies single outliers based on a median & percentile filter.
-
-    Parameters
-    ----------
-    f : Column to perform outlier rejection.
-
-    Returns
-    -------
-    mask : Boolean array. True is outlier.
-    """
-
-    medf = nd.median_filter(f,size=4)
-    resf = f - medf
-    resf = ma.masked_invalid(resf)
-    resfcomp = resf.compressed()
-    lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)
-    resf = ma.masked_outside(resf,lo,up,copy=True)
-    mask = resf.mask
-    return mask
-
-def tcbvdt(tQLC0,fcol,efcol,cadmask=None,dt=False,ver=True):
-    """
-    Table CBV Detrending
-
-    My implimentation of CBV detrending.  Assumes the relavent
-    lightcurve has been detrended.
-
-    Paramaters
-    ----------
-
-    tQLC    : Table for single quarter.
-    fcol    : string.  name of the flux column
-    efol    : string.  name of the flux_err colunm
-    cadmask : Boolean array specifying a subregion
-    ver     : Verbose output (turn off for batch).
-
-    Returns
-    -------
-
-    ffit    : The CBV fit to the fluxes.
-    """
-    tQLC = copy.deepcopy(tQLC0)
-    cbv = [1,2,3,4,5,6] # Which CBVs to use.
-    ncbv = len(cbv)
-
-    kw = tQLC.keywords
-    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
-
-    t     = tQLC['TIME'      ]
-    f     = tQLC[fcol        ]
-    ferr  = tQLC[efcol       ]
-
-    tBV = bvload(kw['QUARTER'],kw['MODULE'],kw['OUTPUT'])
-    bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
-
-    # Remove the bad values of f by setting them to nan.
-    mask = tQLC.fmask
-
-
-    fm   = ma.masked_array(f,mask=mask,copy=True)
-    fdt  = ma.masked_array(f,mask=mask,copy=True)
-    fcbv = ma.masked_array(f,mask=mask,copy=True)
-    tm   = ma.masked_array(t,mask=mask,copy=True)
-    sL   = detrend.cbvseg(tm)
-
-    for s in sL:
-        idnm = np.where(~fm[s].mask)
-        a1,a2= detrend.segfitm(t[s],fm[s],bv[:,s])
-        fdt[s][idnm]  = a1.astype('>f4') 
-        fcbv[s][idnm] = a2.astype('>f4')
-    update_column(tQLC,'fdt',fdt.data)
-    update_column(tQLC,'fcbv',fcbv.data)
-
-    return tQLC
-
-
-
-
-
-
-
-
-
-    
-def prepLC(tLCset,ver=True):
-    """
-    Prepare Lightcurve
-
-    1.  Fill in missing cadences (time, cad, flux nan)
-    2.  Cut out bad regions.
-    3.  Interpolate over the short gaps in the timeseries.
-
-    """
-    kw = tLCset.keywords
-    
-    ppQlam = lambda t0 : ppQ(t0,ver=ver)
-    tLCset = map(ppQlam,tLCset)
-    tLC    = sQ(tLCset)
-
-    update_column(tLC,'t',tLC.TIME)
-
-    for k in kw.keys():
-        tLC.keywords[k] = kw[k]
-
-    f = ma.masked_invalid(tLC.fdt-tLC.fcbv)
-    f.fill_value=0
-
-    dM6 = tfind.mtd(tLC.t,f.filled(),tLC.isStep,tLC.fmask,12)
-    isNoisey = noiseyReg(tLC.t,dM6)
-    update_column(tLC,'isNoisey',isNoisey)
-
-    dM6.mask = dM6.mask | isNoisey
-    update_column(tLC,'dM6',dM6)
-    update_column(tLC,'dM6mask',dM6.mask)
-    
-    tLC.fmask = tLC.fmask | tLC.isNoisey
-
-    return tLC
-
-def noiseyReg(t,dM,thresh=2):
-    """
-    Noisey Region
-    
-    If certain regions are much noisier than others, we should remove
-    them.  A typical value of the noise is computed using a median
-    absolute deviation (MAD) on individual regions.  If certain regions are
-    noiser by thresh, we mask them out.
-
-    Parameters
-    ----------
-
-    dM     : Single event statistic (masked array)
-    thresh : If region has MAD > thresh * typical MAD throw it out.
-    """
-
-    tm   = ma.masked_array(t,mask=dM.mask)    
-    sL   = detrend.cbvseg(tm)
-    
-    madseg  = np.array([ma.median(ma.abs( dM[s] ) ) for s in sL])
-    madLC   = np.median(madseg)  # Typical MAD of the light curve.
-
-    isNoisey = np.zeros( tm.size ).astype(bool)
-    sNL = [] # List to keep track of the noisey segments
-    for s,mads in zip(sL,madseg):
-        if mads > thresh * madLC:
-            isNoisey[s] = True
-            sNL.append(s)
-
-    if len(sNL) != 0:
-        print "Removed following time ranges because data is noisey"
-        print "----------------------------------------------------"
-
-    for s in sNL:
-        print "%.2f %.2f " % (t[s.start],t[s.stop-1])
-
-    return isNoisey
 
 def cadFill(cad0):
     """
@@ -545,3 +303,21 @@ def update_column(t,name,value):
     except ValueError:
         t.remove_columns([name])
         t.add_column(name,value)
+
+
+def idQ2mo(id,q):
+    """
+    Quarter plus KIC ID to mod out.
+
+    Load query the KIC.db and return Module and Output for a given quarter.
+    """
+
+    
+    con = sqlite3.connect(kicdb)
+    cur = con.cursor()
+    command = 'SELECT m,o from q%i WHERE id==%i' % (q,id)
+    res = cur.execute(command).fetchall()
+    assert len(res)==1,"KIC ID is not unique"
+    con.close()
+    m,o = res[0]
+    return m,o
