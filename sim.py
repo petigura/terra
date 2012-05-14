@@ -120,6 +120,10 @@ def bfitRES(file):
 def bfitVAL(file):
     """
     Returns the best fit parameters from tVAL.
+
+    order is 
+
+    seed oP oepoch odf os2n otwd
     """
     tVAL = atpy.Table(file,type='fits')
 
@@ -132,6 +136,7 @@ def bfitVAL(file):
     odf    = tVAL.df[idMa],
     os2n   = tVAL.s2n[idMa],
     otwd   = tVAL.tdur[idMa],
+
 
     print "%i %.3f %.3f %.1f %.2f %.3f" % (seed,oP[0],oepoch[0],odf[0],os2n[0],otwd[0])
 
@@ -184,7 +189,7 @@ def tinject(t0,d0):
     Table inject
     """    
     t = copy.deepcopy(t0)
-    f = keptoy.genEmpLC(d0,t.TIME,t.f)
+    f = keptoy.genEmpLC(d0,t.t,t.f)
     keplerio.update_column(t,'f',f)
     return t
 
