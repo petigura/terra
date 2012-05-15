@@ -111,7 +111,7 @@ def bfitRES(file):
     d = dict(
         oP     = tRES.PG[idMa],
         oepoch = tRES.epoch[idMa],
-        seed   = int(file.split('_')[-1].split('.grid.')[0])
+        seed   = int(file.split('_')[-1].split('.grid.')[0]),
 #        odf    = tRES.df[idMa],
         os2n   = tRES.s2n[idMa],
         otwd   = tRES.twd[idMa],
