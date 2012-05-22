@@ -89,12 +89,20 @@ def getT(time,P,epoch,wd):
 
     Returns
     -------
-    Time series phase folded with everything but the transits masked out.
+    Time series phase folded with everything but regions of width `wd`
+    centered around epoch + (0,1,2,...)*P
+
+    Note
+    ----
+
+    plot(tfold,fm) will not plot all the transit for some reason.
+    Instead, do plot(tfold[~tfold.mask],fm[~tfold.mask])
 
     """
-    tfold = time - epoch # Slide transits to 0, P, 2P
-    tfold = np.mod(tfold,P)
-    tfold = ma.masked_inside(tfold,wd/2,P-wd/2)
+    tfold = time - epoch + P /2 #  shift transit to (0.5, 1.5, 2.5) * P
+    tfold = np.mod(tfold,P)     #  Now transits are at 0.5*P
+    tfold -= P/2
+    tfold = ma.masked_outside(tfold,-wd/2,wd/2)
     tfold = ma.masked_invalid(tfold)
     return tfold
 
