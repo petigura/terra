@@ -15,6 +15,9 @@ import keptoy
 import keplerio
 import detrend
 
+miTransMES = 3 # Minimum number of transits to even be included in MES
+miSES      = 50e-6 # All transits must have SES larger than this.
+
 def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
@@ -217,7 +220,7 @@ def tdpep(t,fm,isStep,PG0):
     PG = np.tile( PG, (rec2d.shape[0],1 ))
     rec2d = mlab.rec_append_fields(rec2d,'PG',PG)
 
-    s2n   = rec2d['fom']/rec2d['noise']*rec2d['count']
+    s2n   = rec2d['fom']/rec2d['noise']*np.sqrt(rec2d['count'])
     rec2d = mlab.rec_append_fields(rec2d,'s2n',  s2n )
     return rec2d
 
@@ -266,36 +269,33 @@ def ep(t0,dM,Pcad):
     nt,ne = dMW.shape
     epoch = np.arange(ne,dtype=float)/ne * Pcad *lc + t0
 
-    # Gives the cuts that all transits must pass to be included in the MES
+    # Checks that all of the SES pass a minimum threshold, miSES.
     vcount = (~dMW.mask).astype(int).sum(axis=0)
-    sig = (dM > 50e-6).astype(int)
+    sig = (dM > miSES).astype(int)
     sigW = XWrap(sig,Pcad,fill_value=0)
     nsig = sigW.sum(axis=0)
     bsig = (nsig == vcount).astype(float)
 
-    # The fact that we 
-    win = (vcount >= 3)  # Did we see at least 3 transits?
+    # Removes transits in gaps.
+    win = (vcount >= miTransMES)  
 
-    cut = win & (nsig == vcount) # The cuts themselves.
-
+    # Zero out MES values that fail the cuts.
+    cut = win & (nsig == vcount) 
     win = win.astype(float)
     cut = cut.astype(float)
-
     fom = cut*dMW.mean(axis=0)
-    
+
     res = {
-        'fom'    : fom         ,
-        'epoch'  : epoch       ,
-        'win'    : win         ,
-        'count'  : vcount        ,
+        'fom'    : fom     ,
+        'epoch'  : epoch   ,
+        'win'    : win     ,
+        'count'  : vcount  ,
         }
 
     return res
 
 def tdmarg(rec2d):
     """
-    tdur marginalize.
-
     Marginalize over the transit duration.
 
     Parameters
@@ -309,7 +309,6 @@ def tdmarg(rec2d):
     rec : Values corresponding to maximal s2n:
     
     """
-    # Marginalize over tdur
     iMaTwd = np.argmax(rec2d['s2n'],axis=0)
     x      = np.arange(rec2d.shape[1])
     rec    = rec2d[iMaTwd,x]
