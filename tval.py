@@ -12,18 +12,28 @@ import copy
 import keptoy
 import tfind
 from numpy.polynomial import Legendre
+from matplotlib import mlab
 
 dP     = 0.5
 depoch = 0.5
+hs2n   = 5   # Search for harmonics if signal has S/N larger than this.
+
+# Try the following harmonics in harm.
+harmL = np.array( [1/2., 2/3., 2., 3/2., 4/3. ] )
 
 def val(t,fm,tres):
     """
     Validate promising transits.
 
+    Wrapper function which does the following for a list of transit
+    specified via `tres`:
+    - Fits the transit with Protopapas (2005) `keptoy.P05` model.
+    - For transits with S/N > hs2n look for harmonics.
+
     Parameters
     ----------
     t    : time
-    fm   : flux 
+    fm   : masked flux array.
     tres : a record array with the parameters of the putative transit.
            - P
            - epoch
@@ -49,13 +59,12 @@ def val(t,fm,tres):
     # Cut out crazy fits.
     resL = [r for r in resL if r['stbl'] ]
 
-    ### Alias Lodgic ###
-    # Check the following periods for aliases.
-    resL = [r for r in resL if  r['s2n'] > 5]
+    ### Harm Lodgic ###
+    # Check the following periods for harmes.
+    resL = [r for r in resL if  r['s2n'] > hs2n]
 
-
-    falias = lambda r : aliasW(t,fm,r)
-    resL = map(falias,resL)            
+    fharm = lambda r : harmW(t,fm,r)
+    resL = map(fharm,resL)            
 
     dtype = [('P',float),('epoch',float),('tdur',float),('df',float),
              ('s2n',float)]
@@ -193,7 +202,6 @@ def fitcand(t,fm,p,full=False):
 
     Add priors in for P.  tdur goes negative, but the sign doesn't matter
     """
-#    import pdb;pdb.set_trace()
     dtL  = LDTwrap(t,fm,p)
     dt   = np.hstack(dtL)
 
@@ -291,21 +299,16 @@ def midTransId(t,p):
 
 
 
-def aliasW(t,fm,p0):
+def harmW(t,fm,p0,disp=False):
     """
-    Alias Wrap
-    """
-    p = copy.deepcopy(p0)
+    Harmonics
 
-    X2,X2A = alias(t,fm,p)
-    if X2A < X2:
-        p['P'] = p['P']*0.5
-        return p
-    else:
-        return p
+    The difference in MES between the true period and harmonics ( 1/2,
+    2/3, .. )*P and subharmonics (2, 3/2, 4/3, ...) * P can be small.
+    We compute Chi2 between the data and the modes and compare them
+    for different models.  We select the mode with the lowest Chi2.
+    This amounts to Bayesian model comparison.
 
-def alias(t,fm,p):
-    """
     Evaluate the Bayes Ratio between signal with P and 0.5*P
 
     Parameters
@@ -313,22 +316,111 @@ def alias(t,fm,p):
 
     t  : Time series
     fm : Flux series
-    p  : Parameter dictionary.
+    p0 : Parameter dictionary.
     
+
+    Returns
+    -------
+    p  : The parameter dictionary with the best X2.
+
     """
-    pA = copy.deepcopy(p)
-    pA['P'] = 0.5 * pA['P']
-    resL = LDTwrap(t,fm,pA)
-    res  = np.hstack(resL)
-
-    # Masked array corresponding to P = 2 P
-    tfold  = getT(res['tdt'],pA['P'],pA['epoch'],pA['tdur'])
-
-    tT     = ma.masked_array(res['tdt'],copy=True,mask=tfold.mask)
-    fT     = ma.masked_array(res['fdt'],copy=True,mask=tfold.mask)
     
-    X2 = lambda par : ma.sum( (fT - keptoy.P05(pd2a(par),tT))**2 )
-    return X2(p),X2(pA)
+    func = lambda h : harm(t,fm,p0,h,full_output=False)
+    res = map(func,harmL)
+    res = np.array(res, dtype = [('X20',float) , ('X2h',float)] )
+    res = mlab.rec_append_fields(res,'h',harmL)
+    res = mlab.rec_append_fields(res,'P',p0['P']*harmL)
+    
+    if disp:
+        print mlab.rec2txt(res) 
+
+    dX2 = res['X2h'] - res['X20'] # Difference in the Chi2
+    if (dX2 > 0).all():
+        return p0
+    else:
+        idmin = dX2.argmin()
+        p = copy.deepcopy(p0)
+        p['P'] = p0['P'] * res['h'][idmin]
+        return p
+
+def harm(t,fm,p0,h,full_output=False):
+    """
+    Harmonics
+
+    Evaluate the difference in Chi2 for transit with P = p0['P'] and h*P.
+
+    Parameters
+    
+    The difference in MES between the true period and harmonics ( 1/2,
+    2/3, .. )*P and subharmonics (2, 3/2, 4/3, ...) * P can be small.
+    We compute Chi2 between the data and the modes and compare them
+    for different models.  We select the mode with the lowest Chi2.
+    This amounts to Bayesian model comparison.
+
+    Evaluate the Bayes Ratio between signal with P and 0.5*P
+
+    Parameters
+    ----------
+
+    t  : Time series
+    fm : Flux series
+    p0 : Initial Parameter dictionary.
+    h  : Harmonic period is p0['P']*h
+    
+    Returns
+    -------
+    
+    X20    : Chi2 of starting model
+    X2h    : Chi2 of harmonic model
+    tTL    : Masked time used to compare models (full_output=True)
+    fTL    : Masked flux used to compare models
+    mod0   : Reference model
+    modh   : Harmonic model
+    """
+    
+    ph = copy.deepcopy(p0)
+    ph['P'] = h * p0['P']
+
+    # Masked array corresponding to the harmonic
+    tfold0  = getT(t,p0['P'],p0['epoch'],p0['tdur'])
+    tfoldh  = getT(t,ph['P'],ph['epoch'],ph['tdur'])
+
+    # Only mask out points that don't belong in either the reference
+    # or the harmonic photometry.
+    mask    = (tfold0.mask & tfoldh.mask)
+    tcomp   = ma.masked_array(t , mask,copy=True)
+    fcomp   = ma.masked_array(fm, mask,copy=True)
+
+    resL0 = LDTwrap(t,fm,p0)
+    resLh = LDTwrap(t,fm,ph)
+    resL = resL0 +resLh
+
+#    if resL == []:
+#        return None
+#    elif len(resL) < 3:  # There must be 3 transits in the model
+#        return None 
+
+    for r in resL:
+        n   = r.size
+        id0 = np.where(t == r['tdt'][0] )[0] # Find starting point
+        fcomp[id0:id0+n] = r['fdt']
+
+    fcomp.mask = mask
+
+    def Chi2(p):
+        mod = keptoy.P05( pd2a(p) , tcomp )
+        res   = (fcomp - mod)/1e-4
+        X2    = ma.sum( abs(res) )
+        return mod,X2
+
+    mod0,X20 = Chi2(p0)
+    modh,X2h = Chi2(ph)
+
+    if full_output:
+        return X20,X2h,tcomp,fcomp,mod0,modh
+    else:
+        return X20,X2h
+    
 
 
 def pd2a(d):
