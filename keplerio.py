@@ -5,12 +5,10 @@ Load a Quarter
 --------------
 
 >>> tQ = keplerio.qload(file)
->>> tQ = keplerio.ppQ(tQ)
 
 Load mulitple quarters
 ----------------------
 >>> tLCset = map(keplerio.qload,files)
->>> tLCset = map(keplerio.ppQ,files)
 >>> tLC    = keplerio.sQ(tLCset)
 
 """

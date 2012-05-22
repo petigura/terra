@@ -14,6 +14,7 @@ from matplotlib.gridspec import GridSpec,GridSpecFromSubplotSpec
 from keptoy import *
 import keptoy
 import qalg
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 def cdpp():
     t = atpy.Table('sqlite','all.db',table='ch1cdpp')
@@ -401,7 +402,9 @@ def ROC(tres,label=True):
 
 def hist(tres):
     """
+    Histogram
     
+    Shows the S/N ratio of the highest significance peak in the periodogram.
     """
     assert len(unique(tres.Pblock))==1,'Periods must be the same'
     assert len(unique(tres.KIC))==1,'Must compare the same star'
@@ -414,21 +417,21 @@ def hist(tres):
         tg = tres.where( (tres.df == df) & tres.bg)
         tb = tres.where( (tres.df == df) & ~tres.bg)
         ax.hist(tg.os2n,color='green',bins=arange(100),
-                label='Good %d' % len(tg.data))
+                label='%d' % len(tg.data))
         ax.hist(tb.os2n,color='red',bins=arange(100),
-                label='Fail %d' % len(tb.data))
+                label='%d' % len(tb.data))
         ax.legend()
 
-        label = r"""
-$\Delta F / F$  = %(df)i ppm
-""" % {'df':df}
+        tprop = dict(size=10,name='monospace')
+        at = AnchoredText(r"%i ppm" % df,
+                          prop=tprop, frameon=True,loc=3)
+        ax.add_artist(at)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=5,prune='upper'))
 
-        ax.annotate(label,xy=(.8,.1),xycoords='axes fraction',
-                    bbox=dict(boxstyle="round", fc="w", ec="k"))
 
+    axL[0].add_artist(at)
 
     xlabel('s2n')
-    title('%d, %i days' % (KIC,tres.Pblock[0])  )
 
 def simplots(tres):
     PL = unique(tres.Pblock)

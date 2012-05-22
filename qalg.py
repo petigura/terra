@@ -165,9 +165,9 @@ def bg(P,oP,epoch,oepoch):
     """
     return ( abs(P - oP)/P < Plim ) & ( abs(epoch - oepoch) < epochlim )
 
-def alias(P,oP):
-    Palias = P * np.array([0.5,2])
-    return (abs( oP / Palias - 1) < Plim).any()
+def bharm(P,oP):
+    Pharm = P * np.array([0.5,2])
+    return (abs( oP / Pharm - 1) < Plim).any()
 
 def bwin(tLC,P,epoch):
     """

@@ -87,18 +87,22 @@ def getkwW(files,view=None):
     else:
         return view.map(getkw,files)
 
-def simReduce(files):
+def simReduce(files,type='grid'):
     """
     Reduce output of a simulation.
     """
 
-    if files[0].count('tVAL') == 1:
+    if type is 'grid':
+        dL = map(bfitRES,files)
+    elif type is 'val':
         dL = map(bfitVAL,files)
     else:
-        dL = map(bfitRES,files)
+        print "type not understood"
+        raise ValueError
 
-    tRED =  qalg.dl2tab(dL)
-    tRED.set_primary_key('seed')
+    dL = np.hstack(dL)
+    tRED =  qalg.rec2tab(dL)
+
     return tRED
 
 def bfitRES(file):
@@ -108,15 +112,19 @@ def bfitRES(file):
     tRES = atpy.Table(file,type='fits')
     
     idMa = np.argmax(tRES.s2n)
-    d = dict(
-        oP     = tRES.PG[idMa],
-        oepoch = tRES.epoch[idMa],
-        seed   = int(file.split('_')[-1].split('.grid.')[0]),
+    oP     = tRES.PG[idMa]
+    oepoch = tRES.epoch[idMa]
+    seed   = int(file.split('_')[-1].split('.grid.')[0])
 #        odf    = tRES.df[idMa],
-        os2n   = tRES.s2n[idMa],
-        otwd   = tRES.twd[idMa],
-        )
-    return d
+    os2n   = tRES.s2n[idMa]
+    otwd   = tRES.twd[idMa]
+
+    names = ['seed','oP','oepoch','os2n','otwd']
+    types = [int] + [float]*4
+    dtype = zip(names,types)
+    res = np.array([(seed,oP,oepoch,os2n,otwd)],dtype=dtype)
+
+    return res
 
 def bfitVAL(file):
     """
@@ -138,8 +146,13 @@ def bfitVAL(file):
     os2n   = tVAL.s2n[idMa],
     otwd   = tVAL.tdur[idMa],
 
+    names = ['seed','oP','oepoch','odf','os2n','otwd']
+    types = [int] + [float]*5
+    dtype = zip(names,types)
 
-    print "%i %.3f %.3f %.1f %.2f %.3f" % (seed,oP[0],oepoch[0],odf[0],os2n[0],otwd[0])
+    res = np.array([(seed,oP[0],oepoch[0],odf[0],os2n[0],otwd[0])],dtype=dtype)
+
+    return res
 
 def name2seed(file):
     """
@@ -217,21 +230,13 @@ def addbg(t):
     keplerio.update_column(t,'bg',bg)    
     return t
 
-def diagFail(t):
-    """
-    Why did a particular run fail?
-    """
-    kepdir = os.environ['KEPDIR']
-
-    return balias,bwin
-
 
 def addFlag(tRED,tLC):
     """
     Adds a string description as to why the run failed'
     """
-    balias = map(qalg.alias,tRED.P,tRED.oP)
-    keplerio.update_column(tRED,'balias',balias )
+    bharm = map(qalg.harm,tRED.P,tRED.oP)
+    keplerio.update_column(tRED,'bharm',bharm )
 
     func = lambda P,epoch : qalg.window(tLC,P,epoch)
     bwin   = map(func,tRED.P,tRED.epoch)
