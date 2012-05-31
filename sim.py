@@ -1,8 +1,14 @@
 """
-This module implements the transit search pipeline.  The idea is to
-keep the interface to the base functions fairly stable, even as the
-data structures change.
+Simulation
 
+This module implements the transit search pipeline.  
+
+Note - EAP 5/22/2012 
+
+Data is stored .fits tables and accessed via
+atpy.  At some point, I'd like to migrate over to .h5 and h5py because
+it's a more standard format.  This module deals with the unpacking of
+the tables only passing numpy arrays to `tval` and `tfind` modules.
 """
 import atpy
 import os
@@ -18,8 +24,8 @@ import tval
 import keptoy
 import keplerio
 from matplotlib import mlab
+from config import *
 
-blockSize = 1000
 
 def grid(t,fm,isStep,**kwargs):
     PG0   = ebls.grid( t.ptp() , 0.5, **kwargs)
@@ -36,56 +42,18 @@ def grid(t,fm,isStep,**kwargs):
     tRES  = qalg.rec2tab(rec)
     return tRES
 
-def val(tLC,tRES,nCheck=50,ver=True):
-    # Unpack array from table.
-
+def val(tLC,tRES,ver=True):
     t  = tLC.t
     fm = ma.masked_array(tLC.fdt-tLC.fcbv,mask=tLC.fmask)
 
     tres = tRES.data    
     tres = mlab.rec_append_fields(tres,['P','tdur','df'], \
         [tres['PG'],tres['twd']*keptoy.lc,tres['fom']])
-    
-    sid  = np.argsort(-tres['s2n'])
-    tres = tres[sid][:nCheck]
-    rval = tval.val(t,fm,tres)
-    tVAL = qalg.rec2tab(rval)
+
+    tresfit,tresharm = tval.val(t,fm,tres)
+    tVAL = qalg.rec2tab(tresharm)
+
     return tVAL
-
-
-
-def kwUnique(kwL,key):
-    """
-    Confirm that all instances of keyword are unique.  Return that unique value
-    """
-    valL = np.unique( np.array( [ kw[key] for kw in kwL ]  ) )
-    assert valL.size == 1, '%s must be unique' % key
-    return valL[0]
-
-def convEpoch(epoch0,P,t0):
-    """
-    Convert Epoch
-
-    There are a couple of conventions for epochs.  keptoy.genEmpLC
-    injects signals at the input epoch.  The transit finder zeroes out
-    the starting time.  The output epoch will not be the same.
-    """
-    
-    return np.remainder(epoch0 + t0,P)
-
-
-def getkw(file):
-    """
-    Open all the files.  Return list of KW dictionaries.
-    """    
-    t = atpy.Table(file)
-    return t.keywords
-
-def getkwW(files,view=None):
-    if view==None:
-        return map(getkw,files)
-    else:
-        return view.map(getkw,files)
 
 def simReduce(files,type='grid'):
     """
@@ -115,24 +83,20 @@ def bfitRES(file):
     oP     = tRES.PG[idMa]
     oepoch = tRES.epoch[idMa]
     seed   = int(file.split('_')[-1].split('.grid.')[0])
-#        odf    = tRES.df[idMa],
+    odf    = tRES.fom[idMa]
     os2n   = tRES.s2n[idMa]
     otwd   = tRES.twd[idMa]
 
-    names = ['seed','oP','oepoch','os2n','otwd']
-    types = [int] + [float]*4
+    names = ['seed','oP','oepoch','os2n','otwd','odf']
+    types = [int] + [float]*5
     dtype = zip(names,types)
-    res = np.array([(seed,oP,oepoch,os2n,otwd)],dtype=dtype)
+    res = np.array([(seed,oP,oepoch,os2n,otwd,odf)],dtype=dtype)
 
     return res
 
 def bfitVAL(file):
     """
     Returns the best fit parameters from tVAL.
-
-    order is 
-
-    seed oP oepoch odf os2n otwd
     """
     tVAL = atpy.Table(file,type='fits')
 
@@ -153,34 +117,6 @@ def bfitVAL(file):
     res = np.array([(seed,oP[0],oepoch[0],odf[0],os2n[0],otwd[0])],dtype=dtype)
 
     return res
-
-def name2seed(file):
-    """
-    Convert the name of a file to a seed value.
-    """
-    bname = os.path.basename(file)
-    bname = os.path.splitext(bname)[0]
-    return int(bname[-4:])
-    
-def addVALkw(files):
-    """
-    Add input information to the tVAL files
-    """
-
-    tVALL = [atpy.Table(f,type='fits') for f in files]
-    kwL = [t.keywords for t in tVALL ]
-
-    PARfile = kwUnique(kwL,'PARFILE')
-    tPAR = atpy.Table(PARfile,type='fits')
-
-    for t,f in zip(tVALL,files):
-        seed = name2seed(f)
-        tROW = tPAR.where(tPAR.seed == seed)
-        assert tROW.data.size == 1, 'Seed must be unique'
-        col = ['P','epoch','df','tdur','seed','tbase']
-        for c in col:
-            t.keywords[c] = tROW.data[c][0]
-        t.write(f,overwrite=True,type='fits')
 
 def inject(tLCbase,tPAR):
     """
@@ -207,38 +143,101 @@ def tinject(t0,d0):
     keplerio.update_column(t,'f',f)
     return t
 
-def PARRES(tPAR0,tRED0):
-    """
-
-    """
-    tPAR = copy.deepcopy(tPAR0)
-    tRED = copy.deepcopy(tRED0)
-
-    tPAR.set_primary_key('seed')
-    tRED.set_primary_key('seed')
-    tRED = join.join(tPAR,tRED)
-
-    # Convert epochs back into input
-    tRED.data['oepoch'] = np.remainder(tRED.oepoch,tRED.P)
-    addbg(tRED)
-    addFlag(tRED)
-    return tRED
-
-
 def addbg(t):    
     bg = qalg.bg(t.P,t.oP,t.epoch,t.oepoch)
     keplerio.update_column(t,'bg',bg)    
     return t
 
-
-def addFlag(tRED,tLC):
+def addFlags(tRED,lcfiles):
     """
-    Adds a string description as to why the run failed'
-    """
-    bharm = map(qalg.harm,tRED.P,tRED.oP)
-    keplerio.update_column(tRED,'bharm',bharm )
+    Add Flags.
 
-    func = lambda P,epoch : qalg.window(tLC,P,epoch)
-    bwin   = map(func,tRED.P,tRED.epoch)
-    keplerio.update_column(tRED,'bwin',bwin)
+    The following boolean comments to the tRED table
+    - good : True if oP,oepoch are consistent with P,epoch
+    - harm : True if oP is a harmonic of P
+    - win  : True if P,oP was consistent with window function.
+
+    Parameters
+    ----------
+    tRED   : atpy results table.  must contain
+             oP,oepoch,P,epoch,KIC columns
+    lcfiles: list of light curve files.  Must be one for every unique KIC
+    """
+    
+    load = lambda f : atpy.Table(f,type='fits')
+    tL = map(load,lcfiles)
+
+    lcfilesKIC  = np.unique([t.keywords['KEPLERID'] for t in tL])
+    tredKIC     = np.unique(tRED.KIC)
+    assert (lcfilesKIC==tredKIC).all(),'tRED.KIC and tL.KIC must agree'
+
+    # Add empty colums
+    tRED.add_empty_column('good',np.int)
+    tRED.add_empty_column('harm',np.int)
+    tRED.add_empty_column('win',np.int)
+
+    tred = tRED.data
+    for KIC in tredKIC:
+        mKIC = tred['KIC'] == KIC        
+        tr = tred[mKIC]
+
+        # Is oP,oepoch consistent with P,epoch?
+        good = map(bg,tr['P'],tr['oP'],tr['epoch'],tr['oepoch'])
+        tr['good'] = good
+
+        # Is oP a harmonic of P
+        harm = map(bharm,tr['P'],tr['oP'])
+        tr['harm'] = harm
+        
+        # Would the transit be accessible after masking?
+        tLC = [t for t in tL if t.keywords['KEPLERID']==KIC][0]
+        dM  = ma.masked_array(tLC.dM6,tLC.dM6mask)        
+        fbwin = lambda P,epoch : bwin(dM.mask,tLC.t[0],P,epoch)
+        win   = map(fbwin,tr['oP'],tr['epoch'])
+        tr['win'] = win
+        tred[mKIC] = tr
+
     return tRED
+
+
+def bg(P,oP,epoch,oepoch):
+    """
+    True if oP,oepoch is consistent with P,epoch
+    """
+    return ( abs(P - oP)/P < Plim ) & ( abs(epoch - oepoch) < epochlim )
+
+def bharm(P,oP):
+    """
+    True if oP is a harmonic of P
+    """    
+    Pharm = P * harmL
+    return (abs( oP / Pharm - 1) < Plim).any()
+
+def bwin(fmask,t0,P,epoch):
+    """
+    Boolean Window
+    
+    Did a particular combination of (P,epoch) get excluded based on the window?
+
+    Parameters
+    ----------
+    fmask : boolean array corresponding to the window function.
+    P     : period of supposed transit
+    epoch : epoch of supposed transit
+
+    Returns
+    -------
+    True if P,epoch are accessible after masking
+
+    """
+
+    dM     = ma.masked_array( np.ones(fmask.size) , fmask )
+    Pcad   = round(P/keptoy.lc)
+    res    = tfind.ep(t0,dM,Pcad)
+
+    # Find the first epoch after time = 0 .
+    epochG = np.remainder(res['epoch'],P)
+    idnn   = np.argmin( abs(epochG - epoch) )
+    bwin   = res['win'][idnn].astype(bool)
+    return bwin
+

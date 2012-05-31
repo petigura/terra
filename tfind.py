@@ -15,8 +15,7 @@ import keptoy
 import keplerio
 import detrend
 
-miTransMES = 3 # Minimum number of transits to even be included in MES
-miSES      = 50e-6 # All transits must have SES larger than this.
+from config import *
 
 def GenK(twdcad,fcwd=1):
     """

@@ -4,12 +4,7 @@ from numpy import ma,tanh,sin,cos,pi
 from numpy.polynomial import Legendre
 import copy
 
-### Constants ###
-G = 6.67e-8 # cgs
-R_sun = 6.9e10 # cm
-M_sun = 2.0e33 # g
-lc = 0.0204343960431288
-c = 100   # Parameter that controls how sharp P05 edge is.
+from config import *
 
 def a2tdur(a0):
     """

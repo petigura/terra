@@ -253,12 +253,10 @@ def isOutlier(f):
 
     medf = nd.median_filter(f,size=4)
     resf = f - medf
-    resf = ma.masked_invalid(resf)
-    resfcomp = resf.compressed()
-    lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)
-    resf = ma.masked_outside(resf,lo,up,copy=True)
-    mask = resf.mask
-    return mask
+    good = ~np.isnan(resf)
+    resfcomp = resf[good]
+    lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)    
+    return good & ( (resf > up) | (resf < lo) )
 
 def noiseyReg(t,dM,thresh=2):
     """

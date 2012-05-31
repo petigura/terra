@@ -7,6 +7,8 @@ functions in this module will check for transit-like signature.
 import numpy as np
 from numpy import ma
 from scipy import optimize
+from scipy import ndimage as nd
+import qalg
 
 import copy
 import keptoy
@@ -14,12 +16,7 @@ import tfind
 from numpy.polynomial import Legendre
 from matplotlib import mlab
 
-dP     = 0.5
-depoch = 0.5
-hs2n   = 5   # Search for harmonics if signal has S/N larger than this.
-
-# Try the following harmonics in harm.
-harmL = np.array( [1/2., 2/3., 2., 3/2., 4/3. ] )
+from config import *
 
 def val(t,fm,tres):
     """
@@ -35,6 +32,7 @@ def val(t,fm,tres):
     t    : time
     fm   : masked flux array.
     tres : a record array with the parameters of the putative transit.
+           - s2n. val evaluates transits with the highest S/N.
            - P
            - epoch
            - tdur
@@ -50,32 +48,29 @@ def val(t,fm,tres):
            - s2n
     """
 
-    r2d = lambda r : dict(P=r['P'],epoch=r['epoch'],tdur=r['tdur'],df=r['df'])
-    dL = map(r2d,tres)
 
-    fcand = lambda d : fitcand(t,fm,d)
-    resL = map(fcand,dL)
+    trespks = tres[ nd.maximum_filter(tres['s2n'],3) == tres['s2n']  ]
+    lcFitThresh = np.sort( trespks['s2n'] )[-nCheck]
+    trespks = trespks[ trespks['s2n'] >  lcFitThresh ]
 
-    # Cut out crazy fits.
-    resL = [r for r in resL if r['stbl'] ]
+    def fcand(r):
+        d = qalg.rec2d(r)
+        resd = fitcand(t,fm,d)
+        return qalg.d2rec(resd)
 
-    ### Harm Lodgic ###
-    # Check the following periods for harmes.
-    resL = [r for r in resL if  r['s2n'] > hs2n]
+    tresfit = map(fcand,trespks)
+    tresfit = np.hstack(tresfit)
+    tresfit = tresfit[ tresfit['stbl'] ]   # Cut out crazy fits.
 
-    fharm = lambda r : harmW(t,fm,r)
-    resL = map(fharm,resL)            
-
-    dtype = [('P',float),('epoch',float),('tdur',float),('df',float),
-             ('s2n',float)]
+    def fharm(r):
+        d = qalg.rec2d(r)
+        resd = harmW(t,fm,d)
+        return qalg.d2rec(resd)
     
-    d2l = lambda d : tuple([ d[ k[0] ] for k in dtype ])
-    d2r = lambda d : np.array( d2l(d) ,dtype=dtype)
+    tresharm = map(fharm,tresfit[ tresfit['s2n'] > hs2n] )
+    tresharm = np.hstack(tresharm)
 
-    rval = map(d2r,resL)
-    rval = np.hstack(rval)
-
-    return rval
+    return tresfit,tresharm
 
 
 def getT(time,P,epoch,wd):
@@ -202,7 +197,15 @@ def fitcand(t,fm,p,full=False):
 
     Returns
     -------
-    res : result dictionary.
+    res : Dictionary with the following parameters.
+          - P
+          - epoch
+          - df
+          - tdur
+          - s2n
+          - stbl    = boolean variable if fit is well behaved.
+          - tdt  - time
+          - fdt  - detrended flux
 
 
     Todo
@@ -401,12 +404,8 @@ def harm(t,fm,p0,h,full_output=False):
 
     resL0 = LDTwrap(t,fm,p0)
     resLh = LDTwrap(t,fm,ph)
-    resL = resL0 +resLh
 
-#    if resL == []:
-#        return None
-#    elif len(resL) < 3:  # There must be 3 transits in the model
-#        return None 
+    resL = resL0 +resLh
 
     for r in resL:
         n   = r.size
@@ -423,6 +422,17 @@ def harm(t,fm,p0,h,full_output=False):
 
     mod0,X20 = Chi2(p0)
     modh,X2h = Chi2(ph)
+
+    if resL == []:
+        return 
+    elif len(resL) < 3:  # There must be 3 transits in the model
+        return None 
+
+
+    # If the harmonic has fewer than 3 transits, don't bother computing X2
+    nh = len(resLh)
+    if nh < 3:
+        X2h = 1e3
 
     if full_output:
         return X20,X2h,tcomp,fcomp,mod0,modh

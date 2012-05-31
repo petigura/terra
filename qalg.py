@@ -14,8 +14,7 @@ import tfind
 import keptoy
 from scipy import ndimage as nd
 
-Plim =  0.001   # Periods must agree to this fractional amount
-epochlim =  0.1 # Epochs must agree to 0.1 days    
+from config import *
 
 def init(**kwargs):
     """
@@ -95,33 +94,22 @@ def tab2dl(t):
     """
     Convert a table to a list of dictionaries
     """
-    dl = []
-    columns = t.columns.keys
-    nrows = len(t.data[ columns[0] ] )
-    for i in range( nrows ):
-        d = {}
-        for k in columns:
-            d[k] = t[k][i]
-
-        dl.append(d)
+    rec = tab.data
+    dl  = [rec2d(r) for r in rec]
     return dl
-
 
 def dl2tab(dl):
     """
     Convert a list of dictionaries to an atpy table.
     """
-    t = atpy.Table()
-    keys = dl[0].keys()
-    for k in keys:
-        data = array( [ d[k] for d in dl ] )
-        t.add_column(k,data)
-
+    rec = [d2rec(d) for d in dL]
+    rec = np.hstack(rec)
+    t   = rec2tab(rec)
     return t
 
 def rec2tab(rec):
     """
-    Convert a list of dictionaries to an atpy table.
+    Convert a record array into an atpy table.
     """
     t = atpy.Table()
     keys = rec.dtype.names
@@ -130,12 +118,25 @@ def rec2tab(rec):
     return t
 
 def rec2d(rec):
+    """
+    Convert a record into a dictionary.
+    """
+
     keys = rec.dtype.names
     d = {}
     for k in keys:
         d[k] = rec[k]
     return d
 
+def d2rec(d):
+    """
+    Convert a dictionary into a length 1 record array.
+    """
+    keys = d.keys()
+    typeL = [type(v) for v in  d.values()]
+    dtype = zip(keys,typeL)
+    return np.array( tuple(d.values()) ,dtype=dtype )
+    
 
 def ROC(t):
     """

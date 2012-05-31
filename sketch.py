@@ -423,13 +423,9 @@ def hist(tres):
         ax.legend()
 
         tprop = dict(size=10,name='monospace')
-        at = AnchoredText(r"%i ppm" % df,
-                          prop=tprop, frameon=True,loc=3)
+        at = AnchoredText(r"%i ppm" % df,prop=tprop, frameon=True,loc=3)
         ax.add_artist(at)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=5,prune='upper'))
-
-
-    axL[0].add_artist(at)
 
     xlabel('s2n')
 
