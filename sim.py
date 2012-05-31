@@ -15,6 +15,7 @@ import os
 from numpy import ma
 import numpy as np
 import copy
+import sqlite3
 
 import join
 import qalg
@@ -25,7 +26,8 @@ import keptoy
 import keplerio
 from matplotlib import mlab
 from config import *
-
+import os
+kicdb = os.environ['KEPBASE']+'files/KIC.db'
 
 def grid(t,fm,isStep,**kwargs):
     PG0   = ebls.grid( t.ptp() , 0.5, **kwargs)
@@ -62,16 +64,42 @@ def simReduce(files,type='grid'):
 
     if type is 'grid':
         dL = map(bfitRES,files)
+        name = 'tredg'
     elif type is 'val':
         dL = map(bfitVAL,files)
+        name = 'tredv'
     else:
         print "type not understood"
         raise ValueError
 
     dL = np.hstack(dL)
     tRED =  qalg.rec2tab(dL)
-
+    tRED.table_name = name
     return tRED
+
+def tredSave(pardb,tRED):
+    """
+    Join the output of the tRED table with the par database
+    """
+
+    name = tRED.table_name
+    tRED.write('sqlite','tPAR.db',overwrite=True)
+
+    con = sqlite3.connect(pardb)
+    cur = con.cursor()
+
+    cmd = 'ATTACH "%s" as kicdb' % kicdb
+    cur.execute(cmd)
+    cmd = 'CREATE TABLE temp as SELECT * from %s join par on %s.seed=par.seed join kicdb.q6 on par.kic=kicdb.q6.id' %(name,name)
+    cur.execute(cmd)
+
+    cmd = 'drop table %s' % (name)
+    cur.execute(cmd)
+
+    cmd = 'ALTER TABLE temp RENAME TO %s' % (name)
+    cur.execute(cmd)
+    con.close()
+
 
 def bfitRES(file):
     """
@@ -143,11 +171,6 @@ def tinject(t0,d0):
     keplerio.update_column(t,'f',f)
     return t
 
-def addbg(t):    
-    bg = qalg.bg(t.P,t.oP,t.epoch,t.oepoch)
-    keplerio.update_column(t,'bg',bg)    
-    return t
-
 def addFlags(tRED,lcfiles):
     """
     Add Flags.
@@ -172,9 +195,9 @@ def addFlags(tRED,lcfiles):
     assert (lcfilesKIC==tredKIC).all(),'tRED.KIC and tL.KIC must agree'
 
     # Add empty colums
-    tRED.add_empty_column('good',np.int)
-    tRED.add_empty_column('harm',np.int)
-    tRED.add_empty_column('win',np.int)
+    keplerio.update_column(tRED,'good',np.empty(tRED.data.size),dtype=int)
+    keplerio.update_column(tRED,'harm',np.empty(tRED.data.size),dtype=int)
+    keplerio.update_column(tRED,'win',np.empty(tRED.data.size),dtype=int)
 
     tred = tRED.data
     for KIC in tredKIC:
@@ -193,7 +216,7 @@ def addFlags(tRED,lcfiles):
         tLC = [t for t in tL if t.keywords['KEPLERID']==KIC][0]
         dM  = ma.masked_array(tLC.dM6,tLC.dM6mask)        
         fbwin = lambda P,epoch : bwin(dM.mask,tLC.t[0],P,epoch)
-        win   = map(fbwin,tr['oP'],tr['epoch'])
+        win   = map(fbwin,tr['P'],tr['epoch'])
         tr['win'] = win
         tred[mKIC] = tr
 
