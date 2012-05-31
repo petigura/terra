@@ -162,13 +162,15 @@ def inject(tLCbase,tPAR):
 
     return tLCraw
 
-def tinject(t0,d0):
+def tinject(t0,d0,fluxField='f'):
     """
     Table inject
+    
+    Inject signal into fluxField 
     """    
     t = copy.deepcopy(t0)
-    f = keptoy.genEmpLC(d0,t.t,t.f)
-    keplerio.update_column(t,'f',f)
+    f = keptoy.genEmpLC(d0,t.t,t[fluxField])
+    keplerio.update_column(t,fluxField,f)
     return t
 
 def addFlags(tRED,lcfiles):
