@@ -15,7 +15,7 @@ from matplotlib.mlab import csv2rec
 import glob
 import pyfits
 
-
+import cotrend
 import detrend
 import tfind
 from keplerio import update_column
@@ -109,6 +109,7 @@ def tcbvdt(tQLC0,fcol,efcol,q,cadmask=None,dt=False,ver=True):
 
     ffit    : The CBV fit to the fluxes.
     """
+    minseg = 100
     tQLC = copy.deepcopy(tQLC0)
     cbv = [1,2,3,4,5,6] # Which CBVs to use.
     ncbv = len(cbv)
@@ -124,28 +125,26 @@ def tcbvdt(tQLC0,fcol,efcol,q,cadmask=None,dt=False,ver=True):
     tBV = bvload(q,mod,out)
     bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
 
-    # Remove the bad values of f by setting them to nan.
     mask = tQLC.fmask
-
 
     fm   = ma.masked_array(f,mask=mask,copy=True)
     fdt  = ma.masked_array(f,mask=mask,copy=True)
     fcbv = ma.masked_array(f,mask=mask,copy=True)
     tm   = ma.masked_array(t,mask=mask,copy=True)
-    sL   = detrend.cbvseg(tm)
 
+    # Detrend each each CBV segment individually
+    label   = detrend.sepseg(tm)
+    sL   = ma.notmasked_contiguous(label)
+    sL   = [s for s in sL if s.stop-s.start > minseg]
     for s in sL:
-        idnm = np.where(~fm[s].mask)
-        a1,a2= detrend.segfitm(t[s],fm[s],bv[:,s])
-        fdt[s][idnm]  = a1.astype('>f4') 
-        fcbv[s][idnm] = a2.astype('>f4')
+        a1,a2= cotrend.dtbvfitm(t[s],fm[s],bv[:,s])
+        fdt[s]  = a1.astype('>f4') 
+        fcbv[s] = a2.astype('>f4')
+
     update_column(tQLC,'fdt',fdt.data)
     update_column(tQLC,'fcbv',fcbv.data)
 
     return tQLC
-
-
-
 
 def bvload(quarter,module,output):
     """
@@ -274,9 +273,10 @@ def noiseyReg(t,dM,thresh=2):
     thresh : If region has MAD > thresh * typical MAD throw it out.
     """
 
-    tm   = ma.masked_array(t,mask=dM.mask)    
-    sL   = detrend.cbvseg(tm)
-    
+    tm    = ma.masked_array(t,mask=dM.mask)    
+    label = detrend.sepseg(tm)
+    sL    = ma.notmasked_contiguous(label)
+
     madseg  = np.array([ma.median(ma.abs( dM[s] ) ) for s in sL])
     madLC   = np.median(madseg)  # Typical MAD of the light curve.
 

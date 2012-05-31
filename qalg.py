@@ -98,7 +98,7 @@ def tab2dl(t):
     dl  = [rec2d(r) for r in rec]
     return dl
 
-def dl2tab(dl):
+def dl2tab(dL):
     """
     Convert a list of dictionaries to an atpy table.
     """
