@@ -15,7 +15,6 @@ nq = 8
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 
-
 def stitch(fl,tl,swd = 0.5):
     """
     Stitch together the boundaries of the quarters.
@@ -97,78 +96,6 @@ def dt(t0):
     tnd[id] = temp
     return fm-tnd
 
-def segfitm(t,fm,bv):
-    """
-    Segment fit masked
-    
-    Parameters
-    ----------
-    t   : time 
-    fm  : flux for a particular segment
-    bv  : vstack of basis vectors
-    
-    """
-    ncbv  = bv.shape[0]
-    
-    tm = ma.masked_array(t,copy=True,mask=fm.mask)
-    mask  = fm.mask 
-
-    bv = ma.masked_array(bv)
-    bv.mask = np.tile(mask, (ncbv,1) )
-
-    # Eliminate masked elements
-    tseg = tm.compressed() 
-    fseg = fm.compressed()
-    bvseg = bv.compressed() 
-    bvseg = bvseg.reshape(ncbv,bvseg.size/ncbv)
-
-    fdtseg,ffitseg,p1seg = segfit(tseg,fseg,bvseg)
-
-    return fdtseg,ffitseg
-
-def segfit(tseg,fseg,bvseg):
-    """
-    Segment fit.
-
-    Fit a segment of data with CBVs.
-
-    Parameters
-    ----------
-    tseg  : time segment
-    fseg  : flux segment
-    bvseg : basis vector segments
-
-    """
-    ftnd  = spldt(tseg,fseg)
-    bvtnd = [spldt(tseg,bvseg[i,:]) for i in range(bvseg.shape[0]) ] 
-    bvtnd = np.vstack(bvtnd)
-
-    bvdt = bvseg - bvtnd
-    fdt = fseg - ftnd
-    p1 = np.linalg.lstsq(bvdt.T,fdt)[0]
-
-    ffit = modelCBV(p1,bvdt)
-    return fdt,ffit,p1
-
-def cbvseg(tm,segsep=1):
-    """
-    CBV Segmentation
-
-    Split time series into segments for CBV fitting.  Sections are
-    considered distinct if they are seperated by more than segsep days
-
-    """
-    nsep = segsep / keptoy.lc
-
-    gap = ma.masked_array(tm.data,mask=~tm.mask,copy=True)
-    nsep = segsep / keptoy.lc
-    gapSlice = ma.notmasked_contiguous(gap)
-    for g in gapSlice:
-        if g.stop-g.start < nsep:
-            tm.mask[g] = False
-
-    return ma.notmasked_contiguous(tm)
-
 def sepseg(tm0,tsep=1):
     """
     Seperate Segments
@@ -186,8 +113,13 @@ def sepseg(tm0,tsep=1):
     -------
     
     label : Masked array.  Label identifies which segment a given point 
-            belongs to.  Masked elements do not belong to any segment  
+            belongs to.  Masked elements do not belong to any segment.
 
+    Useage
+    ------
+    >>> label = sepseg(tm)
+    >>> sL    = ma.notmasked_contiguous(label)
+    `sL` is the list of slices corresponding to unique labels.
     """
 
     # Copy to prevent problems from changing the mask in place
