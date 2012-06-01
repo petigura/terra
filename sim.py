@@ -27,6 +27,8 @@ import keplerio
 from matplotlib import mlab
 from config import *
 import os
+import h5py
+
 kicdb = os.environ['KEPBASE']+'files/KIC.db'
 
 def grid(t,fm,isStep,**kwargs):
@@ -57,13 +59,16 @@ def val(tLC,tRES,ver=True):
 
     return tVAL
 
-def simReduce(files,type='grid'):
+def simReduce(ds,type='grid'):
     """
     Reduce output of a simulation.
+
+    ds   : A (Nrun,nP) record array
+    type : Are we dealing with periodograms or validation files?
     """
 
     if type is 'grid':
-        dL = map(bfitRES,files)
+        dL = map(bfitRES,ds)
         name = 'tredg'
     elif type is 'val':
         dL = map(bfitVAL,files)
@@ -101,24 +106,26 @@ def tredSave(pardb,tRED):
     con.close()
 
 
-def bfitRES(file):
+def bfitRES(tres):
     """
     Returns the best fit parameters from tRES.
-    """
-    tRES = atpy.Table(file,type='fits')
-    
-    idMa = np.argmax(tRES.s2n)
-    oP     = tRES.PG[idMa]
-    oepoch = tRES.epoch[idMa]
-    seed   = int(file.split('_')[-1].split('.grid.')[0])
-    odf    = tRES.fom[idMa]
-    os2n   = tRES.s2n[idMa]
-    otwd   = tRES.twd[idMa]
 
-    names = ['seed','oP','oepoch','os2n','otwd','odf']
-    types = [int] + [float]*5
+    Parameters
+    ----------
+    tres : record
+    """
+
+    idMa = np.argmax(tres['s2n'])
+    oP     = tres['PG'][idMa]
+    oepoch = tres['epoch'][idMa]
+    odf    = tres['fom'][idMa]
+    os2n   = tres['s2n'][idMa]
+    otwd   = tres['twd'][idMa]
+
+    names = ['oP','oepoch','os2n','otwd','odf']
+    types = [float]*5
     dtype = zip(names,types)
-    res = np.array([(seed,oP,oepoch,os2n,otwd,odf)],dtype=dtype)
+    res = np.array([(oP,oepoch,os2n,otwd,odf)],dtype=dtype)
 
     return res
 
