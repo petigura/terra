@@ -16,7 +16,7 @@ blockSize = 1000
 
 # tfind
 miTransMES = 3 # Minimum number of transits to even be included in MES
-miSES      = 50e-6 # All transits must have SES larger than this.
+miSES      = 0 # All transits must have SES larger than this.
 
 # tval
 dP     = 0.5
