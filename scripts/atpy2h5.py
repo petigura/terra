@@ -40,6 +40,8 @@ elsize = arrdtype.itemsize
 crowsize  = int(csize/elsize/ccolsize)
 chunks = (ccolsize,crowsize)
 
+print "Creating Dataset with (%i,%i)" % chunks
+
 ds = f.create_dataset(t0.table_name,(nfiles,t0.data.size),arrdtype,chunks=chunks,compression='lzf',shuffle=True)
 
 kwL = []
