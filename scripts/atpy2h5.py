@@ -29,7 +29,8 @@ f     = h5py.File(out)
 nfiles= len(files)
 
 csize     = 300e3 # Target size uncompressed size for the chunks.
-ccolsize  = min(100,nfiles)
+crowsize  = 1000
+ccolsize  = int(csize/elsize/crowsize)
 
 # Array Data Type
 t0    = atpy.Table(files[0],type='fits')
@@ -37,7 +38,6 @@ arrdtype = t0.data.dtype
 
 # Compute chunksize.
 elsize = arrdtype.itemsize
-crowsize  = int(csize/elsize/ccolsize)
 chunks = (ccolsize,crowsize)
 
 print "Creating Dataset with (%i,%i)" % chunks
