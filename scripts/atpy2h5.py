@@ -4,6 +4,7 @@ import sim
 import h5py
 import glob
 import numpy as np
+import os
 
 parser = argparse.ArgumentParser(
     description='Inject transit into template light curve.')
@@ -14,33 +15,49 @@ parser.add_argument('inp',  type=str   ,
 parser.add_argument('out',  type=str   , 
                     help='output h5 file')
 
+# Unpack arguments
 args  = parser.parse_args()
-files = glob.glob(args.inp)
-f     = h5py.File(args.out)
+inp   = args.inp
+out   = args.out
+
+# Must write into a new h5 file
+if os.path.exists(out):
+    os.remove(out)
+
+files = glob.glob(inp)
+f     = h5py.File(out)
 nfiles= len(files)
+
+csize     = 300e3 # Target size uncompressed size for the chunks.
+ccolsize  = min(100,nfiles)
 
 # Array Data Type
 t0    = atpy.Table(files[0],type='fits')
 arrdtype = t0.data.dtype
 
-# KW dtype
-names = t0.keywords.keys
-types = [type(v) for v in t0.keywords.values]
+# Compute chunksize.
+elsize = arrdtype.itemsize
+crowsize  = int(csize/elsize/ccolsize)
+chunks = (ccolsize,crowsize)
 
-kwdtype = [(n,t) for n,t in zip(names,types) if t!=type('str')]
-kwdtype = np.dtype(kwdtype)
+ds = f.create_dataset(t0.table_name,(nfiles,t0.data.size),arrdtype,chunks=chunks,compression='lzf',shuffle=True)
 
-arrds = f.create_dataset(t0.table_name,(nfiles,t0.data.size),arrdtype,
-                         compression='lzf',chunks=(nfiles,100),shuffle=True)
-
-kwds  = f.create_dataset("kw",(nfiles,),kwdtype,compression='lzf')
-
+kwL = []
 for i in range(nfiles):
-    t = atpy.Table(files[i],type='fits')
+    tfile = files[i]
+    if np.mod(i,100)==0:
+        print i
+    t = atpy.Table(tfile,type='fits')
 
     # Copy the data over
-    arrds[i] =  t.data
+    ds[i] =  t.data
 
-    # And the keywords
-    for n in kwdtype.names:
-        kwds[i][n]  = t.keywords[n]
+    # Construct keyword dictionary
+    kwd = t.keywords
+    kwd['file'] = tfile
+    kwL.append(kwd)
+
+for k in t0.keywords.keys:
+    ds.attrs[k] = np.array([kw[k] for kw in kwL])
+
+f.close()
