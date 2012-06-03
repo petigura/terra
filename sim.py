@@ -59,16 +59,21 @@ def val(tLC,tRES,ver=True):
 
     return tVAL
 
-def simReduce(ds,type='grid'):
+def simReduce(ds,fds,type='grid'):
     """
     Reduce output of a simulation.
 
     ds   : A (Nrun,nP) record array
+    files: A (Nrun) array of the file names
+
     type : Are we dealing with periodograms or validation files?
     """
 
     if type is 'grid':
-        dL = map(bfitRES,ds)
+        dL = map(bfitRES,ds[:],fds[:])
+#        dL = []
+#        for i in range(ds.shape[0]):
+#            dL.append( bfitRES(ds[i],fds[i]) ) 
         name = 'tredg'
     elif type is 'val':
         dL = map(bfitVAL,files)
@@ -106,7 +111,7 @@ def tredSave(pardb,tRED):
     con.close()
 
 
-def bfitRES(tres):
+def bfitRES(tres,file):
     """
     Returns the best fit parameters from tRES.
 
@@ -121,11 +126,12 @@ def bfitRES(tres):
     odf    = tres['fom'][idMa]
     os2n   = tres['s2n'][idMa]
     otwd   = tres['twd'][idMa]
+    seed   = int(file.split('_')[-1].split('.grid.')[0])
 
-    names = ['oP','oepoch','os2n','otwd','odf']
-    types = [float]*5
+    names = ['seed','oP','oepoch','os2n','otwd','odf']
+    types = [int]+[float]*5
     dtype = zip(names,types)
-    res = np.array([(oP,oepoch,os2n,otwd,odf)],dtype=dtype)
+    res = np.array([(seed,oP,oepoch,os2n,otwd,odf)],dtype=dtype)
 
     return res
 
@@ -204,9 +210,9 @@ def addFlags(tRED,lcfiles):
     assert (lcfilesKIC==tredKIC).all(),'tRED.KIC and tL.KIC must agree'
 
     # Add empty colums
-    keplerio.update_column(tRED,'good',np.empty(tRED.data.size),dtype=int)
-    keplerio.update_column(tRED,'harm',np.empty(tRED.data.size),dtype=int)
-    keplerio.update_column(tRED,'win',np.empty(tRED.data.size),dtype=int)
+    keplerio.update_column(tRED,'good',np.empty(tRED.data.size))
+    keplerio.update_column(tRED,'harm',np.empty(tRED.data.size))
+    keplerio.update_column(tRED,'win',np.empty(tRED.data.size))
 
     tred = tRED.data
     for KIC in tredKIC:
@@ -223,7 +229,7 @@ def addFlags(tRED,lcfiles):
         
         # Would the transit be accessible after masking?
         tLC = [t for t in tL if t.keywords['KEPLERID']==KIC][0]
-        dM  = ma.masked_array(tLC.dM6,tLC.dM6mask)        
+        dM  = tfind.mtd(tLC.t,tLC.f,tLC.isStep,tLC.fmask,12)
         fbwin = lambda P,epoch : bwin(dM.mask,tLC.t[0],P,epoch)
         win   = map(fbwin,tr['P'],tr['epoch'])
         tr['win'] = win
