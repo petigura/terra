@@ -50,17 +50,26 @@ def atpy2h5(inp,out,diff=[]):
    # Store the fields that are the same in table_name1d
 
    if diff != []:
-      print 'Only storing different values of...'
-      print diff
-
       ds1dname = t0.table_name+'1d'
       ds1data  = t0.data
       ds1data  = mlab.rec_drop_fields(ds1data,diff)
+
       ds1d     = f.create_dataset(ds1dname,data=ds1data)
 
       same = list(arrdtype.names)
       [same.remove(d) for d in diff]
       r = mlab.rec_drop_fields(t0.data,same)
+
+      print """
+Same Columns
+------------"""
+      print "%s " % ', '.join(map(str,same))
+
+      print """
+Diff Columns
+------------"""
+      print "%s " % ', '.join(map(str,diff))
+
    else:
       r = t0.data
       same = []
@@ -68,8 +77,13 @@ def atpy2h5(inp,out,diff=[]):
    chunks = compChunks(r.dtype.itemsize,nfiles )
    ccolsize,crowsize = chunks
 
-   print "Creating Dataset with (%i,%i)" % chunks
-   ds = f.create_dataset(t0.table_name,(nfiles,t0.data.size),r.dtype,chunks=chunks,compression='lzf',shuffle=True)
+   ncol = nfiles
+   nrow = t0.data.size
+
+   ds = f.create_dataset(t0.table_name,(ncol,nrow),r.dtype,
+                         chunks=chunks,compression='lzf',shuffle=True)
+
+   print "ds.shape = (%i,%i); ds.chunks=(%i,%i)" % (ds.shape + ds.chunks)
 
    kwL = []
    start = 0
@@ -95,17 +109,19 @@ def atpy2h5(inp,out,diff=[]):
           d['file'] = tf
           kwLtemp.append(d)
 
-#       import pdb
-#       pdb.set_trace()
        ds[s] =  np.vstack(rL)
        kwL = kwL + kwLtemp
 
        start = stop
+   
+   print """
+Attaching Keywords
+------------------"""
+   print "%s " % ', '.join(map(str,kwL[0].keys))
+   for k in kwL[0].keys:
+       ds.attrs[k] = np.array([kw[k] for kw in kwL])
 
-   for k in t0.keywords.keys:
-      print k
-      ds.attrs[k] = np.array([kw[k] for kw in kwL])
-
+   
    f.close()
 
 
