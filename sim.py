@@ -3,6 +3,7 @@ Simulation
 
 This module implements the transit search pipeline.  
 
+
 Note - EAP 5/22/2012 
 
 Data is stored .fits tables and accessed via
