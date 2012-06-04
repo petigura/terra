@@ -202,11 +202,8 @@ def addFlags(tRED,lcfiles):
              oP,oepoch,P,epoch,KIC columns
     lcfiles: list of light curve files.  Must be one for every unique KIC
     """
-    
-    load = lambda f : atpy.Table(f,type='fits')
-    tL = map(load,lcfiles)
-
-    lcfilesKIC  = np.unique([t.keywords['KEPLERID'] for t in tL])
+    fL   = [h5py.File(f) for f in lcfiles]
+    lcfilesKIC  = np.unique([f['LC'].attrs['KEPLERID'][0] for f in fL])
     tredKIC     = np.unique(tRED.KIC)
     assert (lcfilesKIC==tredKIC).all(),'tRED.KIC and tL.KIC must agree'
 
@@ -229,9 +226,14 @@ def addFlags(tRED,lcfiles):
         tr['harm'] = harm
         
         # Would the transit be accessible after masking?
-        tLC = [t for t in tL if t.keywords['KEPLERID']==KIC][0]
-        dM  = tfind.mtd(tLC.t,tLC.f,tLC.isStep,tLC.fmask,12)
-        fbwin = lambda P,epoch : bwin(dM.mask,tLC.t[0],P,epoch)
+        LC1d = [f['LC1d'] for f in fL if f['LC'].attrs['KEPLERID'][0]==KIC][0]
+        t        = LC1d['t']
+        f        = LC1d['f']
+        isStep   = LC1d['isStep']
+        fmask    = LC1d['fmask']
+
+        dM  = tfind.mtd(t,f,isStep,fmask,12)
+        fbwin = lambda P,epoch : bwin(dM.mask,t[0],P,epoch)
         win   = map(fbwin,tr['P'],tr['epoch'])
         tr['win'] = win
         tred[mKIC] = tr

@@ -92,16 +92,19 @@ def atpy2h5(inp,out,diff=[]):
 
           # Pull out the dictionaries
           d = t.keywords
-          d['file'] = f
+          d['file'] = tf
           kwLtemp.append(d)
 
+#       import pdb
+#       pdb.set_trace()
        ds[s] =  np.vstack(rL)
        kwL = kwL + kwLtemp
 
        start = stop
 
    for k in t0.keywords.keys:
-       ds.attrs[k] = np.array([kw[k] for kw in kwL])
+      print k
+      ds.attrs[k] = np.array([kw[k] for kw in kwL])
 
    f.close()
 
