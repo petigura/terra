@@ -94,21 +94,27 @@ def tredSave(pardb,tRED):
     """
 
     name = tRED.table_name
-    tRED.write('sqlite','tPAR.db',overwrite=True)
+    tRED.write('sqlite',pardb,overwrite=True)
 
     con = sqlite3.connect(pardb)
     cur = con.cursor()
 
-    cmd = 'ATTACH "%s" as kicdb' % kicdb
-    cur.execute(cmd)
-    cmd = 'CREATE TABLE temp as SELECT * from %s join par on %s.seed=par.seed join kicdb.q6 on par.kic=kicdb.q6.id' %(name,name)
-    cur.execute(cmd)
+    cmd = """
+ATTACH "%(kicdbpath)s" as kicdb;
 
-    cmd = 'drop table %s' % (name)
-    cur.execute(cmd)
+CREATE TABLE temp AS 
+SELECT * from %(name)s
+JOIN par 
+ON %(name)s.seed=par.seed 
+JOIN kicdb.q6 
+ON par.kic=kicdb.q6.id;
 
-    cmd = 'ALTER TABLE temp RENAME TO %s' % (name)
-    cur.execute(cmd)
+DROP TABLE %(name)s;
+
+ALTER TABLE temp RENAME TO %(name)s;
+""" % {'kicdbpath':kicdb,'name':name}
+
+    cur.executescript(cmd)
     con.close()
 
 
