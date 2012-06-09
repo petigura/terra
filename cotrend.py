@@ -15,6 +15,8 @@ from scipy import optimize
 import ebls
 import prepro
 
+from matplotlib import mlab
+
 from numpy import ma
 import numpy as np
 
@@ -71,7 +73,7 @@ def bvfitm(fm,bv):
 
     """
     if type(fm) != np.ma.core.MaskedArray:
-        fm = masked_array(fm)
+        fm = ma.masked_array(fm)
         fm.mask = np.ones(fm.size).astype(bool)
 
     assert fm.size == bv.shape[1],"fm and bv must have equal length"
@@ -87,13 +89,125 @@ def bvfitm(fm,bv):
 #
 
 
+def robustSVD(D,nMode=8,sigOut=10,maxit=4):
+    """
+    Robust SVD
+
+    D = U S V.T
+
+    This decomposition is computed using SVD.  SVD is sensitive to
+    outliers, so we perform iterative sigma clipping in the `\chi^2`
+    sense, but also in the distribution of best fit parameters.
+
+    D_fit[i] = a_1 V_1 + a_2 V_2 + ... a_nMode V_nMode
+    
+    nMode is the (small) number of principle components we wish to fit
+    our data with.
+
+    If any of the a_j, or \chi^2_i = sum((D_fit[i] - D[i])**2)/D.size
+    is an outlier, remove that row from D.
+
+    Parameters
+    ----------
+    
+    D      : Data matrix.  1-D vectors stacked vertically (row-wise). May
+             not contain nans, or masked values.
+    nMode  : Number of modes
+    sigOut : Clip outliers that are more than sigOut away from the median.
+    """
+    Dnrow,Dncol = D.shape     
+    D    = D.copy()
+    gRow = np.ones(Dnrow,dtype=bool) # Good rows (not outliers)
+
+    goodid  = np.arange(D.shape[0])
+
+
+    # Iterate SVD fits.
+    count = 0 
+    finished = False
+    while finished is False:
+        print count
+        if count == maxit:
+            finished=True
+
+        D = D[gRow]
+        Dnrow,Dncol = D.shape     
+
+        U, s, V = np.linalg.svd(D,full_matrices=False)
+        S = np.zeros(V.shape)
+        S[:Dnrow,:Dnrow] = np.diag(s)
+        
+        A    = np.dot(U,S)                  # A is matrix of best fit coeff
+        A    = A[:,:nMode]
+        Dfit = np.dot(A,V[:nMode])  # Dfit is D represented by a
+                                            # trucated series of modes
+        
+        # Evaluate Chi2
+        X2 = ma.sum( (Dfit - D)**2,axis=1) / Dncol
+
+        rL = moments(A)
+        print "Moments of principle component weight"
+        print mlab.rec2txt(rL)        
+        
+
+
+
+        # Determine which rows of D are outliers
+        dev  = (A - rL['med'])/rL['mad']
+
+        # nMode x Dncol matrix of outlier coeffients
+        Aout = abs(dev) > sigOut 
+
+        # Dncol matrix of red-Chi2 outliers
+        Xout = (X2 > 3)  | (X2 < 0.5) 
+        Xout = Xout.reshape(Xout.size,1)
+        
+        # Dncol matrix with the number of coeff that failed.
+        out    = np.hstack([Xout,Aout])
+
+#        out    = np.hstack([Aout])
+
+        # All coefficients must be inliers
+        gRow   = out.astype(int).sum(axis=1) == 0 
+
+        if gRow.all():
+            finished = True
+        else:
+            names = ['ID'] + ['Chi2'] + ['a%i' % (i+1) for i in range(nMode)]
+#            names = ['ID'] + ['a%i' % (i+1) for i in range(nMode)]
+            dtype = zip(names,[float]*len(names))
+
+            
+            routData = np.hstack([np.vstack(goodid),np.vstack(X2),dev])
+ 
+            routData = [tuple(r) for r in routData]
+            rout = np.array(routData,dtype=dtype)
+
+            print "First 10 a/MAD(a)"
+            print mlab.rec2txt(rout[~gRow][:10])
+            print "%i there are %i outliers " % (count,goodid[~gRow].size)
+
+        goodid = goodid[gRow]
+        count +=1
 
 
 
 
+    return U,S,V,goodid,X2
 
-
-
+def moments(A):
+    # Evaluate moments
+    names = ['pc','med','mad','mean','max','min']
+    dtype = zip(names,[float]*len(names))
+    
+    rL = np.zeros(A.shape[1],dtype=dtype)
+    rL['pc']   = np.arange(A.shape[1])
+    rL['mean'] = np.mean(    A , axis=0 )
+    rL['med']  = np.median(  A , axis=0 )
+    rL['max']  = ma.max(     A , axis=0 )
+    rL['min']  = ma.min(     A , axis=0 )
+    rL['mad']  = ma.median(  np.abs( A - rL['med'] ) , axis=0 )
+    return rL
 
 
 tq = 89.826658388163196
@@ -355,7 +469,7 @@ def reorder(X):
 
 def indord(ind):
     n = len(ind)
-    x,y = mgrid[0:n,0:n]
+    x,y = np.mgrid[0:n,0:n]
     xs = x[ind]
     return xs
 
