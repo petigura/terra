@@ -118,10 +118,21 @@ Diff Columns
 Attaching Keywords
 ------------------"""
    print "%s " % ', '.join(map(str,kwL[0].keys))
-   for k in kwL[0].keys:
-       ds.attrs[k] = np.array([kw[k] for kw in kwL])
 
+   keys = []
+   for k in kwL[0].keys:
+      tk = type(kwL[0][k])
+      if (tk is str) or (tk is bool) or (tk is float):      
+         keys.append(k)
+         ds.attrs[k] = np.zeros(nfiles,dtype=tk)
    
+
+   for k in keys:
+      for i in range(nfiles):
+         try:
+            ds.attrs[k][i] = kwL[i][k]
+         except:
+            pass
    f.close()
 
 
