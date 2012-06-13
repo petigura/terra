@@ -115,6 +115,8 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
     nMode  : Number of modes
     sigOut : Clip outliers that are more than sigOut away from the median.
     """
+#    import pdb
+#    pdb.set_trace()
     Dnrow,Dncol = D.shape     
     D    = D.copy()
     gRow = np.ones(Dnrow,dtype=bool) # Good rows (not outliers)
@@ -143,7 +145,7 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
                                             # trucated series of modes
         
         # Evaluate Chi2
-        X2 = ma.sum( (Dfit - D)**2,axis=1) / Dncol
+        X2 = np.sum( (Dfit - D)**2,axis=1) / Dncol
 
         rL = moments(A)
         print "Moments of principle component weight"
@@ -189,9 +191,6 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
 
         goodid = goodid[gRow]
         count +=1
-
-
-
 
     return U,S,V,goodid,X2
 

@@ -14,6 +14,10 @@ import detrend
 from matplotlib import mlab
 import cotrend
 
+nModesSave = 10
+nMode=4
+sigOut=10
+maxit=10
 
 parser = ArgumentParser(description='Perform Robust SVD')
 parser.add_argument('inp',  type=str)
@@ -24,7 +28,8 @@ out   = args.out
 inp   = args.inp
 
 t5    = h5py.File(inp)
-fdt   = t5['LIGHTCURVE']['fdt'][:]
+ds    = t5['LIGHTCURVE']
+fdt   = ds['fdt'][:]
 
 # Cut out the bad columns and rows
 fdt[np.isnan(fdt)] = 0
@@ -38,7 +43,13 @@ fdt = fdt[rzero,:]
 madnorm = lambda x : x/ma.median(ma.abs(x))
 fdt     = [madnorm(fdt[i]) for i in range(len(fdt)) ] 
 fdt = np.vstack(fdt)
-U,S,V,goodid,X2 = cotrend.robustSVD(fdt,nMode=4,sigOut=10,maxit=10)
+
+U,S,Vtemp,goodid,X2 = \
+    cotrend.robustSVD(fdt,nMode=nMode,sigOut=sigOut,maxit=maxit)
+
+V = np.zeros((Vtemp.shape[0],ds.shape[1]))
+
+V[:,czero] = Vtemp
 
 h5 = h5plus.File(out)
 h5.create_dataset('U'     ,data=U)
@@ -46,4 +57,7 @@ h5.create_dataset('S'     ,data=S)
 h5.create_dataset('V'     ,data=V,compression='lzf',shuffle=True)
 h5.create_dataset('goodid',data=goodid)
 h5.create_dataset('X2'    ,data=X2)
+
+# For space reasons, think about only saving the priciple components that I care about
+
 h5.close()

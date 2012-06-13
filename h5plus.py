@@ -5,7 +5,7 @@ import numpy as np
 import os
 from matplotlib import mlab
 import atpy
-
+import sys
 def compChunks(elsize,ncolmax):
    """
    Compute Chunck Size
@@ -19,7 +19,7 @@ def compChunks(elsize,ncolmax):
    chunks = (ccolsize,crowsize)
    return chunks
 
-def atpy2h5(inp,out,diff=[]):
+def atpy2h5(files,out,diff='all',name='ds'):
    """
    atpy format to h5
 
@@ -28,145 +28,116 @@ def atpy2h5(inp,out,diff=[]):
 
    inp  : globable string specifying where the input files are
    out  : output h5 file.  In none exists, we create it.
-   diff : List of fields that are different to be stored as stacked arrays.
-          If the fields are the same, we store as a 1-d array
 
+   diff : List of fields that are stored as stacked arrays.  Those
+          that are not different, we store the first element.
    """
+   nfiles = len(files)
+   t0 = atpy.Table(files[0])
+   h5 = File(out)
+   ds,ds1d = diffDS(t0.table_name,t0.data.dtype,(nfiles,t0.data.size),h5,diff=diff)
+   kwL = []
+   step = ds.chunks[0]
+   sL = [ slice(a,a+step) for a in np.arange(0,ds.shape[0],step) ]
 
-   # Must write into a new h5 file
-   if os.path.exists(out):
-       os.remove(out)
 
-   files = glob.glob(inp)
-   files = np.array(files)
+   for i in range(nfiles):
+      if np.mod(i,100)==0:
+         print i
+      try:
+         t = atpy.Table(files[i],type='fits') 
+         kwL.append(t.keywords)
+   
+         if diff!='all':
+            data = mlab.rec_keep_fields(t.data,diff)
+         else:
+            data = t.data
+   
+         ds[i] = t.data
+   
+      except:
+         print "Unexpected error:", sys.exc_info()[0]
+         
+   ds = attchKW(ds,kwL,kwL[0].keys)
+   h5.close()
 
-   f     = h5py.File(out)
-   nfiles= len(files)
+def File(file):
+   if os.path.exists(file):
+      os.remove(file)
+      print 'removing %s ' % file
+   return h5py.File(file)
 
-   # Array Data Type
-   t0    = atpy.Table(files[0],type='fits')
-   arrdtype = t0.data.dtype
 
-   # Store the fields that are the same in table_name1d
+def diffDS(name,dtype,shape,h5,diff='all'):
+   """
+   Create Datasets
 
-   if diff != []:
-      ds1dname = t0.table_name+'1d'
-      ds1data  = t0.data
-      ds1data  = mlab.rec_drop_fields(ds1data,diff)
+   Try to chunk it up into 300K sizes.
 
-      ds1d     = f.create_dataset(ds1dname,data=ds1data)
+   Parameters
+   ----------
+   name   : Table name
+   dtype  : Element data type
+   shape  : 2D array shape (nLightCurves, nCadences)
+   f      : h5 file handle
+   """
+   nrows,ncols = shape
 
-      same = list(arrdtype.names)
-      [same.remove(d) for d in diff]
-      r = mlab.rec_drop_fields(t0.data,same)
+   names = list(dtype.names)
+   if diff != 'all':
+      [names.remove(d)  for d in diff]
+      dnames = diff
+      
+      sstr = "%s " % ', '.join(map(str,names))
+      dstr = "%s " % ', '.join(map(str,dnames))
 
       print """
 Same Columns
-------------"""
-      print "%s " % ', '.join(map(str,same))
+------------
+%s
 
-      print """
 Diff Columns
-------------"""
-      print "%s " % ', '.join(map(str,diff))
+------------
+%s 
 
+""" %(sstr,dstr )  
+
+      sdtype = np.dtype([ (n,dtype[n]) for n in names])
+      ds1d     = h5.create_dataset(name+'1d',shape=(ncols,),dtype=sdtype)
    else:
-      r = t0.data
-      same = []
+      ds1d = None
+      dnames = names
 
-   chunks = compChunks(r.dtype.itemsize,nfiles )
-   ccolsize,crowsize = chunks
+   ddtype = np.dtype([ (n,dtype[n]) for n in dnames])
 
-   ncol = nfiles
-   nrow = t0.data.size
 
-   ds = f.create_dataset(t0.table_name,(ncol,nrow),r.dtype,
-                         chunks=chunks,compression='lzf',shuffle=True)
+   # There chunksize cannot be bigger than shape (there should be a
+   # more explicit warning for this.
+
+   chunks = compChunks(dtype.itemsize,nrows)
+   chunks = min(chunks[0],ncols),chunks[1]
+   ds = h5.create_dataset(name,shape,ddtype,chunks=chunks,compression='lzf',
+                          shuffle=True)
 
    print "ds.shape = (%i,%i); ds.chunks=(%i,%i)" % (ds.shape + ds.chunks)
+   return ds,ds1d
 
-   kwL = []
-   start = 0
-   stop = 0
+def attchKW(ds,kwL,keys):
+   """
+   Attach keywords 
 
-   while stop < nfiles:
-       stop = start + ccolsize
-       stop = min(stop,nfiles)
+   Parameters
+   ----------
+   tL    : List of open tables
+   keys  : List of h5 compatible keywords
 
-       print stop
-       s = slice(start,stop)
-
-       rL = []
-       kwLtemp = []
-
-       for tf in files[s]:
-          t = atpy.Table(tf,type='fits')
-          r = mlab.rec_drop_fields(t.data,same)
-          rL.append(r)
-
-          # Pull out the dictionaries
-          d = t.keywords
-          d['file'] = tf
-          kwLtemp.append(d)
-
-       ds[s] =  np.vstack(rL)
-       kwL = kwL + kwLtemp
-
-       start = stop
-   
-   print """
-Attaching Keywords
-------------------"""
-   print "%s " % ', '.join(map(str,kwL[0].keys))
-
-   keys = []
-   for k in kwL[0].keys:
-      tk = type(kwL[0][k])
-      if (tk is str) or (tk is bool) or (tk is float):      
-         keys.append(k)
-         ds.attrs[k] = np.zeros(nfiles,dtype=tk)
-   
-
+   """
    for k in keys:
-      for i in range(nfiles):
-         try:
-            ds.attrs[k][i] = kwL[i][k]
-         except:
-            pass
-   f.close()
+      k = str(k) # h5 saves saves keys as unicode
+      kwarray = np.array( [kw[k] for kw in kwL] )
+      try:
+         ds.attrs[k] = kwarray
+      except:
+         print "could not attach %s" % k
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+   return ds

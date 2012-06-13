@@ -1,6 +1,7 @@
 """
 Wrapper around the spline detrending.
 """
+
 from argparse import ArgumentParser
 import h5plus
 import h5py
@@ -51,9 +52,13 @@ t0 = func(0)
 diff = ['fdt']
 h5 = h5plus.File(out)
 ds,ds1d = h5plus.diffDS(rA.name,t0.data.dtype,rA.shape,h5,diff=diff)
+
+ds1d = mlab.rec_drop_fields(t0.data,diff)
 for i in range(rA.shape[0]):
     if np.mod(i,100) == 0:
         print i
     t = func(i)
     ds[i] = mlab.rec_keep_fields(t.data,diff)
+
+
 h5.close()
