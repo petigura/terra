@@ -40,7 +40,7 @@ def atpy2h5(files,out,diff='all',name='ds'):
    step = ds.chunks[0]
    sL = [ slice(a,a+step) for a in np.arange(0,ds.shape[0],step) ]
 
-
+   nFail = 0 
    for i in range(nfiles):
       if np.mod(i,100)==0:
          print i
@@ -53,12 +53,16 @@ def atpy2h5(files,out,diff='all',name='ds'):
          else:
             data = t.data
    
-         ds[i] = t.data
+         ds[i-nFail] = t.data
    
       except:
-         print "Unexpected error:", sys.exc_info()[0]
+         print sys.exc_info()[1]
+         nFail +=1
          
    ds = attchKW(ds,kwL,kwL[0].keys)
+
+   ds.resize(ds.shape[0]-nFail,axis=0)
+   print "%i files failed" % nFail
    h5.close()
 
 def File(file):
