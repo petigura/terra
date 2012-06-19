@@ -115,8 +115,6 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
     nMode  : Number of modes
     sigOut : Clip outliers that are more than sigOut away from the median.
     """
-#    import pdb
-#    pdb.set_trace()
     Dnrow,Dncol = D.shape     
     D    = D.copy()
     gRow = np.ones(Dnrow,dtype=bool) # Good rows (not outliers)
@@ -150,9 +148,6 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
         rL = moments(A)
         print "Moments of principle component weight"
         print mlab.rec2txt(rL)        
-        
-
-
 
         # Determine which rows of D are outliers
         dev  = (A - rL['med'])/rL['mad']
@@ -167,8 +162,6 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
         # Dncol matrix with the number of coeff that failed.
         out    = np.hstack([Xout,Aout])
 
-#        out    = np.hstack([Aout])
-
         # All coefficients must be inliers
         gRow   = out.astype(int).sum(axis=1) == 0 
 
@@ -177,11 +170,9 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
         else:
             names = ['ID'] + ['Chi2'] + ['a%i' % (i+1) for i in range(nMode)]
 #            names = ['ID'] + ['a%i' % (i+1) for i in range(nMode)]
-            dtype = zip(names,[float]*len(names))
 
-            
-            routData = np.hstack([np.vstack(goodid),np.vstack(X2),dev])
- 
+            dtype = zip(names,[float]*len(names))
+            routData = np.hstack([np.vstack(goodid),np.vstack(X2),dev]) 
             routData = [tuple(r) for r in routData]
             rout = np.array(routData,dtype=dtype)
 

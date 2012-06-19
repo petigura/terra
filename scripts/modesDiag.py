@@ -7,40 +7,10 @@ import h5py
 from matplotlib.pylab import *
 import os
 import atpy
+import sqlite3
 
 kicdbpath = os.environ['KEPBASE']+'files/KIC.db'
-
-parser = ArgumentParser(description='Diagnose Modes')
-parser.add_argument('lc',  type=str,help='Input LC file')
-parser.add_argument('dt',  type=str,help='Detrended Flux')
-parser.add_argument('svd',  type=str,help='Mode file')
-parser.add_argument('out',  type=str,help='outputbase name')
-
-args = parser.parse_args()
 nModes = 4
-hlc = h5py.File(args.lc)
-hdt = h5py.File(args.dt)
-hsvd = h5py.File(args.svd)
-
-fdt = hdt['LIGHTCURVE']['fdt']
-U,S,V,goodid,mad = hsvd['U'],hsvd['S'],hsvd['V'],hsvd['goodid'],hsvd['MAD']
-
-nstars = U.shape[0]
-S = S[:nstars,:nstars]
-A = dot(U,S)
-fit = dot(A[:,:nModes],V[:nModes])
-fit = fit*mad[goodid]
-
-kic = hlc['KIC']
-a = tuple(kic[:])
-query = 'select id,kic_ra,kic_dec from KIC where id in %s' % str(a)
-
-#import pdb
-#pdb.set_trace()
-tkic = atpy.Table('sqlite',kicdbpath,table='KIC',query=query)
-tkic = tkic.rows(goodid)
-scatter(tkic.kic_ra,tkic.kic_dec)
-
 cdict3 = {'red':  ((0.0, 0.0, 0.0),
                    (0.25,0.0, 0.0),
                    (0.5, 0.8, 1.0),
@@ -63,15 +33,60 @@ cdict3 = {'red':  ((0.0, 0.0, 0.0),
 plt.register_cmap(name='BlueRed3', data=cdict3) # optional lut kwarg
 plt.rcParams['image.cmap'] = 'BlueRed3'
 
+
+parser = ArgumentParser(description='Diagnose Modes')
+parser.add_argument('dt', type=str,help='Detrended Flux')
+parser.add_argument('svd',type=str,help='Mode file')
+parser.add_argument('q',  type=int,help='quarter')
+parser.add_argument('out',type=str,help='outputbase name')
+
+args = parser.parse_args()
+hdt = h5py.File(args.dt)
+hsvd = h5py.File(args.svd)
+q    = args.q
+
+fdt = hdt['LIGHTCURVE']['fdt']
+U,S,V,goodid,mad,kic = \
+    hsvd['U'],hsvd['S'],hsvd['V'],hsvd['goodid'],hsvd['MAD'],hsvd['KIC']
+
+# Construct fits
+nstars = U.shape[0]
+S     = S[:nstars,:nstars]
+A     = dot(U,S)
+fit   = dot(A[:,:nModes],V[:nModes])
+fit   = fit*mad[goodid]
+
+a = tuple(kic[:])
+query = 'select id,kic_ra,kic_dec from KIC where id in %s' % str(a)
+skic = str(tuple(kic[goodid]))
+
+conn = sqlite3.connect(kicdbpath)
+cur = conn.cursor()
+
+query = """
+SELECT 
+q%(q)i.id,kic.kic_ra,kic.kic_dec 
+FROM q%(q)i 
+JOIN kic 
+ON q%(q)i.id=kic.id 
+WHERE q%(q)i.id in %(skic)s
+""" % {'q':q,'skic':skic} 
+
+cur.execute(query)
+res = cur.fetchall()
+conn.close()
+
+tkic = array(res,dtype=zip(['id','ra','dec'],[int,float,float]))
 A = A[:,:nModes]
 cmax = abs(A).max()
-
 for i in range(nModes):
-    ra = tkic.kic_ra
-    dec = tkic.kic_dec
-    scatter(ra,dec,c=A[:,i],edgecolors='none',vmin=-cmax,vmax=cmax,s=60)
+    ra = tkic['ra']
+    dec = tkic['dec']
+    scatter(ra,dec,c=A[:,i],edgecolors='none',vmin=-cmax,vmax=cmax,s=30)
     xlabel('RA (Deg)')
     ylabel('Dec (Deg)')
+    title('PC %i' % (i+1))
+
     fig = gcf()
     fig.savefig(args.out+'_fov%i.png' % i)
 
