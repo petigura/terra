@@ -40,8 +40,11 @@ rzero = np.median(fdt,axis=1)!=0.
 fdt = fdt[rzero,:] 
 
 # Normalize by Median Absolute Dev.  Normalized reduced Chi2 should be about 1
-madnorm = lambda x : x/ma.median(ma.abs(x))
-fdt     = [madnorm(fdt[i]) for i in range(len(fdt)) ] 
+mad = ma.median(ma.abs(fdt),axis=1)
+mad = mad.reshape(mad.size,1)
+fdt = fdt/mad
+
+
 fdt = np.vstack(fdt)
 
 U,S,Vtemp,goodid,X2 = \
@@ -55,6 +58,7 @@ h5 = h5plus.File(out)
 h5.create_dataset('U'     ,data=U)
 h5.create_dataset('S'     ,data=S)
 h5.create_dataset('V'     ,data=V,compression='lzf',shuffle=True)
+h5.create_dataset('MAD'   ,data=mad)
 h5.create_dataset('goodid',data=goodid)
 h5.create_dataset('X2'    ,data=X2)
 
