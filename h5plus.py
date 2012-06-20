@@ -6,6 +6,8 @@ import os
 from matplotlib import mlab
 import atpy
 import sys
+import pyfits
+
 def compChunks(elsize,ncolmax):
    """
    Compute Chunck Size
@@ -35,33 +37,35 @@ def atpy2h5(files,out,diff='all',name='ds'):
    nfiles = len(files)
    t0 = atpy.Table(files[0])
    h5 = File(out)
-   ds,ds1d = diffDS(t0.table_name,t0.data.dtype,(nfiles,t0.data.size),h5,diff=diff)
-   kwL = []
-   step = ds.chunks[0]
-   sL = [ slice(a,a+step) for a in np.arange(0,ds.shape[0],step) ]
-
+   ds,ds1d = diffDS(t0.table_name,t0.data.dtype,(nfiles,t0.data.size)
+                    ,h5,diff=diff)
+   
+   kicL = []   
    nFail = 0 
    for i in range(nfiles):
       if np.mod(i,100)==0:
          print i
       try:
-         t = atpy.Table(files[i],type='fits') 
-         kwL.append(t.keywords)
-   
+         hdu = pyfits.open(files[i])
+         data = hdu[1].data
+         kic  = hdu[1].header['KEPLERID']
+         assert type(kic) == int
+         kicL.append(kic)
+         
          if diff!='all':
-            data = mlab.rec_keep_fields(t.data,diff)
+            data = mlab.rec_keep_fields(data,diff)
          else:
-            data = t.data
-   
-         ds[i-nFail] = t.data
+            ds1d[:] =  mlab.rec_drop_fields(data,diff)
+
+         ds[i-nFail] = data
    
       except:
          print sys.exc_info()[1]
          nFail +=1
          
-   ds = attchKW(ds,kwL,kwL[0].keys)
-
    ds.resize(ds.shape[0]-nFail,axis=0)
+   kicL = np.array(kicL)
+   h5.create_dataset('KIC',data=kicL)
    print "%i files failed" % nFail
    h5.close()
 

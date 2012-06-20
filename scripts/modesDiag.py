@@ -33,7 +33,6 @@ cdict3 = {'red':  ((0.0, 0.0, 0.0),
 plt.register_cmap(name='BlueRed3', data=cdict3) # optional lut kwarg
 plt.rcParams['image.cmap'] = 'BlueRed3'
 
-
 parser = ArgumentParser(description='Diagnose Modes')
 parser.add_argument('dt', type=str,help='Detrended Flux')
 parser.add_argument('svd',type=str,help='Mode file')
@@ -46,6 +45,8 @@ hsvd = h5py.File(args.svd)
 q    = args.q
 
 fdt = hdt['LIGHTCURVE']['fdt']
+t   = hdt['LIGHTCURVE1d']['t']
+
 U,S,V,goodid,mad,kic = \
     hsvd['U'],hsvd['S'],hsvd['V'],hsvd['goodid'],hsvd['MAD'],hsvd['KIC']
 
@@ -86,7 +87,17 @@ for i in range(nModes):
     xlabel('RA (Deg)')
     ylabel('Dec (Deg)')
     title('PC %i' % (i+1))
-
     fig = gcf()
     fig.savefig(args.out+'_fov%i.png' % i)
+
+clf()
+for i in range(nModes):
+    step = np.std(V[i])
+    plot(t,V[i]+i*step*5)
+
+xlabel('time')
+title('%i Modes' % nModes)
+fig = gcf()
+fig.savefig(args.out+'_pc.png')
+
 

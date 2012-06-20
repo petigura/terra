@@ -52,8 +52,7 @@ h5 = h5plus.File(out)
 ds,ds1d = h5plus.diffDS(dsinp.name,t0.data.dtype,dsinp.shape,h5,diff=diff)
 kic = h5.create_dataset( 'KIC',data=h5inp['KIC'][:] )
 
-
-ds1d = mlab.rec_drop_fields(t0.data,diff)
+ds1d[:] = mlab.rec_drop_fields(t0.data,diff)
 for i in range(dsinp.shape[0]):
     if np.mod(i,100) == 0:
         print i
