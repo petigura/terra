@@ -29,7 +29,7 @@ inp   = args.inp
 
 h5inp = h5py.File(inp)
 ds    = h5inp['LIGHTCURVE']
-fdt   = ds['fdt'][:]
+fdt   = ma.masked_array(ds['fdt'][:],ds['fmask'][:],fill_value=np.nan)
 kic   = h5inp['KIC'][:]
 
 # Cut out the bad columns and rows
