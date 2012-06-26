@@ -11,7 +11,7 @@ import atpy
 import keplerio
 import copy
 import os
-from matplotlib.mlab import csv2rec
+from matplotlib.mlab import csv2rec,rec_append_fields
 import glob
 import pyfits
 
@@ -19,12 +19,22 @@ import cotrend
 import detrend
 import tfind
 from keplerio import update_column
+import qalg
+
 
 kepdir = os.environ['KEPDIR']
-kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
 qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
+sapkey = csv2rec(sapkeypath,delimiter=' ')
+sapdtype = zip( sapkey['key'],[bool]*sapkey['key'].size )
+
+cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
+cutList = atpy.Table(cutpath,type='ascii').data
+
+nCadDesatGrow = 1 # Grow the desat by 1 column in both directions
+nCadAtTwkGrow = 4 # Grow the desat by 1 column in both directions
 
 def prepLC(tLC):
     """
@@ -166,33 +176,121 @@ def qmask(t0):
     Determine the masked regions for the quarter.
     """
     t = copy.deepcopy(t0)
-
-    update_column(t,'isBadReg',  isBadReg(t.t) )
-    update_column(t,'isOutlier', isOutlier(t.f) )
-    update_column(t,'isStep',    isStep(t.f) )
-    update_column(t,'isDis',     isDis(t.SAP_QUALITY) )
-
-    fm = ma.masked_invalid(t.SAP_FLUX)
-    fm.mask = fm.mask | t.isBadReg | t.isOutlier | t.isStep | t.isDis
-    update_column(t,'fmask',fm.mask)
-
+    r = rqmask(t.data)
+    t = qalg.rec2tab(r)
+    t.keywords = t0.keywords
     return t
 
-def isDis(qual):
+
+def rqmask(r0):
     """
-    Cut out discontinuities
+    Record Array Quarter Mask
+
+    Computes two masks:
+    - fmask  : True if a certain cadence is to be excluded from the
+               lightcurve
+    - segEnd : True if this is a region between two detrending
+               segments.  These occur at discontinuities.  The
+               detrender should not try to run over a jump in the
+               photomtry.
+    
+    Parameters
+    ----------
+    r0 : lightcurve record array with the following fields:
+         - `t`
+         - `f`      
+         - `SAP_QUALITY`
+
+    Returns
+    -------
+    r  : record array with the following fields added:
+         - fmask
+         - segEnd
+         - isStep
+         - isOutlier
+         - isBadReg
+    """
+    r = r0.copy()
+
+    rqual = parseQual(r['SAP_QUALITY'])
+
+    r = rec_append_fields(r,'isBadReg' ,isBadReg(r['t'])  )
+    r = rec_append_fields(r,'isOutlier',isOutlier(r['f']) )
+    r = rec_append_fields(r,'isStep'   ,isStep(r['f'])    )
+    r = rec_append_fields(r,'isDis'    ,isStep(rqual['dis'])  )
+
+    # Grow momentum desat regions 
+    bdesat = rqual['desat']
+    bdesat = nd.convolve(bdesat.astype(int) , np.ones(nCadDesatGrow+1) )
+    bdesat = bdesat > 0
+
+    # Grow the attitude tweaks 
+    batTwk = rqual['atTwk']
+    batTwk = nd.convolve(batTwk.astype(int) , np.ones(nCadAtTwkGrow+1) )
+    batTwk = batTwk > 0
+
+    # fmask is the union of all the individually masked elements    
+    fm = ma.masked_invalid(r.SAP_FLUX)
+    fm.mask = \
+        fm.mask | r['isBadReg'] | r['isOutlier'] | r['isStep'] | \
+        r['isDis'] | bdesat | batTwk
+    
+    r = rec_append_fields(r,'fmask'    ,fm.mask)
+    
+    # segEnd is the union of the manually excluded regions and the
+    # attitude tweaks.
+    segEnd = r['isBadReg'] | batTwk
+    r = rec_append_fields(r,'segEnd',segEnd)
+
+    return r
+
+
+def parseQual(SAP_QUALITY):
+    """
+    Parse the SAP_QUALITY field
 
     Parameters
     ----------
-    qual - SAP_QUALITY
+    SAP_QUALITY - Quality flag set from fits file.
+
+    Returns
+    -------
+    Record array where each of the fields are booleans corresponding
+    to wheter that particular bin was set.
+
+    rqual['Dis'] - True if the Kepler team identified a discontinuity.
+
     """
 
+    rqual = np.zeros(SAP_QUALITY.size,dtype=sapdtype)
+    for b,k in zip(sapkey['bit'],sapkey['key']):
+        val = 2**(b-1)
+        rqual[k] = (SAP_QUALITY & val) != 0
+
+    return rqual
+
+def isDis(bDis):
+    """
+    Is discontinuity?
+
+    If the kepler team identifies a discontinuity.  We mask out
+    several cadences before, and many cadences afterward.
+
+    Parameters
+    ----------
+    bDis - Boolean from Kepler SAP_QAULITY
+
+    Returns
+    -------
+    Boolean array corresponding to masked out region.
+
+    """
     preCut  = 4 # Number of cadences to cut out before discontinuity
     postCut = 50 # Number of cadences to cut after discont
 
-    cad = np.arange(qual.size)
+    cad = np.arange(bDis.size)
     cad = ma.masked_array(cad)
-    disId = cad[qual==1024]
+    disId = cad[ bDis ]
     for id in disId:
         cad = ma.masked_inside(cad,id-preCut,id+postCut)
 
@@ -210,17 +308,17 @@ def isBadReg(t):
     -------
     mask : mask indicating bad values. True is bad.
     """
-    cutpath = os.path.join(os.environ['KEPDIR'],'ranges/cut_time.txt')
-    rec = atpy.Table(cutpath,type='ascii').data
+
+
     tm = ma.masked_array(t,copy=True)
-    for r in rec:
+    for r in cutList:
         tm = ma.masked_inside(tm,r['start'],r['stop'])
     mask = tm.mask
     return mask
 
 def isStep(f):
     """
-    isStep
+    Is Step
 
     Identify steps in the LC
     """

@@ -25,29 +25,47 @@ inp   = args.inp
 out   = args.out
 
 h5inp = h5py.File(inp)
-dsinp    = h5inp['LIGHTCURVE']
+dsinp = h5inp['LIGHTCURVE']
+
 
 def func(i):
     r = dsinp[i]
-    t = qalg.rec2tab(r)
+    oldName = ['TIME','CADENCENO']
+    newName = ['t','cad']
+    for o,n in zip(oldName,newName):
+        r = mlab.rec_append_fields(r,n,r[o])
+        r = mlab.rec_drop_fields(r,o)
 
-    t.rename_column('TIME','t')
-    t.rename_column('CADENCENO','cad')
-
-    t = keplerio.nQ(t)
-    t = keplerio.nanTime(t)
-    t = prepro.qmask(t)
+    r = keplerio.rnQ(r)
+    r = keplerio.rnanTime(r)
+    r = prepro.rqmask(r)
     
     # Detrend the flux
-    fm = ma.masked_array(t.f,t.fmask)
-    tm = ma.masked_array(t.t,t.fmask)
-    ftnd  = detrend.spldtm(tm,fm)
+    fm = ma.masked_array(r['f'],r['fmask'])
+    tm = ma.masked_array(r['t'],r['fmask'])
+
+    # Assign a label to the segEnd segment
+    label = ma.masked_array( np.zeros(r.size)-1, r['segEnd'] )
+
+    ftnd = fm.copy()
+
+    sL = ma.notmasked_contiguous(label)
+    nseg = len(sL)
+    for i in range(nseg):
+        s = sL[i]
+        ftnd[s]  = detrend.spldtm(tm[s],fm[s])
+        label[s] = i
+
+    r = mlab.rec_append_fields(r,'label',label.data)
     fdt   = fm-ftnd
-    keplerio.update_column(t,'fdt',fdt.data)
+
+    r = mlab.rec_append_fields(r,'ftnd',ftnd.data)
+    r = mlab.rec_append_fields(r,'fdt',fdt.data)
+    t = qalg.rec2tab(r)
     return t
     
 t0 = func(0)
-diff = ['fdt']
+diff = ['fdt','fmask','segEnd']
 h5 = h5plus.File(out)
 ds,ds1d = h5plus.diffDS(dsinp.name,t0.data.dtype,dsinp.shape,h5,diff=diff)
 kic = h5.create_dataset( 'KIC',data=h5inp['KIC'][:] )

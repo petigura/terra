@@ -25,16 +25,19 @@ import glob
 import pyfits
 import sqlite3
 
-from matplotlib.mlab import csv2rec
+
+from matplotlib import mlab
 import keptoy
 import detrend
 import tfind
+import qalg
+
 
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
-qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+qsfx  = mlab.csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
 kicdb = os.path.join(kepfiles,'KIC.db')
 
 # Extra columns not needed in transit search.
@@ -156,6 +159,8 @@ def nQ(t0):
     """
     Normalize lightcurve.
 
+    Simple wrapper around rnQ.
+
     Parameters
     ----------
     t0 : input table.
@@ -166,6 +171,26 @@ def nQ(t0):
     
     """
     t = copy.deepcopy(t0)
+    r = rnQ(t.data)
+    t = qalg.rec2tab(r)
+    t.keywords['NQ'] = True
+
+    return t
+
+def rnQ(r0):
+    """
+    Record Array Normalize Quarter
+
+    Parameters
+    ----------
+    r0 : Record array with the columns to be normalized.
+    
+    Returns
+    -------
+    r  : Light curve with new, median-normalized columns.
+
+    """
+    r = r0.copy()
 
     col   = ['SAP_FLUX','PDCSAP_FLUX']
     ecol  = ['SAP_FLUX_ERR','PDCSAP_FLUX_ERR']
@@ -173,19 +198,19 @@ def nQ(t0):
     ecol2 = ['ef','efpdc']
 
     for c,ec,c2,ec2 in zip(col,ecol,col2,ecol2):
-        update_column(t,c2, copy.deepcopy(t[c]) )
-        update_column(t, ec2, copy.deepcopy(t[ec]) )
-        medf = np.median(t[c])
-        t.data[c2]  =  t.data[c2]/medf - 1
-        t.data[ec2] =  t.data[ec2]/medf
+        medf = np.median(r[c])
+        norm = r[c] / medf - 1
+        enorm = r[ec] / medf
+        r = mlab.rec_append_fields(r,c2,norm)
+        r = mlab.rec_append_fields(r,ec2,enorm)
 
-    t.keywords['NQ'] = True
-
-    return t
+    return r
 
 def nanTime(t0):
     """
     Remove nans from the timeseries.
+
+    Simple wrapper around rnanTime
 
     Parameters
     ----------
@@ -197,10 +222,27 @@ def nanTime(t0):
     
     """
     t = copy.deepcopy(t0)
-    tm = ma.masked_invalid(t.t)
-    cad,t.t = detrend.maskIntrp(t.cad,tm)
-
+    r = rnanTime(t.data)
+    t = qalg.rec2tab(r)
     return t
+
+def rnanTime(r0):
+    """
+    Record Array Remove Nans
+
+    Parameters
+    ----------
+    r0 : input recarray must contain `t` and `cad` fields.
+
+    Returns
+    -------
+    r  : recarray with the nantimes removed.
+    
+    """
+    r = r0.copy()
+    tm = ma.masked_invalid( r['t'] )
+    cad,r['t'] = detrend.maskIntrp( r['cad'] , tm )
+    return r
 
 def sQ(tLCset0):
     """
