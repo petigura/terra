@@ -64,7 +64,7 @@ def bvfitm(fm,bv):
     Parameters
     ----------
 
-    fm   : photometry masked
+    fm   : photometry masked.  If there is no, mask we deem every point good.
     bv   : basis vectors, stacked row-wise
 
     Returns
@@ -72,9 +72,12 @@ def bvfitm(fm,bv):
     fcbv : fit using a the CBVs
 
     """
+    assert fm.dtype == bv.dtype,\
+        'Light curve and basis vectors must be same type' 
+
     if type(fm) != np.ma.core.MaskedArray:
-        fm = ma.masked_array(fm)
-        fm.mask = np.ones(fm.size).astype(bool)
+        fm      = ma.masked_array(fm)
+        fm.mask = np.zeros(fm.size).astype(bool)
 
     assert fm.size == bv.shape[1],"fm and bv must have equal length"
     mask  = fm.mask 
@@ -82,11 +85,8 @@ def bvfitm(fm,bv):
     p1          = np.linalg.lstsq( bv[:,~mask].T , fm[~mask] )[0]
     fcbv        = fm.copy()
     fcbv[~mask] = np.dot( p1 , bv[:,~mask] )
-    return p1,fcbv
 
-#
-# Non-standard use functions below.
-#
+    return p1,fcbv
 
 
 def robustSVD(D,nMode=8,sigOut=10,maxit=4):
@@ -198,6 +198,11 @@ def moments(A):
     rL['min']  = ma.min(     A , axis=0 )
     rL['mad']  = ma.median(  np.abs( A - rL['med'] ) , axis=0 )
     return rL
+
+#
+# Non-standard use functions below.
+#
+
 
 
 tq = 89.826658388163196

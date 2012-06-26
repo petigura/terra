@@ -57,8 +57,6 @@ A     = dot(U,S)
 fit   = dot(A[:,:nModes],V[:nModes])
 fit   = fit*mad[goodid]
 
-a = tuple(kic[:])
-query = 'select id,kic_ra,kic_dec from KIC where id in %s' % str(a)
 skic = str(tuple(kic[goodid]))
 
 conn = sqlite3.connect(kicdbpath)
