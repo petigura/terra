@@ -117,9 +117,58 @@ def XWrap(x,ifold,fill_value=0):
     return xwrap
 
 
+def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
+    """
+    Period Grid
+
+    Create a grid of trial periods (days).
+
+    [P_0, P_1, ... P_N]
+    
+    Suppose there is a tranit at P_T.  We want our grid to be sampled
+    such that we wont skip over it.  Suppose the closest grid point is
+    off by dP.  When we fold on P_T + dP, the transits will be spread
+    out over dT = N_T * dP where N_T are the number of transits in the
+    timeseries (~ tbase / P_T).  We chose period spacing so that dT is
+    a small fraction of expected transit duration.
+
+    Parameters
+    ----------
+    tbase    : Length of the timeseries
+    ftdurmi  : Minimum fraction of tdur that we'll look for. The last
+               transit of neighboring periods in grid must only be off
+               by a `ftdurmi` fraction of a transit duration.
+    Pmax     : Maximum period.  Defaults to tbase/2, the maximum period
+               that has a possibility of having 3 transits
+    Pmin     : Minumum period in grid 
+
+    Returns
+    -------
+    PG       : Period grid.
+    """
+
+    if Pmax == None:
+        Pmax = tbase/2.
+
+    P0  = Pmin
+    PG  = []
+    while P0 < Pmax:
+        # Expected transit duration for P0.
+        tdur   = a2tdur( P2a(P0)  ) 
+        tdurmi = ftdurmi * tdur
+        dP     = tdurmi / tbase * P0
+        P0 += dP
+        PG.append(P0)
+
+    PG = np.array(PG)
+    return PG
+
 def P2Pcad(PG0):
     """
-    Period Grid (cadences)
+    Convert units of period grid from days to cadences
+
+    We compute MES by averaging SES column-wise across a wrapped SES
+    array.  We must fold according to an integer number of cadences.
     """
     assert type(PG0) is np.ndarray, "Period Grid must be an array"
 
