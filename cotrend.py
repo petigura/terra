@@ -69,6 +69,7 @@ def bvfitm(fm,bv):
 
     Returns
     -------
+    p1   : best fit coeff
     fcbv : fit using a the CBVs
 
     """

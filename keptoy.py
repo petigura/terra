@@ -199,15 +199,15 @@ def P051T(p,t):
     pP05 = [P , p[0] , p[1] , p[2] ]
     return  P05(pP05,t)
 
-def genEmpLC(d0,tdt,fdt):
+def genEmpLC(d0,t,f):
     """
     Generate Synthetic Lightcurves
 
     Parameters
     ----------
     darr : List of dictionaries specifying the LC parameters.
-    tdt  : Input time series
-    fdt  : Input flux series
+    t    : Input time series
+    f    : Input flux series
 
 
     Returns
@@ -215,7 +215,7 @@ def genEmpLC(d0,tdt,fdt):
     f :  flux arrays
     """
     d = copy.deepcopy(d0)
-    f = inject(tdt,fdt,**d)
+    f = inject(t,f,**d)
     f = f.astype(np.float32)
     return f
 

@@ -173,6 +173,7 @@ def nQ(t0):
     t = copy.deepcopy(t0)
     r = rnQ(t.data)
     t = qalg.rec2tab(r)
+    t.keywords = t0.keywords
     t.keywords['NQ'] = True
 
     return t
@@ -224,6 +225,7 @@ def nanTime(t0):
     t = copy.deepcopy(t0)
     r = rnanTime(t.data)
     t = qalg.rec2tab(r)
+    t.keywords = t0.keywords
     return t
 
 def rnanTime(r0):

@@ -78,6 +78,7 @@ conn.close()
 tkic = array(res,dtype=zip(['id','ra','dec'],[int,float,float]))
 A = A[:,:nModes]
 cmax = abs(A).max()
+fig = figure(figsize=(18,8))
 for i in range(nModes):
     ra = tkic['ra']
     dec = tkic['dec']

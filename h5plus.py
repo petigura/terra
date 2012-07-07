@@ -42,6 +42,7 @@ def atpy2h5(files,out,diff='all',name='ds'):
    
    kicL = []   
    nFail = 0 
+#   import pdb;pdb.set_trace()
    for i in range(nfiles):
       if np.mod(i,100)==0:
          print i
@@ -54,7 +55,6 @@ def atpy2h5(files,out,diff='all',name='ds'):
          
          if diff!='all':
             data = mlab.rec_keep_fields(data,diff)
-         else:
             ds1d[:] =  mlab.rec_drop_fields(data,diff)
 
          ds[i-nFail] = data
