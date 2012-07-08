@@ -539,21 +539,23 @@ def FFAGroupShiftAdd(group0,Arow,Brow,Bshft):
              shape(group0) = (M,P0) where M is a power of 2.
 
     """
-    nRowGroup = group0.shape[0]
+    nRowGroup,nColGroup = group0.shape
     group     = np.empty(group0.shape)
 
     sizes = np.array([Arow.size, Brow.size, Bshft.size])
     assert (sizes == nRowGroup).all() , 'Number of rows in group must agree with butterfly output'
+
+    # Grow group by the maximum shift value
+    maxShft = max(Bshft)
+    group0 = np.hstack( [group0 , group0[:,: maxShft]] )
 
     for iRow in range(nRowGroup):
         iA = Arow[iRow]
         iB = Brow[iRow]
         Bs = Bshft[iRow]
 
-        A = group0[iA] 
-        B = group0[iB]
-        if Bs!=0:
-            np.roll(B,-Bshft[iRow])
+        A = group0[iA][:-maxShft] 
+        B = group0[iB][Bs:Bs+nColGroup]
 
         group[iRow] = A + B
 
