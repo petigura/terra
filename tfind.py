@@ -17,6 +17,16 @@ import detrend
 
 from config import *
 
+# dtype of the record array returned from ep()
+epnames = ['mean','count','epoch','Pcad']
+epdtype = zip(epnames,[float]*len(epnames) )
+epdtype = np.dtype(epdtype)
+
+# dtype of the record array returned from tdpep()
+tdnames = epnames + ['noise','s2n','twd']
+tddtype = zip(tdnames,[float]*len(tdnames))
+tddtype = np.dtype(tddtype)
+
 def GenK(twdcad,fcwd=1):
     """
     Generate Kernels.  
@@ -305,60 +315,55 @@ def mtd(t,f,isStep,fmask,twd):
     dM = ma.masked_array(dM,mask=mask,fill_value=0)
     return dM
 
-def tdpep(t,fm,isStep,PG0):
+def tdpep(t,fm,isStep,P1,P2,twdG):
     """
     Transit-duration - Period - Epoch
 
     Parameters 
     ---------- 
-    fm  : Flux with bad data points masked out.  It is assumed that
-          elements of f are evenly spaced in time.
-    PG0 : Initial period grid.
+    fm   : Flux with bad data points masked out.  It is assumed that
+           elements of f are evenly spaced in time.
+    P1   : First period (cadences)
+    P2   : Last period (cadences)
+    twdG : Grid of transit durations (cadences)
 
     Returns
     -------
 
-    epoch2d : Grid (twd,P) of best epoch 
-    df2d    : Grid (twd,P) of depth epoch 
-    count2d : number of filled data for particular (twd,P)
-    noise   : Grid (twd) typical scatter 
-    PG      : The Period grid
-    twd     : Grid of trial transit widths.
-
+    rtd : 2-D record array with the following fields at every trial
+          (twd,Pcad):
+          - noise
+          - s2n
+          - twd
+          - fields in rep
     """
     assert fm.fill_value ==0
+
     # Determine the grid of periods that corresponds to integer
     # multiples of cadence values
-    ncad = fm.size
-    PcadG,remG,PG = P2Pcad(PG0,ncad)
-       
-    # Initialize tdur grid.  
-    twdMi = a2tdur( P2a( PG[0 ] ) ) /keptoy.lc
-    twdMa = a2tdur( P2a( PG[-1] ) ) /keptoy.lc
-    twdG = np.round(np.linspace(twdMi,twdMa,4)).astype(int)
-    rec2d = []
-    noise = []
-    for twd in twdG:
-        dM = mtd(t,fm.filled(),isStep,fm.mask,twd)
-        rec2d.append( pep(t[0],dM,PcadG,remG) )
+    PcadG = np.arange(P1,P2+1)
 
-        # Noise per transit 
-        mad = ma.abs(dM)
-        mad = ma.median(mad)
-        noise.append(mad)
+    ntwd     = len(twdG)
 
-    rec2d = np.vstack(rec2d)
+    # Determine how many periods we will fold on.
+    nPperP0  = 2**np.ceil( np.log2(1.*fm.size/PcadG) )
+    nP       = np.sum(nPperP0)
 
-    make2d = lambda x : np.tile( np.vstack(x), (1,rec2d.shape[1] ))
-    rec2d = mlab.rec_append_fields(rec2d,'noise',make2d(noise))
-    rec2d = mlab.rec_append_fields(rec2d,'twd',  make2d(twdG))
+    rtd = np.empty( (ntwd,nP) , dtype=tddtype )
+    for i in range(ntwd):     # Loop over twd
+        twd = twdG[i]
+        rtd['twd'][i] = twd
 
-    PG = np.tile( PG, (rec2d.shape[0],1 ))
-    rec2d = mlab.rec_append_fields(rec2d,'PG',PG)
+        dM  = mtd(t,fm.filled(),isStep,fm.mask,twd)
+        rep = pep(t[0],dM,PcadG)
 
-    s2n   = rec2d['fom']/rec2d['noise']*np.sqrt(rec2d['count'])
-    rec2d = mlab.rec_append_fields(rec2d,'s2n',  s2n )
-    return rec2d
+        for k in epdtype.names:
+            rtd[i][k] = rep[k]
+
+        rtd['noise'][i] = ma.median( ma.abs(dM) )        
+
+    rtd['s2n'] = rtd['mean']/rtd['noise']*np.sqrt(rtd['count'])
+    return rtd
 
 def pep(t0,dM,PcadG):
     """
@@ -372,10 +377,10 @@ def pep(t0,dM,PcadG):
     """
 
     func = lambda Pcad: ep(t0,dM,Pcad)
-    res = map(func,PcadG)
-    res = np.hstack(res)
+    rep = map(func,PcadG)
+    rep = np.hstack(rep)
 
-    return res
+    return rep
 
 def ep(t0,dM,Pcad0):
     """
@@ -388,10 +393,9 @@ def ep(t0,dM,Pcad0):
     Pcad : Number of cadances to foldon
 
     Returns the following information:
-    - 'fom'    : Figure of merit for each trial epoch
-    - 'count'  : 
-    - 'epoch'  : Trial 
-    - 'win'    : Which epochs passed (window function)
+    - 'mean'   : Average of the folded columns (does not count masked items)
+    - 'count'  : Number of non-masked items.
+    - 'epoch'  : epoch maximum mean.
     """
     
     dMW = XWrap2(dM,Pcad0,pow2=True)
@@ -411,20 +415,18 @@ def ep(t0,dM,Pcad0):
     countF = FFA(mask) # Number of valid data points
     meanF  = sumF/countF
 
-    names = ['mean','count','epoch','Pcad']
-    dtype = zip(names,[float]*4)
-    res   = np.empty(M,dtype=dtype)
+    rep   = np.empty(M,dtype=epdtype)
 
     # Take maximum epoch
     idColMa      = meanF.argmax(axis=1)
-    res['mean']  = meanF[idRow,idColMa]
-    res['count'] = countF[idRow,idColMa]
-    res['epoch'] = epoch[idColMa]
-    res['Pcad']  = Pcad
+    rep['mean']  = meanF[idRow,idColMa]
+    rep['count'] = countF[idRow,idColMa]
+    rep['epoch'] = epoch[idColMa]
+    rep['Pcad']  = Pcad
 
-    return res
+    return rep
 
-def tdmarg(rec2d):
+def tdmarg(rtd):
     """
     Marginalize over the transit duration.
 
@@ -439,9 +441,9 @@ def tdmarg(rec2d):
     rec : Values corresponding to maximal s2n:
     
     """
-    iMaTwd = np.argmax(rec2d['s2n'],axis=0)
-    x      = np.arange(rec2d.shape[1])
-    rec    = rec2d[iMaTwd,x]
+    iMaTwd = np.argmax(rtd['s2n'],axis=0)
+    x      = np.arange(rtd.shape[1])
+    rec    = rtd[iMaTwd,x]
 
     return rec
 
@@ -495,8 +497,6 @@ def FFA(XW):
     for stage in range(1,nStage+1):
         XWFS = FFAShiftAdd(XWFS,stage) 
     return XWFS
-
-
 
 def FFAButterfly(stage):
     """
