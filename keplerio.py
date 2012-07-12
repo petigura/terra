@@ -246,7 +246,30 @@ def rnanTime(r0):
     cad,r['t'] = detrend.maskIntrp( r['cad'] , tm )
     return r
 
+
 def sQ(tLCset0):
+    """
+    Stitch Quarters (stored as a table set) together
+
+    Parameters
+    ----------
+    tLCset0 : List of tables to stitch together.
+    
+    Returns
+    -------
+    tLC : Lightcurve that has been stitched together.    
+    """
+    tLCset = copy.deepcopy(tLCset0)
+    rL  = [ t.data for t in tLCset ]
+    rLC = rsQ(rL)
+
+    # Output (stiched table)
+    tLC = qalg.rec2tab(rLC)
+    tLC.table_name = "LC" 
+    tLC.keywords = tLCset[0].keywords
+    return tLC
+
+def rsQ(rL):
     """
     Stitch Quarters together.
 
@@ -257,34 +280,32 @@ def sQ(tLCset0):
 
     Parameters
     ----------
-    tLCset0 : List of tables to stitch together.
-    
+    rL : List of record arrays
+
     Returns
     -------
-    tLC : Lightcurve that has been stitched together.    
+    rLC : Record array of all the joined quarters.
 
     """
-
-    tLCset = copy.deepcopy(tLCset0)
-    tLC = atpy.Table()
-    tLC.table_name = "LC" 
-    tLC.keywords = tLCset[0].keywords
-
+    startTimes = np.array([ r['t'][0] for r in rL] )
+    
+    assert (startTimes==np.sort(startTimes) ).all(), 'Quarters must be in order'
+    
     # Figure out which cadences are missing and fill them in.
-    cad       = [tab.cad for tab in tLCset]
+    cad       = [r['cad'] for r in rL]
     cad       = np.hstack(cad) 
     cad,iFill = cadFill(cad)
     nFill     = cad.size
-    update_column(tLC,'cad',cad)
+
+    rLC = np.rec.fromarrays([cad],names='cad')
 
     # Add all the columns from the FITS file.
-    fitsname = tLCset[0].data.dtype.fields.keys()
+    fitsname = rL[0].dtype.fields.keys()
     fitsname.remove('cad')
 
     for fn in fitsname:
-        col = [tab[fn] for tab in tLCset] # Column in list form
+        col = [r[fn] for r in rL] # Column in list form
         col = np.hstack(col)       
-
         # Fill new array elements
         if col.dtype is np.dtype('bool'):
             fill_value = True
@@ -294,13 +315,13 @@ def sQ(tLCset0):
         ctemp = np.empty(nFill,dtype=col.dtype) # Temporary column
         ctemp[::] = fill_value
         ctemp[iFill] = col
-        update_column(tLC,fn,ctemp)
+        rLC = mlab.rec_append_fields(rLC,fn,ctemp)
 
     # nanTime doesn't work here because I've update the "cad" field
-    tm = ma.masked_invalid(tLC.t)
-    cad,tLC.t = detrend.maskIntrp(tLC.cad,tm)
+    tm = ma.masked_invalid(rLC['t'])
+    cad,rLC['t'] = detrend.maskIntrp(rLC['cad'],tm)
 
-    return tLC
+    return rLC
 
 def cadFill(cad0):
     """
