@@ -3,7 +3,6 @@ Erik's cotrending functions.
 """
 from scipy import ndimage as nd
 from scipy import stats
-
 import glob
 import atpy
 
@@ -17,8 +16,10 @@ import prepro
 
 from matplotlib import mlab
 
-from numpy import ma
+from numpy import ma,rec
 import numpy as np
+
+from config import nMode,sigOut,maxIt
 
 def dtbvfitm(t,fm,bv):
     """
@@ -90,7 +91,7 @@ def bvfitm(fm,bv):
     return p1,fcbv
 
 
-def robustSVD(D,nMode=8,sigOut=10,maxit=4):
+def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
     """
     Robust SVD
 
@@ -109,12 +110,16 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
     is an outlier, remove that row from D.
 
     Parameters
-    ----------
-    
+    ----------    
     D      : Data matrix.  1-D vectors stacked vertically (row-wise). May
              not contain nans, or masked values.
     nMode  : Number of modes
-    sigOut : Clip outliers that are more than sigOut away from the median.
+    sigOut : Clip outliers that are more than sigOut away from the
+             median.  Defaults to the config value.
+    maxIt  : Maximum number of iterations to perform before exiting.
+             Defaults to the config value.
+
+
     """
     Dnrow,Dncol = D.shape     
     D    = D.copy()
@@ -128,7 +133,7 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
     finished = False
     while finished is False:
         print count
-        if count == maxit:
+        if count == maxIt:
             finished=True
 
         D = D[gRow]
@@ -186,6 +191,59 @@ def robustSVD(D,nMode=8,sigOut=10,maxit=4):
 
     return U,S,V,goodid,X2
 
+def mkModes(fdt,kic):
+    """
+    Make Modes
+
+    Take a collection of light curves and find the principle
+    components.  This algorithm implements a robust SVD.
+
+    Parameters
+    ----------
+    fdt : Masked array.  Collection of light curves arranged row-wise.
+          Masked elements will be eliminated from the SVD
+    kic : Array with the KIC ID
+    """
+
+    nRow,nCol = fdt.shape
+
+    # Cut out the bad columns and rows
+    fdt[fdt.mask] = 0
+    czero = fdt.sum(axis=0)!=0.
+    fdt = fdt[:,czero] 
+    
+    rzero = np.median(fdt,axis=1)!=0.
+    fdt = fdt[rzero,:] 
+    kic = kic[rzero] 
+    nstars = kic.size
+
+    # Normalize by Median Absolute Dev.  Normalized reduced Chi2
+    # should be about 1.
+    mad = ma.median(ma.abs(fdt),axis=1)
+    mad = mad.reshape(mad.size,1)
+    fdt = fdt/mad
+    fdt = np.vstack(fdt)
+
+    U,S,Vtemp,goodid,X2 = robustSVD(fdt)
+    # Cut out the columns that did not pass the robust SVD
+    mad = mad[goodid]
+    kic = kic[goodid]
+
+    nGood = Vtemp.shape[0] # Number of inlier stars.
+
+    # Fill back in the empty columns
+    V = np.zeros((nGood,nCol))
+    V[:,czero] = Vtemp
+
+    S      = S[:nstars,:nstars]
+    A      = np.dot(U,S)
+    A      = A[:,:nMode]
+    fit    = np.dot(A,V[:nMode])*mad
+
+    return U,S,V,A,fit,kic
+
+
+
 def moments(A):
     # Evaluate moments
     names = ['pc','med','mad','mean','max','min']
@@ -200,10 +258,60 @@ def moments(A):
     rL['mad']  = ma.median(  np.abs( A - rL['med'] ) , axis=0 )
     return rL
 
-#
-# Non-standard use functions below.
-#
+def cotrendFits(U,S,V,nModes=None):
+    """
+    Cotrending Fits
 
+    Use the priciple components and singular values, to construct the
+    cotrending fits to the light curves
+    """
+
+    # Construct fits
+    nstars = U.shape[0]
+    S      = S[:nstars,:nstars]
+    A      = np.dot(U,S)
+    A      = A[:,:nModes]
+    fits   = np.dot(A,V[:nModes])
+    fits   = fit*mad[goodid]
+    
+    return fits
+
+def calibrate():
+    """
+    Calibrate Light Curves
+
+    Take a collection of light curves along with the PCA vectors.
+    """
+def join_on_kic(x1,x2,kic1,kic2):
+    """
+    Join Arrays on KIC
+
+    Parameters
+    ----------
+
+    x1   : First array
+    x2   : Second array
+    kic1 : KIC ID corresponding to first array
+    kic2 : KIC ID corresponding to first array
+
+    Returns
+    -------
+    xj1  : Joined first array
+    xj2  : Joined second array
+    kic  : The union of kic1 kic2
+    """
+    
+    r = lambda kic : rec.fromarrays([kic,np.arange(kic.size)],names='kic,rid')
+    r1 = r(kic1)
+    r2 = r(kic2)
+                                    
+    rj = mlab.rec_join('kic',r1,r2)
+    kic = rj['kic']
+
+    xj1 = x1[ rj['rid1'] ]
+    xj2 = x2[ rj['rid2'] ]
+    
+    return xj1,xj2,kic
 
 
 tq = 89.826658388163196

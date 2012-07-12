@@ -28,30 +28,27 @@ nModes = 4
 parser = ArgumentParser(description='Diagnose Modes')
 parser.add_argument('svd',type=str,help='Mode file')
 parser.add_argument('q',  type=int,help='quarter')
-parser.add_argument('out',type=str,help='output basename')
+parser.add_argument('out',nargs='?',type=str,help='output basename.  If none is given, just knock off the .svd.h5')
+
 args = parser.parse_args()
+out  = args.out 
+if out is None:
+    out = args.svd.replace('.svd.h5','')
 
 hsvd = h5py.File(args.svd)
 q    = args.q
 
-U,S,V,goodid,mad,kic = \
-    hsvd['U'],hsvd['S'],hsvd['V'],hsvd['goodid'],hsvd['MAD'],hsvd['KIC']
+V   = hsvd['V'][:]
+fit = hsvd['fit'][:]
+kic = hsvd['KIC'][:]
+A   = hsvd['A'][:]
 
-# Construct fits
-nstars = U.shape[0]
-S     = S[:nstars,:nstars]
-A     = dot(U,S)
-A     = A[:,:nModes]
-fit   = dot(A,V[:nModes])
-fit   = fit*mad[goodid]
 
-# Order the KIC list and the Fit Coeffs by KIC
-gkic = kic[goodid]
+# Sort the A array in ascending order of KIC 
+gkic = kic[:]
 sid  = argsort(gkic)
 gkic = gkic[sid]
-A = A[sid]
-
-
+A    =  A[sid]
 
 skic = str(tuple(gkic))
 
@@ -84,7 +81,7 @@ for i in range(nModes):
     ylabel('Dec (Deg)')
     title('PC %i' % (i+1))
     fig = gcf()
-    fig.savefig(args.out+'_fov%i.png' % i)
+    fig.savefig(out+'_fov%i.png' % i)
 clf()
 
 t = np.arange(V[0].size)*keptoy.lc
@@ -95,6 +92,6 @@ for i in range(nModes):
 xlabel('time')
 title('%i Modes' % nModes)
 fig = gcf()
-fig.savefig(args.out+'_pc.png')
+fig.savefig(out+'_pc.png')
 
 
