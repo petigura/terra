@@ -14,7 +14,7 @@ from keptoy import *
 import keptoy
 import keplerio
 import detrend
-import FFA
+import FFA_cy as FFA
 
 from config import *
 
