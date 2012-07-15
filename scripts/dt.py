@@ -14,7 +14,6 @@ import detrend
 from matplotlib import mlab
 
 parser = ArgumentParser(description='Wrapper around detrender')
-
 parser.add_argument('inp',type=str,help='input h5 file')
 parser.add_argument('out', nargs='?',type=str,help='output h5 file.  If not given, we just change the extention from .h5 to .dt.h5')
 parser.add_argument('--diff',nargs='+',type=str,default=[],
@@ -28,7 +27,6 @@ if out is None:
 
 h5inp = h5py.File(inp)
 dsinp = h5inp['LIGHTCURVE']
-
 
 def func(i):
     r = dsinp[i]
@@ -65,18 +63,17 @@ def func(i):
     r = mlab.rec_append_fields(r,'fdt',fdt.data)
     return r
     
-t0 = func(0)
+r0 = func(0)
 diff = ['fdt','fmask','segEnd']
 h5 = h5plus.File(out)
-ds,ds1d = h5plus.diffDS(dsinp.name,t0.data.dtype,dsinp.shape,h5,diff=diff)
+ds,ds1d = h5plus.diffDS(dsinp.name,r0.dtype,dsinp.shape,h5,diff=diff)
 kic = h5.create_dataset( 'KIC',data=h5inp['KIC'][:] )
 
-ds1d[:] = mlab.rec_drop_fields(t0.data,diff)
+ds1d[:] = mlab.rec_drop_fields(r0,diff)
 for i in range(dsinp.shape[0]):
     if np.mod(i,100) == 0:
         print i
     r = func(i)
     ds[i] = mlab.rec_keep_fields(r,diff)
-
 
 h5.close()
