@@ -223,26 +223,24 @@ def tdpep(t,fm,isStep,P1,P2,twdG):
     # Determine the grid of periods that corresponds to integer
     # multiples of cadence values
     PcadG = np.arange(P1,P2+1)
-
     ntwd     = len(twdG)
 
-    # Determine how many periods we will fold on.
-    nPperP0  = 2**np.ceil( np.log2(1.*fm.size/PcadG) )
-    nP       = np.sum(nPperP0)
-
-    rtd = np.empty( (ntwd,nP) , dtype=tddtype )
+    rtd = []
     for i in range(ntwd):     # Loop over twd
         twd = twdG[i]
-        rtd['twd'][i] = twd
 
         dM  = mtd(t,fm.filled(),isStep,fm.mask,twd)
         rep = pep(t[0],dM,PcadG)
+        r   = np.empty(rep.size, dtype=tddtype)
 
         for k in epdtype.names:
-            rtd[i][k] = rep[k]
+            r[k] = rep[k]
+        r['noise'] = ma.median( ma.abs(dM) )        
+        r['twd']   = twd
 
-        rtd['noise'][i] = ma.median( ma.abs(dM) )        
+        rtd.append(r) 
 
+    rtd = np.vstack(rtd)
     rtd['s2n'] = rtd['mean']/rtd['noise']*np.sqrt(rtd['count'])
     return rtd
 
