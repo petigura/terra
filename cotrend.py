@@ -299,6 +299,11 @@ def join_on_kic(x1,x2,kic1,kic2):
     xj1  : Joined first array
     xj2  : Joined second array
     kic  : The union of kic1 kic2
+
+    Todo
+    ----
+    Make default proceedure to just return the indecies like (arg join).
+
     """
     
     r = lambda kic : rec.fromarrays([kic,np.arange(kic.size)],names='kic,rid')

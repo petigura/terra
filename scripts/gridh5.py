@@ -1,28 +1,42 @@
-import sim
-import argparse
-import atpy
+from argparse import ArgumentParser
 from numpy import ma
 import keptoy
 import h5py
 import h5plus
 import numpy as np
 import tfind
+import cotrend
 
-parser = argparse.ArgumentParser(description='Run grid search')
+prsr = ArgumentParser(description='Run grid search')
 
-parser.add_argument('inp',  type=str   , help='input file')
-parser.add_argument('out',  type=str   , help='output file')
-parser.add_argument('--n',  type=int,default=0,   help= 'number of searches to run.  If this keyword is set, we search for only on the first n rows.')
+prsr.add_argument('inp',  type=str   , help='input file')
+prsr.add_argument('out',  type=str   , help='output file')
+prsr.add_argument('--kic',type=int,nargs='+',help= 'KIC IDs to process')
+args = prsr.parse_args()
 
-args = parser.parse_args()
-h5 = h5py.File(args.inp)
+h5     = h5py.File(args.inp)
+dslc   = h5['LIGHTCURVE']
+dskic  = h5['KIC'][:]
 
-dslc = h5['LIGHTCURVE']
-nstars,ncad = dslc.shape
-if args.n is not 0:
-    nstars = args.n
+# Select a subset of the stars.
+if args.kic is not None:
+    argkic = np.array(args.kic)
+    x2 = x1 = np.arange( dslc.shape[0] )
+
+    idargj,iddsj,kic = cotrend.join_on_kic(x1,x2,argkic,dskic)
+    iddsj = list(iddsj)
     
-print "running grid search on %i stars" % nstars
+    skic = kic.astype('|S10')
+    skic = reduce(lambda x,y : x+' '+y,skic)
+    dslc = dslc[iddsj]
+
+    assert kic.size==argkic.size,'kic star not found'
+
+    print "Running grid search on the following %i stars \n" % kic.size
+    print skic
+
+nstars,ncad = dslc.shape
+
 rL = []
 for i in range(nstars):    
     lc = dslc[i]
@@ -43,4 +57,6 @@ rL = np.vstack(rL)
 
 h5 = h5plus.File(args.out)
 h5.create_dataset('RES',data=rL)
+h5.create_dataset('KIC',data=kic)
+h5.close()
 print "grid: Created %s" % args.out
