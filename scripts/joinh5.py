@@ -53,6 +53,7 @@ for f in files:
     nSubRow = dsSub.shape[0]
     dsout[irow:irow+nSubRow] = dsSub[:]
     dskic[irow:irow+nSubRow] = h['KIC'][:]
+    irow +=nSubRow
     h.close()
 
 h5out.close()
