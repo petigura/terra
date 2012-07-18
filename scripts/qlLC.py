@@ -12,8 +12,10 @@ prsr = ArgumentParser()
 prsr.add_argument('inp',type=str, help='input file')
 prsr.add_argument('out',type=str, help='out file')
 prsr.add_argument('--kic',type=int,help='If h5 file contains more than one lc, specify it with the KIC')
-
 args  = prsr.parse_args()
+
+print "inp: %s" % args.inp
+
 hcal = h5py.File(args.inp)
 if args.kic is not None:
     idkic = np.where(hcal['KIC'][:]==args.kic)[0][0]
@@ -52,3 +54,4 @@ yticks(yt,(np.round(yt*1e3,decimals=1)))
 draw()
 tight_layout()
 fig.savefig(args.out)
+print "out: %s" % args.out
