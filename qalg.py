@@ -192,3 +192,5 @@ def bwin(tLC,P,epoch):
     idnn   = np.argmin( abs(epochG - epoch) )
     bwin   = winG[idnn].astype(bool)
     return bwin
+
+

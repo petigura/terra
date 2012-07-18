@@ -27,9 +27,8 @@ P = res['Pcad']*keptoy.lc
 s2n = res['s2n']
 
 axSm.plot(P,s2n)
-xshft = P.ptp()/nsteps
+xshft = int(P.ptp())/nsteps
 yshft = np.percentile(s2n,99) - np.percentile(s2n,1)
-
 
 rcParams.update({'axes.color_cycle':['b','r']})
 
