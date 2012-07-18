@@ -72,21 +72,46 @@ def val(t,fm,tres):
 
     return tresfit,tresharm
 
-def gridPk(rgrid):
+def gridPk(rg,width=1000):
     """
     Grid Peak
     
     Find the peaks in the MES periodogram.
 
+    Parameters
+    ----------
+    rg    : record array corresponding to the grid output.
 
+    width : Width of the maximum filter used to compute the peaks.
+            The peaks must be the highest point in width Pcad.  Pcad
+            is not a uniformly sampled grid so actuall peak width (in
+            units of days) will vary.
 
+    Returns
+    -------
+    rgpk : A trimmed copy of rg corresponding to peaks.  We sort on
+           the `s2n` key
+
+    TODO
+    ----
+    Make the peak width constant in terms of days.
 
     """
-
-
-
     
+    s2nmax = nd.maximum_filter(rg['s2n'],width)
 
+    # np.unique returns the (sorted) unique values of the maximum filter.  
+    # rid give the indecies of us2nmax to reconstruct s2nmax
+    # np.allclose(us2nmax[rid],s2nmax) evaluates to True
+
+    us2nmax,rid = np.unique(s2nmax,return_inverse=True)
+    
+    bins = np.arange(0,rid.max()+2)
+    count,bins = np.histogram(rid,bins )
+    pks2n = us2nmax[ bins[count>=width] ]
+    pks2n = np.rec.fromarrays([pks2n],names='s2n')
+    rgpk  = mlab.rec_join('s2n',rg,pks2n)
+    return rgpk
 
 def getT(time,P,epoch,wd):
     """
