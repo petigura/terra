@@ -72,6 +72,21 @@ def val(t,fm,tres):
 
     return tresfit,tresharm
 
+def gridPk(rgrid):
+    """
+    Grid Peak
+    
+    Find the peaks in the MES periodogram.
+
+
+
+
+    """
+
+
+
+    
+
 
 def getT(time,P,epoch,wd):
     """

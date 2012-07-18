@@ -14,7 +14,6 @@ prsr.add_argument('out',type=str, help='out file')
 prsr.add_argument('--kic',type=int,help='If h5 file contains more than one lc, specify it with the KIC')
 
 args  = prsr.parse_args()
-import pdb;pdb.set_trace()
 hcal = h5py.File(args.inp)
 if args.kic is not None:
     idkic = np.where(hcal['KIC'][:]==args.kic)[0][0]
