@@ -6,6 +6,9 @@ from argparse import ArgumentParser
 import h5py
 import h5plus
 import tval
+from matplotlib import mlab
+import numpy as np
+
 prsr = ArgumentParser()
 
 prsr.add_argument('inp',type=str, help='input file')
@@ -19,6 +22,7 @@ print "out: %s" % args.out
 hgd  = h5py.File(args.inp,'r+') 
 rgpk = tval.gridPk(hgd['RES'][:])
 rgpk = rgpk[-args.n:][::-1]  # Take the last n peaks
+rgpk = mlab.rec_append_fields(rgpk,'pknum',np.arange(rgpk.size) )
 
 hpk = h5plus.File(args.out)
 hpk.create_dataset('RES',data=rgpk)

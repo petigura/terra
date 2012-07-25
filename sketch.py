@@ -16,168 +16,62 @@ import keptoy
 import qalg
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
-def cdpp():
-    t = atpy.Table('sqlite','all.db',table='ch1cdpp')
-
-    cdppmin = min(t.cdpp12hr)
-    cdppmax = max(t.cdpp12hr)
-
-    nplots = 8
-    cdpp = logspace(log10(20),log10(200),nplots)
-
-    for i in range(nplots):
-        print cdpp[i]
-        closest  = argsort( abs( t.cdpp12hr - cdpp[i] ))[0]
-        starcdpp = t.cdpp12hr[closest]
-        keplerid = t.KEPLERID[closest]
-        file = glob.glob('archive/data3/privkep/EX/Q3/kplr%09i-*_llc.fits' %
-                         keplerid)
-
-        star = atpy.Table(file[0],type='fits') 
-        ax = plt.subplot(nplots,1,i+1)
-
-        med = median(star.SAP_FLUX )
-
-        ax.plot(star.TIME,(star.SAP_FLUX/med-1),'.',ms=2,
-                label='KIC-%i, CDPP-12hr %.2f' % (keplerid,starcdpp) )
-        ax.legend()
-
-
-
-def markT(ax,tT,**kwargs):
-    for t in tT:
-        ax.axvline(t,**kwargs)
-    return ax
 
     
 def inspectT(t0,f0,P,ph,darr=None):
     """
-    Take a quick look at a transit
+    Inspect Transit
+
     """
-    size = 150
-    pad = 0.1 # amount to pad in units of size
-    cW = 2 
-    linscale = 3
+
     
-    fig = plt.gcf()
-
-    f = f0.copy()
-    t = t0.copy()
-
-    f -= f.mean()
-    t -= t[0]
-    tbase = t.ptp()
-
-    nt = int(ntrans( tbase, P, ph ))
-    otT =  P * (arange(nt) + ph ) 
-    print otT,t0[0]
-
-    # Plot the time series
-    nstack = int(ceil( t.ptp() / size))
-    gs = GridSpec(2,1)
-
-    gsStack = GridSpec(nstack, 1)
-    gsStack.update(hspace=0.001,bottom=.3,left=0.03,right=0.98)
-    gsT = GridSpec(1, nt)
-    gsT.update(top=0.28,wspace=0.001,left=0.03,right=0.98)
-
-    axStackl = []
-    for i in range(nstack):
-        axStackl.append( plt.subplot( gsStack[i]) ) 
-        ax = axStackl[i]
-        offset = size*i
-        ax.plot(t,f,marker='.',ms=2,lw=0,alpha=.6)
-        ax.set_xlim(offset-pad*size,offset+(1+pad)*size)
-        ax.axvline(offset,ls='--',lw=1,label='Padded')
-        ax.axvline(offset+size,ls='--',lw=1)
-        ax.annotate('Offset = %i' % offset,xy=(.01,.1),
-                    xycoords='axes fraction')
-
-        xa = ax.get_xaxis()
-        ya = ax.get_yaxis()
-
-        rms = std(f)
-        linthreshy = linscale*rms
-        ax.set_yscale('symlog',linthreshy=linthreshy)
-        ax.axhline(linthreshy,color='k',ls=':')
-        ax.axhline(-linthreshy,color='k',ls=':')
-        ax = markT(ax,otT,color='red',lw=3,alpha=0.4)
-
-        if darr != None:
-            inT = int(ntrans( tbase, darr['P'], darr['phase'] ))
-            itT =  darr['P']*arange(inT) + darr['phase'] * darr['P'] - t0[0]
-            ax = markT(ax,itT,color='green',lw=3,alpha=0.4)
-
-        if i == 0:
-            xa.set_ticks_position('top')
-            ax.legend(loc='upper left')
-        else:
-            xa.set_visible(False)
-            ya.set_visible(False)
-
-    tdur = a2tdur(P2a(P))
-
-    axTl = []    
-    for i in range(nt):
-        axTl.append( plt.subplot( gsT[i] ) )
-        axT = axTl[i]
-        axT.plot(t,f,'.')        
-
-        tfit,yfit = lightcurve(tbase=tbase,phase=ph,P=P,df=f)
-        axT.plot(tfit,yfit-1,color='red')
-        axT.set_xlim( otT[i] - cW*tdur , otT[i] + cW*tdur )
-        lims = axT.axis()
-
-        tm = ma.masked_outside( t,lims[0],lims[1] )
-        fm = ma.masked_array(f,mask=tm.mask)        
-
-        axT.axis( ymax=fm.max() , ymin=fm.min() )        
-        xticklabels = axT.get_xticklabels()
-        [xtl.set_rotation(30) for xtl in xticklabels]
-        ya = axT.get_yaxis()
-
-        if i != 0:
-            plt.setp(ya,visible=False)
-
-    limarr = array([ ax.axis() for ax in axTl ])
-    yMi = min(limarr[:,2])
-    yMa = max(limarr[:,3])
-
-
-    for ax in axTl:
-        ax.axis(ymax=yMa , ymin=yMi) 
-        
-
-
-def stack(axL,xmin,size,pad=0.1,lfsize='small'):
+def stack(t,y,P,t0,cL=['k','r'],step=1e-3):
     """
-    Given a list of axis, we'll adjust the x limits so we can fit a very long
-    data string on the computer screen.
+    Plot the SES    
     """
-    nAx = len(axL)
-    for i in range(nAx):
+    ax1 = gca()
+    ax2 = ax1.twiny()
 
-        ax = axL[i]
-        offset = xmin + i*size
+    ncL = len(cL)
+    t = t.copy()
 
-        ax.set_xlim(offset-pad*size,offset+(1+pad)*size)
-        ax.axvline(offset,ls='--',label='Padded')
-        ax.axvline(offset+size,ls='--')
-        ax.annotate(r'$\Delta$ T = %i' % (i*size) ,xy=(.01,.1),
-                    xycoords='axes fraction',fontsize=lfsize)
-        
-        xa = ax.get_xaxis()
-        ya = ax.get_yaxis()
+    # Shift t-series so first transit is at t = 0 
+    dt = tval.t0shft(t,P,t0)
+    t += dt
+    phase = mod(t,P)/P
 
-        if i == 0:
-            xa.set_ticks_position('top')
-        elif i ==nAx-1:
-            ax.legend(loc='lower right')
-            xa.set_visible(False)
-            ya.set_visible(False)
-        else:
-            xa.set_visible(False)
-            ya.set_visible(False)
+    # Associate each section of length P to a specific
+    # transit. Sections start 1/4 P before and end 3/4 P after.
+    label = np.floor(t/P+1./4).astype(int) 
+    labelL = unique(label)
+
+    for l in labelL:
+        blabel = (l == label)
+
+        tseg = t[blabel]-l*P
+        yseg = y[blabel]-step*l
+        ax1.plot( tseg, yseg, cL[np.mod(l,ncL)] )
+
+        phseg = phase[blabel]-1./4
+        ax2.plot(phseg,yseg,alpha=0)
+
+    ax2.set_xlim(-.25,.75)
+    ax2.axvline(0,alpha=.3)
+    ax2.axvline(.5,alpha=.3)
+
+def PF(t,y,P,t0,tdur):
+    """
+    Plot Phase-folded light curve
+    """
+
+    dt = tval.t0shft(t,P,epoch)
+    tm += dt
+    
+    clf()
+    ax = gca()
+    ax.plot(mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask],'.')
+
+
 
 def stackold(x,y,size,pad=0.1,axl=None,**kw):
     """
@@ -237,14 +131,6 @@ def DM(dM,P):
     dMW = ma.masked_invalid(dMW)
     plt.plot(t,dMW.mean(axis=0)*sqrt(nT) - 5e-4,lw=3)
 
-def XWrap(XW,step=1):
-    """
-    Plot XWrap arrays, folded on the right period.
-    """
-
-    nT = XW.shape[0]
-    ncad = XW.shape[1]
-    [plt.plot(XW[i,:]+i*step,aa=False) for i in range(nT)]    
 
 def FOM(t0,dM,P,step=None,**kwargs):
     """

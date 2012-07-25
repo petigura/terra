@@ -141,6 +141,119 @@ def getT(time,P,epoch,wd):
     tfold = ma.masked_invalid(tfold)
     return tfold
 
+def t0shft(t,P,t0):
+    """
+    Epoch shift
+
+    Find the constant shift in the timeseries such that t0 = 0.
+
+    Parameters
+    ----------
+    t  : time series
+    P  : Period of transit
+    t0 : Epoch of one transit (does not need to be the first).
+
+    Returns
+    -------
+    dt : Amount to shift by.
+    """
+    t  = t.copy()
+    dt = 0
+
+    t  -= t0 # Shifts the timeseries s.t. transits are at 0,P,2P ...
+    dt -= t0
+
+    # The first transit is at t =  nFirstTransit * P
+    nFirstTrans = np.ceil(t[0]/P) 
+    dt -= nFirstTrans*P 
+
+    return dt
+
+def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
+    """
+    Transit Label
+
+    Mark cadences as:
+    - transit   : in transit
+    - continuum : just outside of transit (used for fitting)
+    - other     : all other data
+
+    Parameters
+    ----------
+    t     : time series
+    P     : Period of transit
+    t0    : epoch of one transit
+    tdur  : transit duration
+    cfrac : continuum defined as points between tdur * (0.5 + cpad)
+            and tdur * (0.5 + cpad + cfrac) of transit midpoint cpad
+
+    Returns
+    -------
+    tLbl  : numerical labels for transit region starting at 0
+    cLbl  : numerical labels for continuum region starting at 0
+    """
+
+    t = t.copy()
+    t += t0shft(t,P,t0)
+    print t[0]
+    tLbl = np.zeros(t.size,dtype=int) - 1
+    cLbl = np.zeros(t.size,dtype=int) - 1 
+    
+    iTrans   = 0 # number of transit, starting at 0.
+    tmdTrans = 0 # time of iTrans mid transit time.  
+    while tmdTrans < t[-1]:
+        # Time since mid transit in units of tdur
+        t0dt = np.abs(t - tmdTrans) / tdur 
+        bt = t0dt < 0.5
+        bc = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
+        
+        tLbl[bt] = iTrans
+        cLbl[bc] = iTrans
+
+        iTrans += 1 
+        tmdTrans = iTrans * P
+
+    return tLbl,cLbl
+
+def LDT(t,fm,cLbl,tLbl):
+    """
+    Local Detrending
+
+    A simple function that subtracts a polynomial trend from the
+    lightcurve excluding a region around the transit.
+
+    Parameters
+    ----------
+    t    : time
+    f    : masked flux array
+    cLbl : Labels for continuum regions
+
+    
+    Returns
+    -------
+    fldt : local detrended flux
+    """
+
+    fldt    = ma.masked_array( np.zeros(t.size) , True ) 
+    
+    for i in range(cLbl.max() + 1):
+        bc = (cLbl == i )
+        fc = fm[bc]
+        tc = t[bc]
+        bldt = ( tLbl == i ) | (cLbl == i) 
+        tldt = t[bldt]
+
+        if fc.count() > 4:
+            shft = - np.mean(tc)
+            tc   -= shft 
+            tldt -= shft
+            pfit = np.polyfit(tc,fc,1)
+            fldt[bldt] = fm[bldt] - np.polyval(pfit,tldt)
+            fldt.mask[bldt] = fm.mask[bldt]
+
+    return fldt
+
+
 def trsh(P,tbase):
     ftdurmi = 0.5
     tdur = keptoy.a2tdur( keptoy.P2a(P) ) 
@@ -192,37 +305,6 @@ def id1T(t,fm,p,wd=2.,usemask=True):
     idL  = [ id for id in idL if id.size > 10 ]
 
     return ms,idL
-
-def LDT(epoch,tdur,t,f,pad=0.2,deg=1):
-    """
-    Local detrending
-
-    A simple function that subtracts a polynomial trend from the
-    lightcurve excluding a region around the transit.
-
-    pad : Extra number of days to notch out of the of the transit region.
-    """
-    bcont = abs(t - epoch) > tdur/2 + pad
-    fcont = f[bcont]
-    tcont = t[bcont]
-
-    legtrend = Legendre.fit(tcont,fcont,deg,domain=[t.min(),t.max()])
-    trend    = legtrend(t)
-    return trend 
-
-def LDTwrap(t,fm,p):
-    ms,idL = id1T(t,fm,p,wd=2.)
-    tdur  = p['tdur']
-
-    dtype=[('trend',float),('fdt',float),('tdt',float) ]
-    resL = []
-    for m,id in zip(ms,idL):
-        trend = LDT( t[m],tdur, t[id] , fm[id].data)
-        fdt   = fm[id]-trend
-        tdt   = t[id]
-        res = np.array(zip(trend,fdt,tdt),dtype=dtype)
-        resL.append(res)
-    return resL
 
 def fitcand(t,fm,p,full=False):
     """
