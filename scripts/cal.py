@@ -6,6 +6,7 @@ import h5plus
 import h5py
 from numpy import ma
 import numpy as np
+from matplotlib import mlab
 
 import cotrend
 from config import nMode
@@ -22,24 +23,15 @@ hsvd  = h5py.File(args.svd)
 
 out = h5plus.ext(args.fdt,'.cal.h5',out=args.out)
 
-dsdt = hdt['LIGHTCURVE']
-fdt  = ma.masked_array(dsdt['fdt'][:],dsdt['fmask'][:])
+rdt = hdt['LIGHTCURVE'][:]
+fdt  = ma.masked_array(rdt['fdt'][:],rdt['fmask'][:])
 bv   = hsvd['V'][:nMode]
 
-fit = ma.zeros(fdt.shape)
-for i in range(fdt.shape[0]):
-    p1,fit[i] = cotrend.bvfitm(fdt[i].astype(float),bv)
-
+fit    = ma.zeros(fdt.shape)
+p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
 fcal  = fdt - fit
+rcal = mlab.rec_append_fields(rdt,['fit','fcal'],[fit,fcal])
+
 h5    = h5plus.File(out)
-
-lc = np.rec.fromarrays([fcal.data,fcal.mask],names='fcal,fmask')
-lc = np.array(lc)
-
-
-fcal  = h5.create_dataset('LIGHTCURVE',data=lc)
-kic   = h5.create_dataset('KIC' ,data=hdt['KIC'][:] )
-# Simply attach the 1D collumn from the dt
-ds1d = hdt['LIGHTCURVE1d']
-lc1d =  h5.create_dataset(ds1d.name,data=ds1d[:])
+fcal  = h5.create_dataset('LIGHTCURVE',data=rcal)
 h5.close()
