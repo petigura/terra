@@ -24,7 +24,10 @@ depoch = 0.5
 hs2n   = 5   # Search for harmonics if signal has S/N larger than this.
 
 # Try the following harmonics in harm.
-harmL = np.array( [1/2., 2/3., 2., 3/2., 4/3. ] )
+harmL = np.arange(2,5)
+harmL = np.vstack([harmL,1./harmL])
+harmL = harmL.T.flatten()
+
 nCheck = 10 # Number of peaks in periodogram to fit.
 
 #modesDiag
@@ -54,4 +57,14 @@ nMode     = 4
 nModeSave = 20 # To save space, don't save all the of the V matrix
 sigOut    = 10
 maxIt     = 10 # Maximum number of iterations for robust-SVD
+
+# Prepro
+stepThrsh = 1e-3 # Threshold steps must be larger than.  
+wd        = 4    # Width of the median filter used to determine step
+
+# After identifying problem cadences we expand the region which we
+# consider bad data by the following amounts in both directions.
+nCadDesatGrow = 1  
+nCadAtTwkGrow = 4  
+nCadStepGrow  = 20 # Steps should not interfere with transit.
 

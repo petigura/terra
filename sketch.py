@@ -25,12 +25,11 @@ def inspectT(t0,f0,P,ph,darr=None):
     """
 
     
-def stack(t,y,P,t0,cL=['k','r'],step=1e-3):
+def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50):
     """
     Plot the SES    
     """
-    ax1 = gca()
-    ax2 = ax1.twiny()
+    ax = gca()
 
     ncL = len(cL)
     t = t.copy()
@@ -38,26 +37,36 @@ def stack(t,y,P,t0,cL=['k','r'],step=1e-3):
     # Shift t-series so first transit is at t = 0 
     dt = tval.t0shft(t,P,t0)
     t += dt
-    phase = mod(t,P)/P
+    phase = mod(t+P/4,P)/P-1./4
 
     # Associate each section of length P to a specific
     # transit. Sections start 1/4 P before and end 3/4 P after.
     label = np.floor(t/P+1./4).astype(int) 
     labelL = unique(label)
 
+    xshft = 0
+    yshft = 0
     for l in labelL:
+        # Calculate shift in t-series.
+        row,col = np.modf(1.*l/maxhlines)
+        row = row*maxhlines
+        xshift = col
+        yshift = -row*step
+
         blabel = (l == label)
+        phseg = phase[blabel]
+        yseg  = y[blabel]
+        sid   = np.argsort(phseg)
+        phseg = phseg[sid]
+        yseg  = yseg[sid]
 
-        tseg = t[blabel]-l*P
-        yseg = y[blabel]-step*l
-        ax1.plot( tseg, yseg, cL[np.mod(l,ncL)] )
 
-        phseg = phase[blabel]-1./4
-        ax2.plot(phseg,yseg,alpha=0)
+        color = cL[ np.mod( l , len(cL) ) ]
+        ax.plot(phseg+xshift,yseg+yshift,color=color)
 
-    ax2.set_xlim(-.25,.75)
-    ax2.axvline(0,alpha=.3)
-    ax2.axvline(.5,alpha=.3)
+    xlim(-.25,.75)
+    axvline(0,alpha=.3)
+    axvline(.5,alpha=.3)
 
 def PF(t,y,P,t0,tdur):
     """

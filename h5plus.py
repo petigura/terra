@@ -149,3 +149,20 @@ def attchKW(ds,kwL,keys):
          print "could not attach %s" % k
 
    return ds
+
+def ext(inp,ext,out=None):
+   """
+   Convience function for extension short cuts.
+   """
+   
+   bname = os.path.basename(inp)
+   bname_no_ext = bname.split('.')[0]
+
+   if out is None:
+      out = bname_no_ext+ext
+   elif os.path.isdir(out):
+      out = out+bname_no_ext+ext
+
+   return out
+
+      
