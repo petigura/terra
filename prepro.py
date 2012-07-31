@@ -11,6 +11,8 @@ import atpy
 import keplerio
 import copy
 import os
+
+from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
 import glob
 import pyfits
@@ -20,7 +22,7 @@ import detrend
 import tfind
 from keplerio import update_column
 import qalg
-
+from config import stepThrsh,wd,nCadDesatGrow,nCadAtTwkGrow,nCadStepGrow
 
 kepdir = os.environ['KEPDIR']
 cbvdir = os.path.join(kepdir,'CBV/')
@@ -32,9 +34,6 @@ sapdtype = zip( sapkey['key'],[bool]*sapkey['key'].size )
 
 cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
 cutList = atpy.Table(cutpath,type='ascii').data
-
-nCadDesatGrow = 1 # Grow the desat by 1 column in both directions
-nCadAtTwkGrow = 4 # Grow the desat by 1 column in both directions
 
 def prepLC(tLC):
     """
@@ -169,6 +168,67 @@ def bvload(quarter,module,output):
     tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
     return tBV
 
+
+def rdt(r0):
+    """
+    Detrend light curve
+
+    Parameters
+    ----------
+    r0 : with `f`, `fmask`, `t`, `segEnd` fields
+
+    Returns
+    -------
+    r  : same record array with the following fields:
+         label - 0,1,2 identifies groups for spline detrending.
+         ftnd  - the best fit trend
+         fdt   - f - ftnd.
+    """
+
+    r = r0.copy()
+    # Detrend the flux
+    fm = ma.masked_array(r['f'],r['fmask'])
+    tm = ma.masked_array(r['t'],r['fmask'])
+
+    # Assign a label to the segEnd segment
+    label = ma.masked_array( np.zeros(r.size)-1, r['segEnd'] )
+
+    ftnd = fm.copy()
+
+    sL = ma.notmasked_contiguous(label)
+    nseg = len(sL)
+    for i in range(nseg):
+        s = sL[i]
+        ftnd[s]  = detrend.spldtm(tm[s],fm[s])
+        label[s] = i
+
+    r   = mlab.rec_append_fields(r,'label',label.data)
+    fdt = fm-ftnd
+
+    r = mlab.rec_append_fields(r,'ftnd',ftnd.data)
+    r = mlab.rec_append_fields(r,'fdt',fdt.data)
+    return r
+
+def modcols(r0):
+    """
+    Modify Columns
+
+    1. Changes TIME, CADENCENO to t, cad
+    2. rnQ      - normalize quarter
+    3. rnanTime - remove nans from time series
+    """
+
+    r = r0.copy()
+    oldName = ['TIME','CADENCENO']
+    newName = ['t','cad']
+    for o,n in zip(oldName,newName):
+        r = mlab.rec_append_fields(r,n,r[o])
+        r = mlab.rec_drop_fields(r,o)
+
+    r = keplerio.rnQ(r)
+    r = keplerio.rnanTime(r)
+    return r
+
 def qmask(t0):
     """
     Quarter mask
@@ -239,7 +299,7 @@ def rqmask(r0):
     
     # segEnd is the union of the manually excluded regions and the
     # attitude tweaks.
-    segEnd = r['isBadReg'] | batTwk
+    segEnd = r['isBadReg'] | batTwk | r['isStep']
     r = rec_append_fields(r,'segEnd',segEnd)
 
     return r
@@ -322,8 +382,6 @@ def isStep(f):
 
     Identify steps in the LC
     """
-    stepThrsh = 1e-3 # Threshold steps must be larger than.  
-    wd = 4 # The number of cadences we use to determine the change in level.
     medf = nd.median_filter(f,size=wd)
 
     kern = np.zeros(wd)
