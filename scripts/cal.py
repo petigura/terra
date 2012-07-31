@@ -20,9 +20,7 @@ args  = parser.parse_args()
 hdt  = h5py.File(args.fdt)
 hsvd  = h5py.File(args.svd)
 
-out = args.out
-if out is None:
-    out = args.fdt.replace('.dt.h5','.cal.h5')
+out = h5plus.ext(args.ftd,'.cal.h5',out=args.out)
 
 dsdt = hdt['LIGHTCURVE']
 fdt  = ma.masked_array(dsdt['fdt'][:],dsdt['fmask'][:])
