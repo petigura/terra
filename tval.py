@@ -16,7 +16,7 @@ import tfind
 from numpy.polynomial import Legendre
 from matplotlib import mlab
 
-from config import *
+import config
 
 def val(t,fm,tres):
     """
@@ -431,137 +431,74 @@ def midTransId(t,p):
     return ms
 
 
-
-def harmW(t,fm,p0,disp=False):
+def harmSearch(res,t,fm,Pcad0,ver=False):
     """
-    Harmonics
+    Harmonic Search
 
-    The difference in MES between the true period and harmonics ( 1/2,
-    2/3, .. )*P and subharmonics (2, 3/2, 4/3, ...) * P can be small.
-    We compute Chi2 between the data and the modes and compare them
-    for different models.  We select the mode with the lowest Chi2.
-    This amounts to Bayesian model comparison.
-
-    Evaluate the Bayes Ratio between signal with P and 0.5*P
+    Look for harmonics of P by computing MES at 1/4, 1/3, 1/2, 2, 3, 4.
 
     Parameters
     ----------
-
-    t  : Time series
-    fm : Flux series
-    p0 : Parameter dictionary.
     
-
-    Returns
-    -------
-    p  : The parameter dictionary with the best X2.
-
-    """
-    
-    func = lambda h : harm(t,fm,p0,h,full_output=False)
-    res = map(func,harmL)
-    res = np.array(res, dtype = [('X20',float) , ('X2h',float)] )
-    res = mlab.rec_append_fields(res,'h',harmL)
-    res = mlab.rec_append_fields(res,'P',p0['P']*harmL)
-    
-    if disp:
-        print mlab.rec2txt(res) 
-
-    dX2 = res['X2h'] - res['X20'] # Difference in the Chi2
-    if (dX2 > 0).all():
-        return p0
-    else:
-        idmin = dX2.argmin()
-        p = copy.deepcopy(p0)
-        p['P'] = p0['P'] * res['h'][idmin]
-        return p
-
-def harm(t,fm,p0,h,full_output=False):
-    """
-    Harmonics
-
-    Evaluate the difference in Chi2 for transit with P = p0['P'] and h*P.
-
-    Parameters
-    
-    The difference in MES between the true period and harmonics ( 1/2,
-    2/3, .. )*P and subharmonics (2, 3/2, 4/3, ...) * P can be small.
-    We compute Chi2 between the data and the modes and compare them
-    for different models.  We select the mode with the lowest Chi2.
-    This amounts to Bayesian model comparison.
-
-    Evaluate the Bayes Ratio between signal with P and 0.5*P
-
-    Parameters
-    ----------
-
-    t  : Time series
-    fm : Flux series
-    p0 : Initial Parameter dictionary.
-    h  : Harmonic period is p0['P']*h
+    res   : result from the grid searh
+    t     : time
+    fm    : flux
+    Pcad0 : initial period in
     
     Returns
     -------
-    
-    X20    : Chi2 of starting model
-    X2h    : Chi2 of harmonic model
-    tTL    : Masked time used to compare models (full_output=True)
-    fTL    : Masked flux used to compare models
-    mod0   : Reference model
-    modh   : Harmonic model
+
+    rLarr : Same format as grid output.  If the code conveged on the
+            correct harmonic, the true peak will be in here.
     """
-    
-    ph = copy.deepcopy(p0)
-    ph['P'] = h * p0['P']
 
-    # Masked array corresponding to the harmonic
-    tfold0  = getT(t,p0['P'],p0['epoch'],p0['tdur'])
-    tfoldh  = getT(t,ph['P'],ph['epoch'],ph['tdur'])
+    harmL = np.hstack([1,config.harmL])
 
-    # Only mask out points that don't belong in either the reference
-    # or the harmonic photometry.
-    mask    = (tfold0.mask & tfoldh.mask)
-    tcomp   = ma.masked_array(t , mask,copy=True)
-    fcomp   = ma.masked_array(fm, mask,copy=True)
+    imax = 4    
+    i = 0 # iteration counter
+    bfund = False # Is Pcad0 the fundemental?
 
-    resL0 = LDTwrap(t,fm,p0)
-    resLh = LDTwrap(t,fm,ph)
+    while (bfund is False) and (i < imax):
+        def harmres(h):
+            Ph = Pcad0 * h
+            pkwd = Ph / t.size # proxy for peak width
+            pkwdThresh = 0.03
+            if pkwd > pkwdThresh:
+                dP = np.ceil(pkwd / pkwdThresh)
+            else: 
+                dP = 1
 
-    resL = resL0 +resLh
+            P1 = np.floor(Ph) - dP
+            P2 = np.ceil(Ph)  + dP
 
-    for r in resL:
-        n   = r.size
-        id0 = np.where(t == r['tdt'][0] )[0] # Find starting point
-        fcomp[id0:id0+n] = r['fdt']
+            isStep = np.zeros(fm.size).astype(bool)
+            twdG = [3,5,7,10,14,18]
+            rtd = tfind.tdpep(t,fm,isStep,P1,P2,twdG)
+            r   = tfind.tdmarg(rtd)
+            return r
 
-    fcomp.mask = mask
+        rL = map(harmres,harmL)
+        hs2n = [np.nanmax(r['s2n']) for r in rL]
+        rLarr = np.hstack(rL)
+        
+        hs2n = ma.masked_invalid(hs2n)
+        hs2n.fill_value=0
+        hs2n = hs2n.filled()
 
-    def Chi2(p):
-        mod = keptoy.P05( pd2a(p) , tcomp )
-        res   = (fcomp - mod)/1e-4
-        X2    = ma.sum( abs(res) )
-        return mod,X2
+        if ver is True:
+            np.set_printoptions(precision=1)
+            print harmL*Pcad0*keptoy.lc
+            print hs2n
 
-    mod0,X20 = Chi2(p0)
-    modh,X2h = Chi2(ph)
+        if np.argmax(hs2n) == 0:
+            bfund =True
+        else:
+            jmax = np.nanargmax(rLarr['s2n'])
+            Pcad0 = rLarr['Pcad'][jmax]
 
-    if resL == []:
-        return 
-    elif len(resL) < 3:  # There must be 3 transits in the model
-        return None 
+        i+=1
 
-
-    # If the harmonic has fewer than 3 transits, don't bother computing X2
-    nh = len(resLh)
-    if nh < 3:
-        X2h = 1e3
-
-    if full_output:
-        return X20,X2h,tcomp,fcomp,mod0,modh
-    else:
-        return X20,X2h
-    
-
+    return rLarr
 
 def pd2a(d):
     return np.array([d['P'],d['epoch'],d['df'],d['tdur']])

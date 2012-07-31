@@ -19,80 +19,14 @@ import FFA_cy as FFA
 from config import *
 
 # dtype of the record array returned from ep()
-epnames = ['mean','count','epoch','Pcad']
+epnames = ['mean','count','t0cad','Pcad']
 epdtype = zip(epnames,[float]*len(epnames) )
 epdtype = np.dtype(epdtype)
 
 # dtype of the record array returned from tdpep()
-tdnames = epnames + ['noise','s2n','twd']
+tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
-
-def GenK(twdcad,fcwd=1):
-    """
-    Generate Kernels.  
-    
-    Parameters
-    ----------
-    twidcad : length of the transit (cadences)
-    fcwid   : Each side of the continuum is fcwd * twid (default is 1)
-
-    Returns
-    -------
-    bK : Before transit kernel.
-    tK : Trasit kernel.
-    aK : After transit kernel.
-    dK : Depth kernel.
-
-    Notes
-    -----
-    Recall that conv(f,g) will flip g.
-
-    """
-    cwd = twdcad * fcwd
-    kSize = 2*cwd + twdcad  # Size of the kernel
-    kTemp = np.zeros(kSize) # Template kernal of appropriate length.
-
-    bK = kTemp.copy()
-    bK[-cwd:] = np.ones(1) / cwd # Before transit kernel
-
-    boxK = kTemp.copy()
-    boxK[cwd:-cwd] = np.ones(1) # Box shaped kernel
-
-    tK = boxK.copy()
-    tK[cwd:-cwd] /= twdcad # transit kernel
-
-    aK = kTemp.copy()
-    aK[:cwd] = np.ones(1) / cwd # After transit kernel
-
-    dK = kTemp.copy() 
-    dK = 0.5*(bK+aK) - tK # Depth kernel
-
-    return bK,boxK,tK,aK,dK
-
-def isfilled(t,fm,twd):
-    """
-    Is putative transit filled?  This means:
-    1 - Transit > 25% filled
-    2 - L & R wings are both > 25% filled
-    """
-    assert keplerio.iscadFill(t,fm.data),'Series might not be evenly sampled'
-
-    bK,boxK,tK,aK,dK = GenK(twd ) 
-    bgood = (~fm.mask).astype(float) 
-
-    bfl = nd.convolve(bgood,bK) # Compute the filled fraction.
-    afl = nd.convolve(bgood,aK)
-    tfl = nd.convolve(bgood,tK)
-
-    # True -- there is enough data for us to look at a transit at the
-    # midpoint
-    filled = (bfl > 0.25) & (afl > 0.25) & (tfl > 0.25) 
-
-    return filled
-
-
-
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
     """
@@ -156,7 +90,7 @@ def P2Pcad(PG0,ncad):
     PG     = (PcadG0 + 1.*remG / nrow)*lc
     return PcadG0,remG,PG
 
-def mtd(t,f,isStep,fmask,twd):
+def mtd(t,fm,twd):
     """
     Mean Transit Depth
 
@@ -164,12 +98,9 @@ def mtd(t,f,isStep,fmask,twd):
 
     Parameters
     ----------
-    t      : time series 
-    f      : flux series.  f can contain no nans since invade good region 
-             during convolution.convolution. Interpolate through them. 
-    isStep : Boolean array specifying the step discontinuities in the data.  
-             They will be grown by the width of the convolution kernel
-    fmask  : mask specifying which points are valid.
+    t      : time series.
+    fm     : masked flux array.  masked regions enter into the average
+             with 0 weight.
     twd    : Width of kernel in cadances
 
     Notes
@@ -178,25 +109,42 @@ def mtd(t,f,isStep,fmask,twd):
     interpolate the entire time series.  We see some edge effects
 
     """
-    
-    # If f contains nans, interpolate through them
-    if f[np.isnan(f)].size > 0:
-        t,f = detrend.maskIntrp( t , ma.masked_invalid(f) )
+    fm = fm.copy()
+    fm.fill_value = 0
+    w = (~fm.mask).astype(int) # weights either 0 or 1
+    f = fm.filled()
 
-    bK,boxK,tK,aK,dK = GenK( twd )
-    nK = dK.size
-    dM = nd.convolve1d(f,dK)
+    pad = np.zeros(twd)
+    f = np.hstack([pad,f,pad])
+    w = np.hstack([pad,w,pad])
 
-    # Grow step mask.
-    isStep = nd.convolve( isStep.astype(int) , np.ones(nK) )
-    isStep = isStep > 0
+    assert (np.isnan(f)==False).all() ,'mask out nans'
+    kern = np.ones(twd,float)
 
-    fm   = ma.masked_array(f,mask=fmask) 
-    mask = ~isfilled(t,fm,twd) | isStep
-    dM = ma.masked_array(dM,mask=mask,fill_value=0)
+    ws = np.convolve(w*f,kern,mode='same') # Sum of points in bin
+    c = np.convolve(w,kern,mode='same')    # Number of points in bin
+
+    # Number of good points before, during, and after transit
+    bc = c[:-2*twd]
+    tc = c[twd:-twd]
+    ac = c[2*twd:]
+
+    # Weighted sum of points before, during and after transit
+    bws = ws[:-2*twd]
+    tws = ws[twd:-twd]
+    aws = ws[2*twd:]
+
+    dM = 0.5*(bws/bc + aws/ac) - tws/tc
+    dM = ma.masked_invalid(dM)
+    dM.fill_value =0
+
+    # Require 0.5 of the points before, during and after transit to be good.
+    gap = (bc < twd/2) | (tc < twd/2) | (ac < twd/2)
+    dM.mask = dM.mask | gap
+
     return dM
 
-def tdpep(t,fm,isStep,P1,P2,twdG):
+def tdpep(t,fm,P1,P2,twdG):
     """
     Transit-duration - Period - Epoch
 
@@ -223,58 +171,46 @@ def tdpep(t,fm,isStep,P1,P2,twdG):
     # Determine the grid of periods that corresponds to integer
     # multiples of cadence values
     PcadG = np.arange(P1,P2+1)
-    ntwd     = len(twdG)
+    ntwd  = len(twdG)
 
     rtd = []
     for i in range(ntwd):     # Loop over twd
         twd = twdG[i]
+        dM  = mtd(t,fm,twd)
 
-        dM  = mtd(t,fm.filled(),isStep,fm.mask,twd)
-        rep = pep(t[0],dM,PcadG)
+        # Compute MES over period grid
+        func = lambda Pcad: ep(dM,Pcad)
+        rep = map(func,PcadG)
+        rep = np.hstack(rep)
+
         r   = np.empty(rep.size, dtype=tddtype)
-
         for k in epdtype.names:
             r[k] = rep[k]
+
         r['noise'] = ma.median( ma.abs(dM) )        
         r['twd']   = twd
-
+        r['t0']    = r['t0cad']*lc + t[0]
         rtd.append(r) 
 
     rtd = np.vstack(rtd)
     rtd['s2n'] = rtd['mean']/rtd['noise']*np.sqrt(rtd['count'])
     return rtd
 
-def pep(t0,dM,PcadG):
+def ep(dM,Pcad0):
     """
-    Period-Epoch
-
-    Parameters
-    ----------
-    t0    : time of first dM[0].
-    dM    : depth statistic
-    PcadG : Grid of periods (units of cadance)
-    """
-
-    func = lambda Pcad: ep(t0,dM,Pcad)
-    rep = map(func,PcadG)
-    rep = np.hstack(rep)
-
-    return rep
-
-def ep(t0,dM,Pcad0):
-    """
-    Search in Epoch.
+    Search in Epoch
 
     Parameters
     ----------
     t0   : Time of first cadance.  This is needed to set the epoch.
     dM   : Transit depth estimator
-    Pcad : Number of cadances to foldon
+    Pcad0: Number of cadances to foldon
 
     Returns the following information:
     - 'mean'   : Average of the folded columns (does not count masked items)
     - 'count'  : Number of non-masked items.
-    - 'epoch'  : epoch maximum mean.
+    - 't0cad'  : epoch of maximum MES (cadences)
+    - 'Pcad'   : Periods that the FFA computed MES 
     """
     
     dMW = FFA.XWrap2(dM,Pcad0,pow2=True)
@@ -283,7 +219,7 @@ def ep(t0,dM,Pcad0):
     idCol = np.arange(Pcad0,dtype=int)   # id of each column
     idRow = np.arange(M,dtype=int)   # id of each row
 
-    epoch = idCol.astype(float) * lc + t0
+    t0cad = idCol.astype(float)
     Pcad  = Pcad0 + idRow.astype(float) / (M - 1)
 
     dMW.fill_value=0
@@ -300,7 +236,7 @@ def ep(t0,dM,Pcad0):
     idColMa      = meanF.argmax(axis=1)
     rep['mean']  = meanF[idRow,idColMa]
     rep['count'] = countF[idRow,idColMa]
-    rep['epoch'] = epoch[idColMa]
+    rep['t0cad'] = t0cad[idColMa]
     rep['Pcad']  = Pcad
 
     return rep
