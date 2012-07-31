@@ -62,9 +62,6 @@ maxIt     = 10 # Maximum number of iterations for robust-SVD
 stepThrsh = 1e-3 # Threshold steps must be larger than.  
 wd        = 4    # Width of the median filter used to determine step
 
-# After identifying problem cadences we expand the region which we
+# After identifying problem cadences, we expand the region which we
 # consider bad data by the following amounts in both directions.
-nCadDesatGrow = 1  
-nCadAtTwkGrow = 4  
-nCadStepGrow  = 20 # Steps should not interfere with transit.
-
+cadGrow = dict(desat=1,atTwk=4,isStep=100)

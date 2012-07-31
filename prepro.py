@@ -22,7 +22,7 @@ import detrend
 import tfind
 from keplerio import update_column
 import qalg
-from config import stepThrsh,wd,nCadDesatGrow,nCadAtTwkGrow,nCadStepGrow
+from config import stepThrsh,wd,cadGrow
 
 kepdir = os.environ['KEPDIR']
 cbvdir = os.path.join(kepdir,'CBV/')
@@ -278,28 +278,28 @@ def rqmask(r0):
     r = rec_append_fields(r,'isOutlier',isOutlier(r['f']) )
     r = rec_append_fields(r,'isStep'   ,isStep(r['f'])    )
     r = rec_append_fields(r,'isDis'    ,isStep(rqual['dis'])  )
+    r = rec_append_fields(r,'desat'    ,rqual['desat']  )
+    r = rec_append_fields(r,'atTwk'    ,rqual['atTwk']  )
 
-    # Grow momentum desat regions 
-    bdesat = rqual['desat']
-    bdesat = nd.convolve(bdesat.astype(int) , np.ones(nCadDesatGrow+1) )
-    bdesat = bdesat > 0
 
-    # Grow the attitude tweaks 
-    batTwk = rqual['atTwk']
-    batTwk = nd.convolve(batTwk.astype(int) , np.ones(nCadAtTwkGrow+1) )
-    batTwk = batTwk > 0
+    # Grow masks for bad regions
+    for k in cadGrow.keys():
+        nGrow = cadGrow[k] * 2 # Expand in both directions
+        b = r[k]
+        b = nd.convolve( b.astype(float) , np.ones(nGrow,float) )
+        r[k] = b > 0
 
     # fmask is the union of all the individually masked elements    
     fm = ma.masked_invalid(r.SAP_FLUX)
     fm.mask = \
         fm.mask | r['isBadReg'] | r['isOutlier'] | r['isStep'] | \
-        r['isDis'] | bdesat | batTwk
+        r['isDis'] | r['desat'] | r['atTwk']
     
     r = rec_append_fields(r,'fmask'    ,fm.mask)
     
     # segEnd is the union of the manually excluded regions and the
     # attitude tweaks.
-    segEnd = r['isBadReg'] | batTwk | r['isStep']
+    segEnd = r['isBadReg'] | r['atTwk'] | r['isStep']
     r = rec_append_fields(r,'segEnd',segEnd)
 
     return r
