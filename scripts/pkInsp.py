@@ -6,10 +6,12 @@ Split h5 file into individual files
 from argparse import ArgumentParser
 from matplotlib.pylab import *
 from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-import sqlite3
+
+
 import h5py
 import numpy as np
+import atpy
+from scipy.optimize import fmin
 
 import sketch
 import tfind
@@ -33,23 +35,22 @@ prsr.add_argument('--epoch',type=int,default=0,help='shift wrt fits epoch')
 args  = prsr.parse_args()
 if args.db !=None:
     assert len(args.p) == 2,'must specify KIC,pknum'
-    con = sqlite3.connect(args.db)
-    cur = con.cursor()
-    cmd = """
-SELECT P,epoch,twd*29.4/60.,mean*1e6,KIC
-FROM pk 
-WHERE 
-KIC=%(KIC)i 
-AND 
-pknum=%(pknum)i;
-""" % dict(KIC=args.p[0],pknum=args.p[1])
-    cur.execute(cmd)
-    P,t0,tdur,df,KIC = cur.fetchone()
+    query = 'SELECT * from pk WHERE KIC=%i and pknum=%i' % (args.p[0],args.p[1])
+    t = atpy.Table('sqlite',args.db,query=query)
+    assert t.data.size==1,'must return a single column'
+
+    info = {}
+    for k in t.keys():
+        info[k] = t[k][0]
+
 else:
     P,t0,tdur,df = args.p
-    KIC = 0
+    info = dict(P=P,t0=t0,tdur=tdur,df=df,KIC=0)
 
+t0 = info['t0']
 t0 += args.epoch
+P  = info['P']
+
 
 fig = figure(figsize=(18,10))
 if args.grid is not None:
@@ -65,81 +66,105 @@ fcal = ma.masked_array(lc['fcal'],lc['fmask'])
 t    = lc['t']
 
 
-kicinfo = """
-KIC  %(KIC)09d
-P    %(P).2f
-t0   %(t0).2f
-Dur  %(tdur).2f
-df   %(df).2f
-""" % dict(P=P,t0=t0,tdur=tdur,df=df,KIC=KIC) 
+info['scar'] *= 1e6
+info['mean'] *= 1e6
 
 
-def plotPF():
+info['tdur']  = info['twd']*keptoy.lc*24
+tdur = info['tdur']
+df = info['mean'] / 1e6
+
+def plotPF(t,y,P,t0,tdur):
     # Plot phase folded LC
-    tLbl,cLbl = tval.transLabel(t,P,t0,tdur/24)
-    fldt = tval.LDT(t,fcal,cLbl,tLbl)
-    tm = ma.masked_array(t,fldt.mask,copy=True)
-    dt = tval.t0shft(t,P,t0)
-    tm += dt
-    tfold,ffold = mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask] 
-    bins=linspace(tfold.min(),tfold.max(),nbins)
-    s,bins = histogram(tfold,weights=ffold,bins=bins)
-    c,bins = histogram(tfold,bins=bins)
+    x,y = tval.PF(t,y,P,t0,tdur)
 
-    tprop = dict(size=10,name='monospace')
-    at = AnchoredText(kicinfo,prop=tprop,frameon=True,loc=3)
+    y = ma.masked_invalid(y)
+    x.mask = x.mask | y.mask
+    x,y = x.compressed(),y.compressed()
 
-    sca(axPF)
-    plot(tfold,ffold,',',alpha=.5)
+    bins   = linspace(x.min(),x.max(),nbins)
+    s,bins = histogram(x,weights=y,bins=bins)
+    c,bins = histogram(x,bins=bins)
+    plot(x,y,',',alpha=.5)
     plot(bins[:-1]+0.5*(bins[1]-bins[0]),s/c,'o')
-    gca().add_artist(at)
     axhline(0,alpha=.3)
-    ylim( np.percentile( ffold,(5,95) ) )
+
+    obj = lambda p : np.sum((y - keptoy.trap(p,x))**2)
+    p0 = [1e6*df,tdur/24.,.1*tdur/24.]
+    p1 = fmin(obj,p0,disp=1)
+    xfit = linspace(x.min(),x.max(),1000)
+    yfit = keptoy.trap(p1,xfit)
+    plot(xfit,yfit)
 
 def plotSES():
     # Plot SES
     tdurcad = int(np.round(tdur / 24. / keptoy.lc))
-    dM = tfind.mtd(t,fcal,np.zeros(fcal.size).astype(bool),fcal.mask,tdurcad)
+    dM = tfind.mtd(t,fcal,tdurcad)
     sca(axStack)
-    sketch.stack(t,dM,P,t0,step=1e-6*df)
+    sketch.stack(t,dM,P,t0,step=df)
     autoscale(tight=True)
 
 def plotGrid():
-    sca(axGrid)
     x = res['Pcad']*keptoy.lc
     plot(x,res['s2n'])
     id = np.argsort( np.abs(x - P) )[0]
     plot(x[id],res['s2n'][id],'ro')
-    axGrid.xaxis.set_visible(False)
-    sca(axPep)
-    
-    p90 = np.percentile(res['s2n'],90)
-    bplot = res['s2n'] > p90
-#    bplot = bplot.astype(float)
-#    import pdb;pdb.set_trace()
-    scatter(x[bplot],res['epoch'][bplot],edgecolor='none',
-            c=res['s2n'][bplot],cmap=cm.bone_r,alpha=0.5)
-
     autoscale(tight=True)
 
-gs = GridSpec(nrows,4)
+gs = GridSpec(nrows,5)
 if args.grid is not None:
-    axGrid  = fig.add_subplot(gs[0,0:3])
-    axPep   = fig.add_subplot(gs[1,0:3],sharex=axGrid)
+    axGrid  = fig.add_subplot(gs[0,0:4])
+    axStack = fig.add_subplot(gs[2: ,0:4])
+    axPF    = fig.add_subplot(gs[1,0:2])
+    axPF180 = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
+    axScar  = fig.add_subplot(gs[0:2,4])
 
-    axStack = fig.add_subplot(gs[2: ,0:3])
-    axPF    = fig.add_subplot(gs[0:2,3:4])
-
-    plotPF()
-    plotSES()
+    sca(axGrid)
     plotGrid()
+
+    sca(axPF180)
+    plotPF(t,fcal,P,t0+P/2,tdur)
+    gca().xaxis.set_visible(False)
+    gca().yaxis.set_visible(False)
+
+    sca(axPF)
+    plotPF(t,fcal,P,t0,tdur)
+    ylim(-5*df,3*df)
+
+    sca(axStack)
+    plotSES()
+
+    sca(axScar)
+    sketch.scar(res)
+
 else:
     axPF    = fig.add_subplot(gs[0])
     axStack = fig.add_subplot(gs[1:])
     plotPF()
     plotSES()
 
+print info
+info['drat'] = info['tfdur'] / info['twdur']
+kicinfo = """
+KIC  %(KIC)09d
+P    %(P).2f
+t0   %(t0).2f
+Dur  %(tdur).2f
+df   %(mean).2f
+scar %(scar).2f
+p50  %(p50).2f
+p90  %(p90).2f
+p99  %(p99).2f
+tdf  %(tdf).2f
+drat %(drat).2f
+""" % info
+
+
+
+gcf().text(.8,.1,kicinfo,size=18,name='monospace',bbox=dict(visible=True,fc='none'))
+
 tight_layout()
+gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
 if args.o is not None:
     fig.savefig(args.o)
