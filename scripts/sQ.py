@@ -39,4 +39,4 @@ for b in binlen:
 h5out = h5plus.File(args.out)
 h5out.create_dataset('LIGHTCURVE',data=rLC)
 h5out.close()
-print "sQ.py created %s" args.out
+print "sQ.py created %s" % args.out
