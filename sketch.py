@@ -81,6 +81,22 @@ def PF(t,y,P,t0,tdur):
     ax.plot(mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask],'.')
 
 
+def scar(r):
+    """
+    Plot scar plot
+
+    Parameters
+    ----------
+    r : res record array containing s2n,Pcad,t0cad, column
+    
+    """
+    bcut = r['s2n']> np.percentile(r['s2n'],90)
+    x = r['Pcad'][bcut]
+    x -= min(x)
+    x /= max(x)
+    y = (r['t0cad']/r['Pcad'])[bcut]
+    plot(x,y,'.',mew=0)
+
 
 def stackold(x,y,size,pad=0.1,axl=None,**kw):
     """

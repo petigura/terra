@@ -17,6 +17,7 @@ from numpy.polynomial import Legendre
 from matplotlib import mlab
 
 import config
+from scipy.spatial import cKDTree
 
 def val(t,fm,tres):
     """
@@ -112,6 +113,33 @@ def gridPk(rg,width=1000):
     pks2n = np.rec.fromarrays([pks2n],names='s2n')
     rgpk  = mlab.rec_join('s2n',rg,pks2n)
     return rgpk
+
+def scar(res):
+    """
+    Determine whether points in p,epoch plane are scarred.  That is
+    high MES values are due to single point outliers.
+
+    Parameters
+    ----------
+    res  : result array with `Pcad`, `t0cad`, and `s2n` fields
+
+    Returns
+    -------
+    nn   : 90 percentile distance to nearest neighbor.  
+    
+    """
+
+    
+    bcut = res['s2n']> np.percentile(res['s2n'],90)
+    x = res['Pcad'][bcut]
+    x -= min(x)
+    x /= max(x)
+    y = (res['t0cad']/res['Pcad'])[bcut]
+
+    D = np.vstack([x,y]).T
+    tree = cKDTree(D)
+    d,i= tree.query(D,k=2)
+    return np.percentile(d[:,1],90)
 
 def getT(time,P,epoch,wd):
     """
@@ -253,6 +281,17 @@ def LDT(t,fm,cLbl,tLbl):
 
     return fldt
 
+def PF(t,fcal,P,t0,tdur):
+    """
+    Transit duration in days
+    """
+    tLbl,cLbl = transLabel(t,P,t0,tdur,cfrac=3)
+    fldt = LDT(t,fcal,cLbl,tLbl)
+    tm = ma.masked_array(t,fldt.mask,copy=True)
+    dt = t0shft(t,P,t0)
+    tm += dt
+    x,y = np.mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask] 
+    return x,y
 
 def trsh(P,tbase):
     ftdurmi = 0.5
@@ -473,7 +512,7 @@ def harmSearch(res,t,fm,Pcad0,ver=False):
 
             isStep = np.zeros(fm.size).astype(bool)
             twdG = [3,5,7,10,14,18]
-            rtd = tfind.tdpep(t,fm,isStep,P1,P2,twdG)
+            rtd = tfind.tdpep(t,fm,P1,P2,twdG)
             r   = tfind.tdmarg(rtd)
             return r
 

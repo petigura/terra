@@ -159,6 +159,21 @@ def box(p,t):
     return fmod
 
 
+def trap(p,t):
+    df   = p[0]
+    fdur = p[1] # Flat duration
+    wdur = p[2] # Wing duration
+    df   = 1e-6*df
+    f    = np.zeros(t.size)
+    abst = np.abs(t)
+    bw   = (abst > fdur/2) & ( abst < fdur/2 + wdur)
+    bf   = (abst < fdur/2) 
+    m    = df/wdur
+    f[bw]= m*(abst[bw] - fdur/2) - df
+    f[bf]= -df
+    return f
+
+
 def P05(p,t):
     """
     Analytic model of Protopapas 2005.
