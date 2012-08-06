@@ -26,7 +26,7 @@ if db is set: KIC, pknum
 else        : P (days), t0 (days), tdur (hours), Depth (ppm)'
 """
 
-prsr.add_argument('p',nargs='+',type=float,help=phelp)
+prsr.add_argument('p',nargs='+',type=str,help=phelp)
 prsr.add_argument('--db',type=str,help='Database file')
 prsr.add_argument('--cal',type=str,help='fcal file')
 prsr.add_argument('--grid',type=str,help='fcal file')
@@ -35,7 +35,7 @@ prsr.add_argument('--epoch',type=int,default=0,help='shift wrt fits epoch')
 args  = prsr.parse_args()
 if args.db !=None:
     assert len(args.p) == 2,'must specify KIC,pknum'
-    query = 'SELECT * from pk WHERE KIC=%i and pknum=%i' % (args.p[0],args.p[1])
+    query = "SELECT * from pk WHERE sKIC='%s' and pknum=%s" % (args.p[0],args.p[1])
     t = atpy.Table('sqlite',args.db,query=query)
     assert t.data.size==1,'must return a single column'
 
@@ -146,7 +146,7 @@ else:
 print info
 info['drat'] = info['tfdur'] / info['twdur']
 kicinfo = """
-KIC  %(KIC)09d
+KIC  %(sKIC)s
 P    %(P).2f
 t0   %(t0).2f
 Dur  %(tdur).2f
