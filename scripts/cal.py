@@ -35,3 +35,4 @@ rcal = mlab.rec_append_fields(rdt,['fit','fcal'],[fit,fcal])
 h5    = h5plus.File(out)
 fcal  = h5.create_dataset('LIGHTCURVE',data=rcal)
 h5.close()
+print "cal.py created %s" % out

@@ -75,7 +75,6 @@ def File(file):
       print 'removing %s ' % file
    return h5py.File(file)
 
-
 def diffDS(name,dtype,shape,h5,diff='all'):
    """
    Create Datasets

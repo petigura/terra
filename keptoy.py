@@ -259,3 +259,9 @@ def genSynLC(darr):
         
     return tl,fl
 
+
+
+
+
+
+

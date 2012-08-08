@@ -262,3 +262,16 @@ def tdmarg(rtd):
 
     return rec
 
+def cadCount(cad,res):
+    """
+    res : record array with t0cad and Pcad fields
+    """
+    cadmi,cadma = cad[0],cad[-1]
+    cadLL = []
+    for t0cad,Pcad in zip(res['t0cad'],res['Pcad']):
+        nT   = np.floor((cad.size - t0cad ) / Pcad) + 1
+        cadL = np.round(t0cad + np.arange(nT)*Pcad)+cadmi
+        cadLL.append(cadL)
+    cadLL = np.hstack(cadLL)
+    c,b = np.histogram(cadLL,bins=np.linspace(cadmi,cadma+1,cad.size+1))
+    return c
