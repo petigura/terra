@@ -144,7 +144,7 @@ else:
     plotSES()
 
 print info
-info['drat'] = info['tfdur'] / info['twdur']
+#info['drat'] = info['tfdur'] / info['twdur']
 kicinfo = """
 KIC  %(sKIC)s
 P    %(P).2f
@@ -155,8 +155,6 @@ scar %(scar).2f
 p50  %(p50).2f
 p90  %(p90).2f
 p99  %(p99).2f
-tdf  %(tdf).2f
-drat %(drat).2f
 """ % info
 
 

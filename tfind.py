@@ -229,7 +229,6 @@ def ep(dM,Pcad0):
     sumF   = FFA.FFA(data) # Sum of array elements folded on P0, P0 + i/(1-M)
     countF = FFA.FFA(mask) # Number of valid data points
     meanF  = sumF/countF
-
     rep   = np.empty(M,dtype=epdtype)
 
     # Take maximum epoch
