@@ -32,9 +32,16 @@ def read(f):
     return res
 
 res = read(files[0])
-rL  = np.zeros( len(files) , dtype=res.dtype )
+rL  = []
 for i in range(len(args.inp)):
-    rL[i] = read(files[i])
+    try:
+        rL.append( read(files[i]) )
+    except:
+        print "%s failed" % files[i]
+        pass
+
+rL = np.hstack(rL)
+
 
 tpk = qalg.rec2tab(rL)
 tpk.table_name = 'pk'

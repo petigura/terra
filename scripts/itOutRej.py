@@ -56,7 +56,7 @@ while done is False:
 
     bout = c > cut
     nout = c[bout].size
-    print "%s: it%i %i outliers" % (bn,it,nout)
+    print "%s: it%i maxcount = %i, %i outliers" % (bn,it,max(c),nout)
     if (nout==0 ) or (it > 2):
         done = True
     else:
