@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Make diagnostic plots for the mode fitting
 
@@ -7,7 +9,6 @@ Future Work
 - Move plotting to a different function, so I can call it interactively.
 
 """
-
 from argparse import ArgumentParser
 import h5py
 import numpy as np
@@ -22,7 +23,10 @@ from config import cdict3
 plt.register_cmap(name='BlueRed3', data=cdict3) # optional lut kwarg
 plt.rcParams['image.cmap'] = 'BlueRed3'
 
-kicdbpath = os.environ['KEPBASE']+'files/KIC.db'
+dbdir = os.environ['KEPBASE']+'files/db/'
+qdbpath = dbdir+'quarters.db'
+kicdbpath = dbdir+'kic_ct.db'
+
 nModes = 4
 
 parser = ArgumentParser(description='Diagnose Modes')
@@ -53,23 +57,27 @@ A    =  A[sid]
 skic = str(tuple(gkic))
 
 # Pull the RA and Dec information from the sqlite3 database.
-conn = sqlite3.connect(kicdbpath)
+conn = sqlite3.connect(qdbpath)
 cur = conn.cursor()
 query = """
+ATTACH  '%(kicdbpath)s' as kicdb;
+""" % {'q':q,'skic':skic,'kicdbpath':kicdbpath}
+cur.execute(query)
+query = """
 SELECT 
-q%(q)i.id,kic.kic_ra,kic.kic_dec 
+skic,b.kic_ra,b.kic_dec 
 FROM q%(q)i 
-JOIN kic 
-ON q%(q)i.id=kic.id 
-WHERE q%(q)i.id in %(skic)s
-""" % {'q':q,'skic':skic} 
+JOIN kicdb.kic b
+USING (kic)
+WHERE skic in %(skic)s;
+""" % {'q':q,'skic':skic,'kicdbpath':kicdbpath} 
 cur.execute(query)
 res = cur.fetchall()
 conn.close()
 
 # Verify that the SQL KIC IDs match the ones we searched for.
-tkic = array(res,dtype=zip(['id','ra','dec'],[int,float,float]))
-assert (tkic['id'] == gkic).all(),'h5 KIC does not match SQL KIC'
+tkic = array(res,dtype=zip(['skic','ra','dec'],['|S9',float,float]))
+assert (tkic['skic'] == gkic).all(),'h5 KIC does not match SQL KIC'
 
 # Plot distribtion of mode weights across the FOV.
 cmax = abs(A).max()

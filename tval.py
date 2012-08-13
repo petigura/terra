@@ -145,16 +145,29 @@ def pkInfo(lc,res,rpk):
     """
     Peak Information
 
-
     Parameters
     ----------
-
+    lc  : light curve record array
+    res : grid search array
+    rpk : peak info.  P, t0, tdur (all in days)
 
     Returns
     -------
-
+    LDT      : Locally detrended light curve at transit.
+    MA       : Mandel Agol Coeff
+    MA_X2    : Mandel Agol Coeff
     
+    LDT180   : Locally detrened light curve 180 deg out of phase
+    MA180    : Mandel Agol Coeff
+    MA180_X2 : Mandel Agol Coeff
+
+    madSES   : MAD of SES over entire light curve
+    miQSES   : value of MAD SES for the least noisy quarter
+    maQSES   : value of MAD SES for the least noisy quarter
     """
+
+    out = {}
+#    out['LDT'] = 
 
     
 
