@@ -141,6 +141,26 @@ def scar(res):
     d,i= tree.query(D,k=2)
     return np.percentile(d[:,1],90)
 
+def pkInfo(lc,res,rpk):
+    """
+    Peak Information
+
+
+    Parameters
+    ----------
+
+
+    Returns
+    -------
+
+    
+    """
+
+    
+
+    return np.percentile(d[:,1],90)
+
+
 def getT(time,P,epoch,wd):
     """
     Get Transits
@@ -248,14 +268,16 @@ def LDT(t,fm,cLbl,tLbl):
     Local Detrending
 
     A simple function that subtracts a polynomial trend from the
-    lightcurve excluding a region around the transit.
+    continuum region on either side of a transit.  There must be at
+    least two valid data points on either side of the transit to
+    include it in the fit.
 
     Parameters
     ----------
     t    : time
-    f    : masked flux array
-    cLbl : Labels for continuum regions
-
+    fm   : masked flux array
+    cLbl : Labels for continuum regions.  Computed using `transLabel`
+    cLbl : Labels for transit regions.  Computed using `transLabel`
     
     Returns
     -------
@@ -263,35 +285,74 @@ def LDT(t,fm,cLbl,tLbl):
     """
 
     fldt    = ma.masked_array( np.zeros(t.size) , True ) 
+    assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
     
     for i in range(cLbl.max() + 1):
-        bc = (cLbl == i )
-        fc = fm[bc]
+        # Points corresponding to continuum region.
+        bc = (cLbl == i ) 
+        fc = fm[bc]       
         tc = t[bc]
-        bldt = ( tLbl == i ) | (cLbl == i) 
+
+        # Identifying the detrending region.
+        bldt = (t > tc[0]) & (t < tc[-1])
         tldt = t[bldt]
 
-        if fc.count() > 4:
+        # Times of transit
+        bt = (tLbl == i)  
+        tt = t[bt]
+
+        # There must be a critical number of valid points before and
+        # after the transit.
+        ncBefore = fc[ tc < tt[0] ].count()  
+        ncAfter  = fc[ tc < tt[-1] ].count()  
+
+        if (ncBefore > 2) & (ncAfter > 2) :        
             shft = - np.mean(tc)
             tc   -= shft 
             tldt -= shft
             pfit = np.polyfit(tc,fc,1)
             fldt[bldt] = fm[bldt] - np.polyval(pfit,tldt)
             fldt.mask[bldt] = fm.mask[bldt]
+        else:
+            print "trans # %i failed: ncB %i ncA %i" % (i,ncBefore,ncAfter)
 
     return fldt
 
-def PF(t,fcal,P,t0,tdur):
+def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     """
-    Transit duration in days
+    Phase Fold
+    
+    Convience function that runs the local detrender and then phase
+    folds the lightcurve.
+
+    Parameters
+    ----------
+
+    t    : time
+    fm   : masked flux array
+    P    : Period (days)
+    t0   : epoch (days)
+    tudr : transit width (days)
+
+    Returns
+    -------
+    tPF  : Phase folded time.  0 corresponds to mid transit.
+    fPF  : Phase folded flux.
     """
-    tLbl,cLbl = transLabel(t,P,t0,tdur,cfrac=3)
-    fldt = LDT(t,fcal,cLbl,tLbl)
+
+    tLbl,cLbl = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
+    fldt     = LDT(t,fm,cLbl,tLbl)
+
     tm = ma.masked_array(t,fldt.mask,copy=True)
     dt = t0shft(t,P,t0)
     tm += dt
-    x,y = np.mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask] 
-    return x,y
+
+    tPF = np.mod(tm[~tm.mask]+P/2,P)-P/2
+    fPF = fldt[~fldt.mask] 
+    return tPF,fPF
+
+
+
 
 def trsh(P,tbase):
     ftdurmi = 0.5
