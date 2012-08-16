@@ -89,4 +89,4 @@ while done is False:
 hlc.close()
 hgd.close()
 h5out.close()
-print "Updated %s" % args.grid
+print "Created %s" % args.out

@@ -38,7 +38,6 @@ for f in inp:
 fdt = ma.vstack(fdtL)
 kic = np.hstack(kicL)
 print "Sucessfully loaded %i light curves" % fdt.shape[0]
-
 U,S,V,A,fit,kic = cotrend.mkModes(fdt,kic)
 
 h5 = h5plus.File(out)
@@ -46,7 +45,6 @@ h5.create_dataset('U'     ,data=U,compression='lzf')
 h5.create_dataset('S'     ,data=S,compression='lzf',shuffle=True)
 h5.create_dataset('V'     ,data=V[:nModeSave],compression='lzf',shuffle=True)
 h5.create_dataset('A'     ,data=A[:,:nModeSave] )
-h5.create_dataset('fit'   ,data=fit)
 h5.create_dataset('KIC'   ,data=kic)
 h5.close()
 print "mkModes: created %s" % out
