@@ -39,17 +39,27 @@ con = sqlite3.connect(args.db)
 cur = con.cursor()
 cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % skic
 cur.execute(cmd)
-res = cur.fetchall()
-climb = np.array(res[0])
+climb = np.array(cur.fetchall()[0])
 
 for i in range(args.n):
     rpk = rgpk[i:i+1]
-    rpk = dict(t0=rpk['t0'][i],P=rpk['Pcad'][i]*keptoy.lc,tdur=rpk['twd'][i]*keptoy.lc,df=rpk['mean'][i])
+    rpk = dict(t0    = rpk['t0'][i] ,
+               P     = rpk['Pcad'][i]*keptoy.lc,
+               tdur  = rpk['twd'][i]*keptoy.lc,
+               df    = rpk['mean'][i],
+               s2n   = rpk['s2n'][i])
+
+    for cut in [50,90,99]:
+        rpk['p%i' % cut] = np.percentile(res['s2n'],cut)
+
     out = tval.pkInfo(lc,res,rpk,climb)
 
     grp = hpk.create_group('pk%i' % i)
     for k in out.keys():
         grp.create_dataset(k,data=out[k])
+
+    for k in rpk.keys():
+        grp.attrs[k] = rpk[k]
 
 
 hgd.close()
