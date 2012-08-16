@@ -288,9 +288,9 @@ def rsQ(rL):
 
     """
     startTimes = np.array([ r['t'][0] for r in rL] )
-    
-    assert (startTimes==np.sort(startTimes) ).all(), 'Quarters must be in order'
-    
+    sid = np.argsort(startTimes)
+    rL = list(np.array(rL)[sid])    
+
     # Figure out which cadences are missing and fill them in.
     cad       = [r['cad'] for r in rL]
     cad       = np.hstack(cad) 

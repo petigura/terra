@@ -43,7 +43,6 @@ hsvd = h5py.File(args.svd)
 q    = args.q
 
 V   = hsvd['V'][:]
-fit = hsvd['fit'][:]
 kic = hsvd['KIC'][:]
 A   = hsvd['A'][:]
 

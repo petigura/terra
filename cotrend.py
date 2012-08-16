@@ -171,12 +171,14 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
         # All coefficients must be inliers
         gRow   = out.astype(int).sum(axis=1) == 0 
 
-        if gRow.all():
+        # If there are no outliers or we've reached the max number of
+        # iterations return the input U,S,V,goodid,X2. If not, clip off
+        # the outliers and repeat.
+        
+        if gRow.all() or (count == maxIt): 
             finished = True
         else:
             names = ['ID'] + ['Chi2'] + ['a%i' % (i+1) for i in range(nMode)]
-#            names = ['ID'] + ['a%i' % (i+1) for i in range(nMode)]
-
             dtype = zip(names,[float]*len(names))
             routData = np.hstack([np.vstack(goodid),np.vstack(X2),dev]) 
             routData = [tuple(r) for r in routData]
@@ -186,12 +188,13 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
             print mlab.rec2txt(rout[~gRow][:10])
             print "%i there are %i outliers " % (count,goodid[~gRow].size)
 
-        goodid = goodid[gRow]
+            goodid = goodid[gRow]
+
         count +=1
 
     return U,S,V,goodid,X2
 
-def mkModes(fdt,kic):
+def mkModes(fdt0,kic0):
     """
     Make Modes
 
@@ -205,17 +208,30 @@ def mkModes(fdt,kic):
     kic : Array with the KIC ID
     """
 
-    nRow,nCol = fdt.shape
+    fdt = fdt0.copy()
+    kic = kic0.copy()
+    nrow0,ncol0 = fdt.shape
 
-    # Cut out the bad columns and rows
-    fdt[fdt.mask] = 0
-    czero = fdt.sum(axis=0)!=0.
-    fdt = fdt[:,czero] 
+    # Cut out the bad columns and rows.
+    # Represent mask as integers, 0=mask.
+    # If sum(axis=0)==0, particular cadences in all stars are bad.
+    # If sum(axis=1)==0, particular stars are all bad.
     
-    rzero = np.median(fdt,axis=1)!=0.
-    fdt = fdt[rzero,:] 
-    kic = kic[rzero] 
-    nstars = kic.size
+    mint = (~fdt0.mask).astype(int) # Mask as integers
+    bcol = mint.sum(axis=0)!=0 # True - good column
+    brow = mint.sum(axis=1)!=0 # True - good row
+
+    nrow = brow[brow].size
+    ncol = bcol[bcol].size
+    print "%i light curves were entirely masked out" % (brow.size - nrow)
+    
+    fdt = fdt[:,bcol]
+    fdt = fdt[brow,:]
+    kic = kic[brow]
+
+
+    nstars = kic.size    
+    fdt[fdt.mask] = 0
 
     # Normalize by Median Absolute Dev.  Normalized reduced Chi2
     # should be about 1.
@@ -232,8 +248,8 @@ def mkModes(fdt,kic):
     nGood = Vtemp.shape[0] # Number of inlier stars.
 
     # Fill back in the empty columns
-    V = np.zeros((nGood,nCol))
-    V[:,czero] = Vtemp
+    V = np.zeros((nGood,ncol0))
+    V[:,bcol] = Vtemp
 
     S      = S[:nstars,:nstars]
     A      = np.dot(U,S)
