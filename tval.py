@@ -105,13 +105,12 @@ def gridPk(rg,width=1000):
     # rid give the indecies of us2nmax to reconstruct s2nmax
     # np.allclose(us2nmax[rid],s2nmax) evaluates to True
 
-    us2nmax,rid = np.unique(s2nmax,return_inverse=True)
-    
+    us2nmax,rid = np.unique(s2nmax,return_inverse=True)    
     bins = np.arange(0,rid.max()+2)
     count,bins = np.histogram(rid,bins )
     pks2n = us2nmax[ bins[count>=width] ]
     pks2n = np.rec.fromarrays([pks2n],names='s2n')
-    rgpk  = mlab.rec_join('s2n',rg,pks2n)
+    rgpk  = mlab.rec_join('s2n',rg,pks2n) # The join cmd orders by s2n
     return rgpk
 
 def scar(res):
@@ -141,7 +140,7 @@ def scar(res):
     d,i= tree.query(D,k=2)
     return np.percentile(d[:,1],90)
 
-def pkInfo(lc,res,rpk):
+def pkInfo(lc,res,rpk,climb):
     """
     Peak Information
 
@@ -149,7 +148,7 @@ def pkInfo(lc,res,rpk):
     ----------
     lc  : light curve record array
     res : grid search array
-    rpk : peak info.  P, t0, tdur (all in days)
+    rpk : dictionary. peak info.  P, t0, tdur, (all in days)
 
     Returns
     -------
@@ -162,16 +161,42 @@ def pkInfo(lc,res,rpk):
     MA180_X2 : Mandel Agol Coeff
 
     madSES   : MAD of SES over entire light curve
-    miQSES   : value of MAD SES for the least noisy quarter
-    maQSES   : value of MAD SES for the least noisy quarter
+    maSES   : value of MAD SES for the least noisy quarter
     """
 
     out = {}
-#    out['LDT'] = 
 
+    t  = lc['t']
+    fm = ma.masked_array(lc['fcal'],lc['fmask'])
+
+    def fitMA(tPF,fPF,climb,pL0):
+        def obj(pL):
+            fmod = keptoy.MA(pL,climb,tPF,usamp=11)
+            return np.sum((fPF-fmod)**2)
+        pL1 = optimize.fmin(obj,pL0) 
+        return pL1
+
+
+    pL0 = [np.sqrt(rpk['df']),rpk['tdur']/2.,.3 ]
+
+    tPF,fPF = PF(t,fm,rpk['P'],rpk['t0'],rpk['tdur'])
+    pL1 = fitMA(tPF,fPF,climb,pL0)
+    fit = keptoy.MA(pL1,climb,tPF,usamp=11)
+    lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
+    out['lcPF'] = lcPF
+    out['pL1']  = pL1
+
+    tPF,fPF = PF(t,fm,rpk['P'],rpk['t0']+rpk['P']/2,rpk['tdur'])
+    pL1 = fitMA(tPF,fPF,climb,pL0)
+    fit = keptoy.MA(pL1,climb,tPF,usamp=11)
+    lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
+    out['lcPF180'] = lcPF
+    out['pL1_180'] = pL1
     
-
-    return np.percentile(d[:,1],90)
+    dM = tfind.mtd(t,fm,rpk['tdur']/keptoy.lc)
+    out['miQSES']  = nd.median_filter(abs(dM),size=50*10)
+    out['madSES']  = ma.median(ma.abs(dM))
+    return out
 
 
 def getT(time,P,epoch,wd):
@@ -362,6 +387,10 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
     tPF = np.mod(tm[~tm.mask]+P/2,P)-P/2
     fPF = fldt[~fldt.mask] 
+    sid = np.argsort(tPF)
+
+    tPF = tPF[sid]
+    fPF = fPF[sid]
     return tPF,fPF
 
 
