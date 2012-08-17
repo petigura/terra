@@ -20,16 +20,37 @@ files = args.inp
 print "reducing %i files" % len(files)
 print "out: %s" % args.out
 
+
+
+akeys =['tdur','p99','df','s2n','t0','P','p90','p50']
+names = ['sKIC','pp','tau','b','pp180','tau180','b180','maQMES','madSES']+akeys
+         
+
+dtype = zip(names,['|S10']+[float]*(len(names)-1))
+
+
 def read(f):
+#    import pdb;pdb.set_trace()
     h5 = h5py.File(f)
+    g = h5['/pk0']
     print f
 
-    sKIC = os.path.basename(f).split('.')[0]
-    res = h5['RES'][:]
-    res = mlab.rec_append_fields(res,'sKIC',sKIC )
-    res = mlab.rec_append_fields(res,'P',res['Pcad']*keptoy.lc)
+    res = np.zeros(1,dtype=dtype)
+    # Read the fields stored in pk file.
+    adict = dict(g.attrs)
+    for k in akeys:
+        res[k] = adict[k]    
+    res['sKIC'] = os.path.basename(f).split('.')[0]
+    res['pp']      = g['pL1'][0]
+    res['tau']     = g['pL1'][1]
+    res['b']       = g['pL1'][2]
+    res['pp180']   = g['pL1_180'][0]
+    res['tau180']  = g['pL1_180'][1]
+    res['b180']    = g['pL1_180'][2]
+
     h5.close()
     return res
+
 
 res = read(files[0])
 rL  = []

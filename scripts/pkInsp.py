@@ -35,7 +35,8 @@ prsr.add_argument('--epoch',type=int,default=0,help='shift wrt fits epoch')
 args  = prsr.parse_args()
 if args.db !=None:
     assert len(args.p) == 2,'must specify KIC,pknum'
-    query = "SELECT * from pk WHERE sKIC='%s' and pknum=%s" % (args.p[0],args.p[1])
+#    query = "SELECT * from pk WHERE sKIC='%s' and pknum=%s" % (args.p[0],args.p[1])
+    query = "SELECT * from pk WHERE sKIC='%s'" % (args.p[0])
     t = atpy.Table('sqlite',args.db,query=query)
     assert t.data.size==1,'must return a single column'
 
@@ -66,14 +67,15 @@ fcal = ma.masked_array(lc['fcal'],lc['fmask'])
 t    = lc['t']
 
 
-info['scar'] *= 1e6
-info['mean'] *= 1e6
+#info['scar'] *= 1e6
+#info['mean'] *= 1e6
 
 
-info['tdur']  = info['twd']*keptoy.lc*24
+#info['tdur']  = info['twd']*keptoy.lc*24
 tdur = info['tdur']
-df = info['mean'] / 1e6
 
+df = info['df']
+#import pdb;pdb.set_trace()
 def plotPF(t,y,P,t0,tdur):
     # Plot phase folded LC
     x,y = tval.PF(t,y,P,t0,tdur)
@@ -89,16 +91,16 @@ def plotPF(t,y,P,t0,tdur):
     plot(bins[:-1]+0.5*(bins[1]-bins[0]),s/c,'o')
     axhline(0,alpha=.3)
 
-    obj = lambda p : np.sum((y - keptoy.trap(p,x))**2)
-    p0 = [1e6*df,tdur/24.,.1*tdur/24.]
-    p1 = fmin(obj,p0,disp=1)
-    xfit = linspace(x.min(),x.max(),1000)
-    yfit = keptoy.trap(p1,xfit)
-    plot(xfit,yfit)
+#    obj = lambda p : np.sum((y - keptoy.trap(p,x))**2)
+#    p0 = [1e6*df,tdur/24.,.1*tdur/24.]
+#    p1 = fmin(obj,p0,disp=1)
+#    xfit = linspace(x.min(),x.max(),1000)
+#    yfit = keptoy.trap(p1,xfit)
+#    plot(xfit,yfit)
 
 def plotSES():
     # Plot SES
-    tdurcad = int(np.round(tdur / 24. / keptoy.lc))
+    tdurcad = int(np.round(tdur / keptoy.lc))
     dM = tfind.mtd(t,fcal,tdurcad)
     sca(axStack)
     sketch.stack(t,dM,P,t0,step=df)
@@ -150,8 +152,7 @@ KIC  %(sKIC)s
 P    %(P).2f
 t0   %(t0).2f
 Dur  %(tdur).2f
-df   %(mean).2f
-scar %(scar).2f
+df   %(df).2f
 p50  %(p50).2f
 p90  %(p90).2f
 p99  %(p99).2f
