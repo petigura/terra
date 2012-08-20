@@ -194,10 +194,11 @@ def pkInfo(lc,res,rpk,climb):
     out['pL1_180'] = pL1
     
     dM = tfind.mtd(t,fm,rpk['tdur']/keptoy.lc)
+    dM.fill_value=0
+    
     
     # MAD computed over 10 day intervals
-    mad10 = nd.median_filter(abs(dM),size=50*10)
-
+    mad10 = nd.median_filter( abs(dM.filled()) ,size=50*10)
     out['maQSES']  = np.max(mad10)
     out['madSES']  = ma.median(ma.abs(dM))
     return out

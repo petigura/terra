@@ -23,14 +23,14 @@ print "out: %s" % args.out
 
 
 akeys =['tdur','p99','df','s2n','t0','P','p90','p50']
-names = ['sKIC','pp','tau','b','pp180','tau180','b180','maQMES','madSES']+akeys
+names = ['sKIC','pp','tau','b','pp180','tau180','b180','maQSES','madSES']+akeys
          
 
 dtype = zip(names,['|S10']+[float]*(len(names)-1))
 
 
 def read(f):
-#    import pdb;pdb.set_trace()
+    import pdb;pdb.set_trace()
     h5 = h5py.File(f)
     g = h5['/pk0']
     print f
@@ -47,6 +47,9 @@ def read(f):
     res['pp180']   = g['pL1_180'][0]
     res['tau180']  = g['pL1_180'][1]
     res['b180']    = g['pL1_180'][2]
+
+    res['maQSES']  = g['maQSES'][()]
+    res['madSES']  = g['madSES'][()]
 
     h5.close()
     return res
