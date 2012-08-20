@@ -25,13 +25,11 @@ import glob
 import pyfits
 import sqlite3
 
-
 from matplotlib import mlab
 import keptoy
 import detrend
 import tfind
 import qalg
-
 
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
@@ -373,9 +371,7 @@ def idQ2mo(id,q):
     Quarter plus KIC ID to mod out.
 
     Load query the KIC.db and return Module and Output for a given quarter.
-    """
-
-    
+    """    
     con = sqlite3.connect(kicdb)
     cur = con.cursor()
     command = 'SELECT m,o from q%i WHERE id==%i' % (q,id)
@@ -384,3 +380,27 @@ def idQ2mo(id,q):
     con.close()
     m,o = res[0]
     return m,o
+
+
+def qStartStop():
+    """
+    Quarter Start Stop
+
+    """
+
+    files = os.path.join(os.environ['KEPBASE'],'files/qSamp/*')
+    files = glob.glob(files)
+    rL = []
+    for f in files:
+        hdu = pyfits.open(f)
+        rL.append( (hdu[0].header['QUARTER'], hdu[1].header['TSTART'], 
+                   hdu[1].header['TSTOP'])  )
+    rL = np.array(rL,dtype=[('q',int),('tstart',float),('tstop',float)] )
+    rL.sort()
+    return rL
+
+
+
+
+
+

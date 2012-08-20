@@ -95,7 +95,7 @@ def scar(r):
     x -= min(x)
     x /= max(x)
     y = (r['t0cad']/r['Pcad'])[bcut]
-    plot(x,y,'.',mew=0)
+    plot(x,y,',',mew=0)
 
 
 def stackold(x,y,size,pad=0.1,axl=None,**kw):

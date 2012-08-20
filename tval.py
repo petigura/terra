@@ -15,6 +15,8 @@ import keptoy
 import tfind
 from numpy.polynomial import Legendre
 from matplotlib import mlab
+import h5py
+import os
 
 import config
 from scipy.spatial import cKDTree
@@ -280,31 +282,37 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
 
     Returns
     -------
-    tLbl  : numerical labels for transit region starting at 0
-    cLbl  : numerical labels for continuum region starting at 0
+    tLbl     : index of the candence closest to the transit.
+    tRegLbl  : numerical labels for transit region starting at 0
+    cRegLbl  : numerical labels for continuum region starting at 0
+
     """
 
     t = t.copy()
     t += t0shft(t,P,t0)
-    print t[0]
-    tLbl = np.zeros(t.size,dtype=int) - 1
-    cLbl = np.zeros(t.size,dtype=int) - 1 
+
+    names = ['tRegLbl','cRegLbl','tLbl']
+    rec  = np.zeros(t.size,dtype=zip(names,[int]*3) )
+    for n in rec.dtype.names:
+        rec[n] -= 1
     
     iTrans   = 0 # number of transit, starting at 0.
     tmdTrans = 0 # time of iTrans mid transit time.  
     while tmdTrans < t[-1]:
         # Time since mid transit in units of tdur
         t0dt = np.abs(t - tmdTrans) / tdur 
-        bt = t0dt < 0.5
-        bc = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
+        it   = t0dt.argmin()
+        bt   = t0dt < 0.5
+        bc   = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
         
-        tLbl[bt] = iTrans
-        cLbl[bc] = iTrans
+        rec['tRegLbl'][bt] = iTrans
+        rec['cRegLbl'][bc] = iTrans
+        rec['tLbl'][it]    = iTrans
 
         iTrans += 1 
         tmdTrans = iTrans * P
 
-    return tLbl,cLbl
+    return rec
 
 def LDT(t,fm,cLbl,tLbl):
     """
@@ -383,7 +391,9 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     fPF  : Phase folded flux.
     """
 
-    tLbl,cLbl = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
+    rec = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
+    tLbl,cLbl = rec['tRegLbl'],rec['cRegLbl']
+
     fldt     = LDT(t,fm,cLbl,tLbl)
 
     tm = ma.masked_array(t,fldt.mask,copy=True)
@@ -397,9 +407,6 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     tPF = tPF[sid]
     fPF = fPF[sid]
     return tPF,fPF
-
-
-
 
 def trsh(P,tbase):
     ftdurmi = 0.5
@@ -706,3 +713,35 @@ def nT(t,mask,p):
             tbool[i] = True
 
     return tbool
+
+
+akeys =['tdur','p99','df','s2n','t0','P','p90','p50']
+names = ['sKIC','pp','tau','b','pp180','tau180','b180','maQSES','madSES']+akeys
+dtype = zip(names,['|S10']+[float]*(len(names)-1))
+
+def readPkScalar(f):
+    """
+    Read Scalar Information from Pk file
+    """
+    h5 = h5py.File(f)
+    g = h5['/pk0']
+    print f
+
+    res = np.zeros(1,dtype=dtype)
+    # Read the fields stored in pk file.
+    adict = dict(g.attrs)
+    for k in akeys:
+        res[k] = adict[k]    
+    res['sKIC'] = os.path.basename(f).split('.')[0]
+    res['pp']      = g['pL1'][0]
+    res['tau']     = g['pL1'][1]
+    res['b']       = g['pL1'][2]
+    res['pp180']   = g['pL1_180'][0]
+    res['tau180']  = g['pL1_180'][1]
+    res['b180']    = g['pL1_180'][2]
+
+    res['maQSES']  = g['maQSES'][()]
+    res['madSES']  = g['madSES'][()]
+
+    h5.close()
+    return res
