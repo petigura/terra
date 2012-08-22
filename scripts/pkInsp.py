@@ -54,23 +54,28 @@ t    = lc['t']
 tdur = info['tdur']
 df   = info['df']
 
-
 rec = tval.transLabel(t,P,t0,tdur)
 tdurcad = int(np.round(tdur / keptoy.lc))
 dM = tfind.mtd(t,fcal,tdurcad)
 
-
-
-
 def plotPF(PF):
     # Plot phase folded LC
     x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
+    bv = ~np.isnan(x) & ~np.isnan(y)
+    try:
+        assert x[bv].size==x.size
+    except AssertionError:
+        print 'nans in the arrays.  Removing them.'
+        x = x[bv]
+        y = y[bv]
+        yfit = yfit[bv]
 
     bins   = linspace(x.min(),x.max(),nbins)
     s,bins = histogram(x,weights=y,bins=bins)
     c,bins = histogram(x,bins=bins)
     plot(x,y,',',alpha=.5)
-    plot(x,yfit,alpha=.5)
+    plot(x,yfit,alpha=.5)        
+
     plot(bins[:-1]+0.5*(bins[1]-bins[0]),s/c,'o',mew=0)
     axhline(0,alpha=.3)
 
