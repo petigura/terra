@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """
-Find the peaks in a grid.
+Effectively a wrapper around tval.pkInfo()
+
+
 """
 from argparse import ArgumentParser
 import h5py
@@ -19,23 +21,29 @@ prsr.add_argument('out',type=str,nargs='?', help="output file.  If None, we repl
 prsr.add_argument('--n',type=int, default=1,help='Number of peaks to store')
 args  = prsr.parse_args()
 
+n = args.n
+cal = args.cal
+db = args.db
+grid = args.grid
+
 out = h5plus.ext(args.grid,'.pk.h5',out=args.out)
 print "grid: %s" % args.grid
 print "out: %s" % out
 
-hgd  = h5py.File(args.grid,'r+') 
+
+hgd  = h5py.File(grid,'r+') 
 res  = hgd['RES'][:]
 rgpk = tval.gridPk(res)
-rgpk = rgpk[-args.n:][::-1]  # Take the last n peaks
+rgpk = rgpk[-n:][::-1]  # Take the last n peaks
 
-hlc = h5py.File(args.cal,'r+')
+hlc = h5py.File(cal,'r+')
 lc = hlc['LIGHTCURVE'][:]
 
 hpk = h5plus.File(out)
-skic = os.path.basename(args.grid).split('.')[0]
+skic = os.path.basename(grid).split('.')[0]
 
 # Pull limb darkening coeff from database
-con = sqlite3.connect(args.db)
+con = sqlite3.connect(db)
 cur = con.cursor()
 cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % skic
 cur.execute(cmd)
@@ -47,10 +55,11 @@ for i in range(args.n):
                P     = rpk['Pcad'][i]*keptoy.lc,
                tdur  = rpk['twd'][i]*keptoy.lc,
                df    = rpk['mean'][i],
-               s2n   = rpk['s2n'][i])
+               s2n   = rpk['s2n'][i],
+               twd   = rpk['twd'][i],
+               noise = rpk['noise'][i],
+               Pcad  = rpk['Pcad'][i],)
 
-    for cut in [50,90,99]:
-        rpk['p%i' % cut] = np.percentile(res['s2n'],cut)
 
     out = tval.pkInfo(lc,res,rpk,climb)
 

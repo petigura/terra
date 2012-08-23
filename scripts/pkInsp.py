@@ -57,7 +57,6 @@ df   = info['df']
 rec = tval.transLabel(t,P,t0,tdur)
 tdurcad = int(np.round(tdur / keptoy.lc))
 dM = tfind.mtd(t,fcal,tdurcad)
-
 def plotPF(PF):
     # Plot phase folded LC
     x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']

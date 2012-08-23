@@ -357,3 +357,21 @@ def MA(pL,climb,t,usamp=11):
         fblock = fblock.reshape(tblock.shape)
         fmod   = fblock.mean(axis=0)
     return fmod - 1
+
+
+def MAfast(pL,climb,t,**kwargs):
+    """
+    Mandel Agol Fast
+
+    Simple and dumb way to increase the speed of MA light curve
+    fitting.  At run time I compute the full MA model for 200 points
+    inside the transit.  Then I interpolate over them.
+    """
+    tmi,tma = t.min(),t.max()
+    densew = 2*pL[1]
+    tdense = np.linspace(-densew,densew,200)
+    tg   = np.hstack([np.linspace(tmi,-densew,10) ,tdense,np.linspace(densew,tma,10)])
+    yg   = MA(pL,climb,tg,usamp=11)
+    yint = np.interp(t,tg,yg)
+
+    return yint

@@ -164,8 +164,15 @@ def pkInfo(lc,res,rpk,climb):
 
     madSES   : MAD of SES over entire light curve
     maSES   : value of MAD SES for the least noisy quarter
-    """
 
+
+    Notes 
+    -----
+    phase folded time seemed to be too low by 1 cadence.  Track why
+    this is.  For now, I've just compensated by tPF+=keptoy.lc
+
+
+    """
     out = {}
 
     t  = lc['t']
@@ -178,31 +185,47 @@ def pkInfo(lc,res,rpk,climb):
         pL1 = optimize.fmin(obj,pL0) 
         return pL1
 
+    P,t0,tdur,df = rpk['P'],rpk['t0'],rpk['tdur'],rpk['df']
+    lbl = transLabel(t,P,t0,tdur)
+    # Notch out the transit and recompute
+    fmcut = fm.copy()
+    fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
+    dMCut = tfind.mtd(t,fmcut, rpk['twd'] )    
 
-    pL0 = [np.sqrt(rpk['df']),rpk['tdur']/2.,.3 ]
+    Pcad0 = np.floor(rpk['Pcad'])
+    r = tfind.ep(dMCut, Pcad0)
 
-    tPF,fPF = PF(t,fm,rpk['P'],rpk['t0'],rpk['tdur'])
+    i = np.nanargmax(r['mean'])
+    out['s2ncut'] = r['mean'][i]/rpk['noise']*np.sqrt(r['count'][i])
+
+    pL0 = [np.sqrt(df),tdur/2.,.3 ]
+    tPF,fPF = PF(t,fm,P,t0,tdur)
+    tPF += keptoy.lc
     pL1 = fitMA(tPF,fPF,climb,pL0)
-    fit = keptoy.MA(pL1,climb,tPF,usamp=11)
+    fit = keptoy.MAfast(pL1,climb,tPF,usamp=11)
     lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
     out['lcPF'] = lcPF
     out['pL1']  = pL1
 
-    tPF,fPF = PF(t,fm,rpk['P'],rpk['t0']+rpk['P']/2,rpk['tdur'])
+    tPF,fPF = PF(t,fm,P,t0+P/2,tdur)
+    tPF += keptoy.lc
     pL1 = fitMA(tPF,fPF,climb,pL0)
-    fit = keptoy.MA(pL1,climb,tPF,usamp=11)
+    fit = keptoy.MAfast(pL1,climb,tPF,usamp=11)
     lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
     out['lcPF180'] = lcPF
     out['pL1_180'] = pL1
-    
-    dM = tfind.mtd(t,fm,rpk['tdur']/keptoy.lc)
+
+    dM = tfind.mtd(t,fm,tdur/keptoy.lc)
     dM.fill_value=0
-    
     
     # MAD computed over 10 day intervals
     mad10 = nd.median_filter( abs(dM.filled()) ,size=50*10)
     out['maQSES']  = np.max(mad10)
     out['madSES']  = ma.median(ma.abs(dM))
+
+    for cut in [50,90,99]:
+        out['p%i' % cut] = np.percentile(res['s2n'],cut)
+
     return out
 
 
@@ -715,8 +738,8 @@ def nT(t,mask,p):
     return tbool
 
 
-akeys =['tdur','p99','df','s2n','t0','P','p90','p50']
-names = ['sKIC','pp','tau','b','pp180','tau180','b180','maQSES','madSES']+akeys
+akeys =['tdur','df','s2n','t0','P']
+names = ['s2ncut','p50','p90','p99','sKIC','pp','tau','b','pp180','tau180','b180','maQSES','madSES']+akeys
 dtype = zip(names,['|S10']+[float]*(len(names)-1))
 
 def readPkScalar(f):
@@ -742,6 +765,12 @@ def readPkScalar(f):
 
     res['maQSES']  = g['maQSES'][()]
     res['madSES']  = g['madSES'][()]
+
+    res['p50']  = g['p50'][()]
+    res['p90']  = g['p90'][()]
+    res['p99']  = g['p99'][()]
+    res['s2ncut']  = g['s2ncut'][()]
+
 
     h5.close()
     return res
