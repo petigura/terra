@@ -10,7 +10,7 @@ from matplotlib import mlab
 import numpy as np
 import keptoy
 import os
-from tval import readPkScalar
+import tval
 
 prsr = ArgumentParser()
 prsr.add_argument('out',type=str, help='output database')
@@ -19,13 +19,15 @@ args  = prsr.parse_args()
 files = args.inp
 print "reducing %i files" % len(files)
 
-res = readPkScalar(files[0])
 rL  = []
+import pdb;pdb.set_trace()
 for i in range(len(args.inp)):
+    f = files[i]
     try:
-        rL.append( readPkScalar(files[i]) )
+        p = tval.Peak(f,quick=True)
+        rL.append( p.get_db() )
     except:
-        print "%s failed" % files[i]
+        print "%s failed" % f
         pass
 
 rL = np.hstack(rL)

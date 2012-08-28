@@ -4,6 +4,11 @@ Transit Validation
 After the brute force period search yeilds candidate periods,
 functions in this module will check for transit-like signature.
 """
+from scipy.spatial import cKDTree
+import sqlite3
+import h5plus
+import re
+
 import numpy as np
 from numpy import ma
 from scipy import optimize
@@ -17,63 +22,10 @@ from numpy.polynomial import Legendre
 from matplotlib import mlab
 import h5py
 import os
+from matplotlib.cbook import is_string_like,is_numlike
+
 
 import config
-from scipy.spatial import cKDTree
-
-def val(t,fm,tres):
-    """
-    Validate promising transits.
-
-    Wrapper function which does the following for a list of transit
-    specified via `tres`:
-    - Fits the transit with Protopapas (2005) `keptoy.P05` model.
-    - For transits with S/N > hs2n look for harmonics.
-
-    Parameters
-    ----------
-    t    : time
-    fm   : masked flux array.
-    tres : a record array with the parameters of the putative transit.
-           - s2n. val evaluates transits with the highest S/N.
-           - P
-           - epoch
-           - tdur
-           - df
-           
-    Returns
-    -------
-    rval : a record array with following fields:
-           - P     <- From best fit
-           - epoch
-           - tdur
-           - df
-           - s2n
-    """
-
-
-    trespks = tres[ nd.maximum_filter(tres['s2n'],3) == tres['s2n']  ]
-    lcFitThresh = np.sort( trespks['s2n'] )[-nCheck]
-    trespks = trespks[ trespks['s2n'] >  lcFitThresh ]
-
-    def fcand(r):
-        d = qalg.rec2d(r)
-        resd = fitcand(t,fm,d)
-        return qalg.d2rec(resd)
-
-    tresfit = map(fcand,trespks)
-    tresfit = np.hstack(tresfit)
-    tresfit = tresfit[ tresfit['stbl'] ]   # Cut out crazy fits.
-
-    def fharm(r):
-        d = qalg.rec2d(r)
-        resd = harmW(t,fm,d)
-        return qalg.d2rec(resd)
-    
-    tresharm = map(fharm,tresfit[ tresfit['s2n'] > hs2n] )
-    tresharm = np.hstack(tresharm)
-
-    return tresfit,tresharm
 
 def gridPk(rg,width=1000):
     """
@@ -173,89 +125,6 @@ def pkInfo(lc,res,rpk,climb):
 
 
     """
-    out = {}
-
-    t  = lc['t']
-    fm = ma.masked_array(lc['fcal'],lc['fmask'])
-
-    def fitMA(tPF,fPF,climb,pL0):
-        def obj(pL):
-            fmod = keptoy.MA(pL,climb,tPF,usamp=11)
-            return np.sum((fPF-fmod)**2)
-        pL1 = optimize.fmin(obj,pL0) 
-        return pL1
-
-    P,t0,tdur,df = rpk['P'],rpk['t0'],rpk['tdur'],rpk['df']
-    lbl = transLabel(t,P,t0,tdur)
-    # Notch out the transit and recompute
-    fmcut = fm.copy()
-    fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
-    dMCut = tfind.mtd(t,fmcut, rpk['twd'] )    
-
-    Pcad0 = np.floor(rpk['Pcad'])
-    r = tfind.ep(dMCut, Pcad0)
-
-    i = np.nanargmax(r['mean'])
-    out['s2ncut'] = r['mean'][i]/rpk['noise']*np.sqrt(r['count'][i])
-
-    pL0 = [np.sqrt(df),tdur/2.,.3 ]
-    tPF,fPF = PF(t,fm,P,t0,tdur)
-    tPF += keptoy.lc
-    pL1 = fitMA(tPF,fPF,climb,pL0)
-    fit = keptoy.MAfast(pL1,climb,tPF,usamp=11)
-    lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
-    out['lcPF'] = lcPF
-    out['pL1']  = pL1
-
-    tPF,fPF = PF(t,fm,P,t0+P/2,tdur)
-    tPF += keptoy.lc
-    pL1 = fitMA(tPF,fPF,climb,pL0)
-    fit = keptoy.MAfast(pL1,climb,tPF,usamp=11)
-    lcPF = np.rec.fromarrays([tPF,fPF,fit],names='tPF,fPF,fit')
-    out['lcPF180'] = lcPF
-    out['pL1_180'] = pL1
-
-    dM = tfind.mtd(t,fm,tdur/keptoy.lc)
-    dM.fill_value=0
-    
-    # MAD computed over 10 day intervals
-    mad10 = nd.median_filter( abs(dM.filled()) ,size=50*10)
-    out['maQSES']  = np.max(mad10)
-    out['madSES']  = ma.median(ma.abs(dM))
-
-    for cut in [50,90,99]:
-        out['p%i' % cut] = np.percentile(res['s2n'],cut)
-
-    return out
-
-
-def getT(time,P,epoch,wd):
-    """
-    Get Transits
-
-    time : Time series
-    P    : Period
-    epoch: epoch
-    wd   : How much data to return for each slice.
-
-    Returns
-    -------
-    Time series phase folded with everything but regions of width `wd`
-    centered around epoch + (0,1,2,...)*P
-
-    Note
-    ----
-
-    plot(tfold,fm) will not plot all the transit for some reason.
-    Instead, do plot(tfold[~tfold.mask],fm[~tfold.mask])
-
-    """
-    tfold = time - epoch + P /2 #  shift transit to (0.5, 1.5, 2.5) * P
-    tfold = np.mod(tfold,P)     #  Now transits are at 0.5*P
-    tfold -= P/2
-    tfold = ma.masked_outside(tfold,-wd/2,wd/2)
-    tfold = ma.masked_invalid(tfold)
-    return tfold
 
 def t0shft(t,P,t0):
     """
@@ -429,143 +298,201 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
     tPF = tPF[sid]
     fPF = fPF[sid]
+    
+    bg  = ~np.isnan(tPF) & ~np.isnan(fPF)
+    tPF = tPF[bg]
+    fPF = fPF[bg]
     return tPF,fPF
 
-def trsh(P,tbase):
-    ftdurmi = 0.5
-    tdur = keptoy.a2tdur( keptoy.P2a(P) ) 
-    tdurmi = ftdurmi*tdur 
-    dP     = tdurmi * P / tbase
-    depoch = tdurmi
+class Peak():
+    noPrintRE = '.*?file|climb|skic'
+    noDBRE    = 'skic|climb'
+    def __init__(self,*args,**kwargs):
+        """
+        Peak Object
 
-    return dict(dP=dP,depoch=depoch)
+        Can intialize from mqcal,grid,db files or from a previous pk file.
+        """
+        if len(args) is 3:
+            attrs = {}
+            attrs['mqcalfile'] = args[0]
+            attrs['gridfile']  = args[1]
+            attrs['dbfile']    = args[2]
+
+        self.ds = {}    
+        if len(args) is 1:
+            self.pkfile    = args[0]
+            hpk            = h5py.File(self.pkfile)
+            attrs          = dict(hpk.attrs) 
+            self.ds = {}
+            for k in hpk.keys():
+                self.ds[k] = hpk[k][:]
+            hpk.close()
+        # If the quick kwarg is set, return the attributes specified in h5file.
+        try:
+            if kwargs['quick']:
+                self.attrs = attrs
+                return
+        except KeyError:
+            pass
+
+        hlc = h5py.File(attrs['mqcalfile'],'r+')
+        hgd = h5py.File(attrs['gridfile'],'r+')
+        self.lc  = hlc['LIGHTCURVE'][:]
+        self.res = hgd['RES'][:]
+        hlc.close()
+        hgd.close()
+
+        # Add important values to attrs dict
+        if attrs.keys().count('sKIC') == 0:
+            skic = os.path.basename(attrs['gridfile']).split('.')[0]
+            attrs['skic'] = skic
+        if attrs.keys().count('climb') == 0:
+            # Pull limb darkening coeff from database
+            con = sqlite3.connect(attrs['dbfile'])
+            cur = con.cursor()
+            cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % attrs['skic']
+            cur.execute(cmd)
+            attrs['climb'] = np.array(cur.fetchall()[0])
+        
+        if len(args) is 3:
+            # Pull the peak information
+            rgpk = gridPk(self.res)
+            rpk = rgpk[-2:-1]
+            for k in ['t0','Pcad','twd','mean','s2n','noise']:
+                attrs[k] = rpk[k][0]
+            attrs['tdur'] = attrs['twd']*keptoy.lc
+            attrs['P']    = attrs['Pcad']*keptoy.lc
+            attrs['skic'] = skic
+
+        # Add commonly used values as attrs
+        self.t    = self.lc['t']
+        self.fm   = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
+        self.P    = attrs['P']
+        self.t0   = attrs['t0']
+        self.tdur = attrs['tdur']
+        self.attrs = attrs
+
+    def phaseFold(self):
+        """
+        Phase Fold
+
+        Add the phase-folded light curve to the peak object.
+        """
+        attrs = self.attrs
+        for ph in [0,180]:
+            P,tdur = attrs['P'],attrs['tdur']
+            t0     = attrs['t0'] + ph / 360. * P 
+            tPF,fPF = PF(self.t,self.fm,P,t0,tdur)
+            tPF += keptoy.lc
+            lcPF = np.array(zip(tPF,fPF),dtype=[('tPF',float),('fPF',float)] )
+            self.ds['lcPF%i' % ph] = lcPF
+
+    def fit(self):
+        """
+        Fit MA model to PF light curves
+        
+        Noise attribute is equivalent to a noise per transit.  
+        noise per point is ~ np.sqrt(twd) * noise
+        """
+        attrs = self.attrs
+        pL0 = [np.sqrt(attrs['mean']),attrs['tdur']/2.,.3 ]
+        for ph in [0,180]:
+            PF = self.ds['lcPF%i' % ph]
+            def model(pL):
+                return keptoy.MAfast(pL,attrs['climb'],PF['tPF'],usamp=11)
+            def obj(pL):
+                res = (PF['fPF']-model(pL))/(attrs['noise']*attrs['twd'])
+                return (res**2).sum()/PF.size
+            pL1,fopt,iter,warnflag,funcalls  \
+                = optimize.fmin(obj,pL0,full_output=True) 
+            fit = model(pL1)
+            self.ds['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
+            self.attrs['pL%i' % ph]  = pL1
+            self.attrs['X2_%i' % ph] = fopt
+            
+    def s2ncut(self):
+        """
+        Cut out the transit and recomput S/N.  It s2ncut should be low.
+        """
+
+        lbl = transLabel(self.t,self.P,self.t0,self.tdur)
+        attrs = self.attrs
+        # Notch out the transit and recompute
+        fmcut = self.fm.copy()
+        fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
+        dMCut = tfind.mtd(self.t,fmcut, attrs['twd'] )    
+
+        Pcad0 = np.floor(attrs['Pcad'])
+        r = tfind.ep(dMCut, Pcad0)
+
+        i = np.nanargmax(r['mean'])
+        s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
+        self.attrs['s2ncut'] = s2n
+        
+    def write(self,pkfile,**kwargs):
+        hpk = h5plus.File(pkfile,**kwargs)
+
+        for k in self.attrs.keys():
+            hpk.attrs[k] = self.attrs[k]
+        for k in self.ds.keys():
+            hpk.create_dataset(k,data=self.ds[k])
+        hpk.close()
     
-def objMT(p,time,fdt):
-    """
-    Multitransit Objective Function
-    """
-    fmod = keptoy.P05(p,time)
-    resid = (fmod - fdt)/1e-4
-    obj = (resid**2).sum() 
-    return obj
+    def flatten(self,exclRE):
+        """
+        Return a flat dictionary with exclRE keys excluded.
+        """
+        pkeys = [k for k in self.attrs.keys() if re.match(exclRE,k) is None]
+        d = {}
+        for k in pkeys:
+            v = self.attrs[k]
+            if k.find('pL') != -1:
+                suffix = k.split('pL')[-1]
+                d['df'+suffix]  = v[0]
+                d['tau'+suffix] = v[1]
+                d['b'+suffix]   = v[2]
+            else:
+                d[k] = v
+        return d
+                        
+    def pL2d(self,pL):
+        return dict(df=pL[0],tau=pL[1],b=pL[2])
 
-def obj1T(p,t,f):
-    """
-    Single Transit Objective Function
-    """
-    model = keptoy.P051T(p,t)
-    resid  = (model - f)/1e-4
-    obj = (resid**2).sum()
-    return obj
+        
+    def __str__(self):
+        dprint = self.flatten(self.noPrintRE)
+        strout = \
+"""
+%s
+-------------
+""" % self.attrs['skic']
+        for k in dprint.keys():
+            v = dprint[k]
+            strout += '%s %.4g\n' % (k.ljust(8),v)
 
+        return strout
 
-def id1T(t,fm,p,wd=2.,usemask=True):
-    """
-    Grab the indecies and midpoint of a putative transit. 
-    """
-    tdur  = p['tdur']
+    def get_db(self):
+        """
+        Return a dict to store as db
+        """
+        d = self.flatten(self.noDBRE)
 
-    tdurcad  = round(tdur/keptoy.lc)
-    wdcad    = round(wd/keptoy.lc)
-
-    mask = fm.mask | ~tfind.isfilled(t,fm,tdurcad)
-
-    ### Determine the indecies of the points to fit. ###
-    # Exclude regions where the convolution returned a nan.
-    ms   = midTransId(t,p)
-    if usemask:
-        ms   = [m for m in ms if ~mask[m] ]
-
-    sLDT = [ getSlice(m,wdcad) for m in ms ]
-    x = np.arange(fm.size)
-    idL  = [ x[s][~fm[s].mask] for s in sLDT ]
-    idL  = [ id for id in idL if id.size > 10 ]
-
-    return ms,idL
-
-def fitcand(t,fm,p,full=False):
-    """
-    Perform a non-linear fit to a putative transit.
-
-    Parameters
-    ----------
-    t  : time
-    fm : flux
-    p  : trial parameter (dictionary)
-    full : Retrun tdt and fdt
-
-    Returns
-    -------
-    res : Dictionary with the following parameters.
-          - P
-          - epoch
-          - df
-          - tdur
-          - s2n
-          - stbl    = boolean variable if fit is well behaved.
-          - tdt  - time
-          - fdt  - detrended flux
+        dtype = []
+        for k in d.keys():
+            k = str(k) # no unicode
+            v = d[k]
+            if is_string_like(v):
+                typ = '|S100'
+            elif is_numlike(v):
+                typ = '<f8'
+            dtype += [(k,typ)]
+            
+        t = tuple(d.values())
+        return np.array([t,],dtype=dtype)
 
 
-    Todo
-    ----
-
-    Add priors in for P.  tdur goes negative, but the sign doesn't matter
-    """
-    dtL  = LDTwrap(t,fm,p)
-    dt   = np.hstack(dtL)
-
-    fdt = dt['fdt']
-    tdt = dt['tdt']
-
-    p0  = np.array([p['P'],p['epoch'],p['df'],p['tdur']])
-    p1  = optimize.fmin_powell(objMT,p0,args=(tdt,fdt),disp=False)
-
-    # Hack to prevent negative transit duration.
-    p1[3] = np.abs(p1[3])
-
-    dp = (p0[:2]-p1[:2])
-    if (abs(dp) > np.array([dP,depoch])).any():
-        stbl = False
-    elif p1[0] < 0:
-        stbl = False
-    else:
-        stbl = True
-
-    tfold = getT(tdt,p['P'],p['epoch'],p['tdur'])
-    fdt   = ma.masked_array(fdt,mask=tfold.mask)
-    tdt   = ma.masked_array(tdt,mask=tfold.mask)
-
-    s2n = s2n_fit(fdt,tdt,p1)
-    res = dict(P=p1[0],epoch=p1[1],df=p1[2],tdur=p1[3],s2n=s2n,stbl=stbl)
-
-    if full:
-        res['fdt'] = fdt
-        res['tdt'] = tdt
-
-    return res
-
-def s2n_mean(fdt):
-    return -ma.mean(fdt)/ma.std(fdt)*np.sqrt(fdt.count())
-
-def s2n_med(fdt):
-    sig = ma.median(fdt)
-    noise = ma.median(abs(fdt-sig))
-    return -sig/noise*np.sqrt(fdt.count())
-
-def s2n_fit(fdt,tdt,p):
-    """
-    Evaluate S/N taking the best fit depth as signal and the scatter
-    about the residuals as the noise.
-    """
-    model = keptoy.P05(p,tdt)
-    sig   = p[2]
-    resid = fdt-model
-    noise = ma.median(abs(resid))
-    s2n = sig/noise*np.sqrt(fdt.count() )
-    return s2n
-
-thresh = 0.001
 
 def window(fl,PcadG):
     """
@@ -583,30 +510,6 @@ def window(fl,PcadG):
         winL.append(win)
 
     return winL
-
-def midTransId(t,p):
-    """
-    Mid Transit Index
-
-    Return the indecies of mid transit for input parameters.
-
-    Parameters
-    ----------
-
-    t - timeseries
-    p - dictionary with 'P','epoch','tdur'
-
-    """
-    P     = p['P']
-    epoch = p['epoch']
-
-    epoch = np.mod(epoch,P)
-    tfold = np.mod(t,P)
-    
-    ms = np.where(np.abs(tfold-epoch) < 0.5 * keptoy.lc)[0]
-    ms = list(ms)
-    return ms
-
 
 def harmSearch(res,t,fm,Pcad0,ver=False):
     """
@@ -677,24 +580,7 @@ def harmSearch(res,t,fm,Pcad0,ver=False):
 
     return rLarr
 
-def pd2a(d):
-    return np.array([d['P'],d['epoch'],d['df'],d['tdur']])
 
-def pa2d(a):
-    return dict(P=a[0],epoch=a[1],df=a[2],tdur=a[3])
-
-def getSlice(m,wdcad):
-    """
-    Get slice
-    
-    Parameters
-    ----------
-    m    : middle index (center of the slice).
-    wdcad : width of slice list (units of cadence).
-
-    """
-
-    return slice( m-wdcad/2 , m+wdcad/2 )
 
 def tdict(d,prefix=''):
     """
@@ -718,7 +604,6 @@ def nT(t,mask,p):
     Simple helper function.  Given the transit ephemeris, how many
     transit do I expect in my data?
     """
-    
     trng = np.floor( 
         np.array([p['epoch'] - t[0],
                   t[-1] - p['epoch']]
@@ -737,40 +622,3 @@ def nT(t,mask,p):
 
     return tbool
 
-
-akeys =['tdur','df','s2n','t0','P']
-names = ['s2ncut','p50','p90','p99','sKIC','pp','tau','b','pp180','tau180','b180','maQSES','madSES']+akeys
-dtype = zip(names,['|S10']+[float]*(len(names)-1))
-
-def readPkScalar(f):
-    """
-    Read Scalar Information from Pk file
-    """
-    h5 = h5py.File(f)
-    g = h5['/pk0']
-    print f
-
-    res = np.zeros(1,dtype=dtype)
-    # Read the fields stored in pk file.
-    adict = dict(g.attrs)
-    for k in akeys:
-        res[k] = adict[k]    
-    res['sKIC'] = os.path.basename(f).split('.')[0]
-    res['pp']      = g['pL1'][0]
-    res['tau']     = g['pL1'][1]
-    res['b']       = g['pL1'][2]
-    res['pp180']   = g['pL1_180'][0]
-    res['tau180']  = g['pL1_180'][1]
-    res['b180']    = g['pL1_180'][2]
-
-    res['maQSES']  = g['maQSES'][()]
-    res['madSES']  = g['madSES'][()]
-
-    res['p50']  = g['p50'][()]
-    res['p90']  = g['p90'][()]
-    res['p99']  = g['p99'][()]
-    res['s2ncut']  = g['s2ncut'][()]
-
-
-    h5.close()
-    return res
