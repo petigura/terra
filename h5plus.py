@@ -8,6 +8,19 @@ import atpy
 import sys
 import pyfits
 
+class File(h5py.File):
+   def __init__(self,name,**kwargs):
+      """
+      Simple extension to h5py.File
+
+      If overwrite=True, remove file before returning the file handel.
+      """
+      if kwargs['overwrite']==True:
+         if os.path.exists(name):
+            os.remove(name)
+         print 'removing %s ' % name
+      h5py.File.__init__(self,name,**kwargs)
+
 def compChunks(elsize,ncolmax):
    """
    Compute Chunck Size
@@ -69,11 +82,7 @@ def atpy2h5(files,out,diff='all',name='ds'):
    print "%i files failed" % nFail
    h5.close()
 
-def File(file):
-   if os.path.exists(file):
-      os.remove(file)
-      print 'removing %s ' % file
-   return h5py.File(file)
+
 
 def diffDS(name,dtype,shape,h5,diff='all'):
    """
