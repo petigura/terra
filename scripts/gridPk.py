@@ -11,6 +11,8 @@ import numpy as np
 import keptoy
 import sqlite3
 import os
+import logging
+
 
 prsr = ArgumentParser(description='Find peaks in grid file')
 prsr.add_argument('cal',type=str, help=".cal.h5 file")
@@ -23,6 +25,8 @@ cal  = args.cal
 db   = args.db
 grid = args.grid
 out  = args.out
+
+print "%s: %s" % (args.cal,os.environ['PYTHONPATH'])
 
 p = tval.Peak(cal,grid,db)
 p.phaseFold()

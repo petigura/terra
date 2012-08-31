@@ -306,7 +306,7 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
 class Peak():
     noPrintRE = '.*?file|climb|skic'
-    noDBRE    = 'skic|climb'
+    noDBRE    = 'climb'
     def __init__(self,*args,**kwargs):
         """
         Peak Object
@@ -427,7 +427,11 @@ class Peak():
         r = tfind.ep(dMCut, Pcad0)
 
         i = np.nanargmax(r['mean'])
-        s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
+        if i is np.nan:
+            s2n = np.nan
+        else:
+            s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
+
         self.attrs['s2ncut'] = s2n
         
     def write(self,pkfile,**kwargs):

@@ -13,7 +13,6 @@ import keptoy
 import tval
 import string
 import keplerio
-from tval import readPkScalar
 
 nbins = 20
 prsr = ArgumentParser()
@@ -35,13 +34,11 @@ cal  = args.cal
 grid = args.grid
 pk   = args.pk
 
-info = readPkScalar(pk)
-pk   = h5py.File(pk)
-grp  = pk['/pk0']
+info = pk.__str__()
+pk   = tval.Peak(pk)
 
-t0 = info['t0']
-#t0 += args.epoch
-P  = info['P']
+t0 = pk.attrs['t0']
+P  = pk.attrs['P']
 
 fig = figure(figsize=(18,10))
 hgrd = h5py.File(grid,'r+') 
@@ -51,8 +48,8 @@ hcal = h5py.File(cal,'r+')
 lc   = hcal['LIGHTCURVE']
 fcal = ma.masked_array(lc['fcal'],lc['fmask'])
 t    = lc['t']
-tdur = info['tdur']
-df   = info['df']
+tdur = pk.attrs['tdur']
+df   = pk.attrs['pL0'][0]**2
 
 rec = tval.transLabel(t,P,t0,tdur)
 tdurcad = int(np.round(tdur / keptoy.lc))
@@ -104,12 +101,14 @@ sca(axGrid)
 plotGrid()
 
 sca(axPF180)
-plotPF(grp['lcPF180'][:])
+plotPF(pk.ds['lcPF180'])
+
 gca().xaxis.set_visible(False)
 gca().yaxis.set_visible(False)
 
 sca(axPF)
-plotPF(grp['lcPF'][:])
+plotPF(pk.ds['lcPF0'])
+
 gca().xaxis.set_visible(False)
 gca().yaxis.set_visible(False)
 ylim(-5*df,3*df)
@@ -141,18 +140,7 @@ axSES.plot(tnum,ses)
 axSeason.plot(season,ses,'.')
 
 
-def p1elrec(rec):
-    sout = ''
-    for n in rec.dtype.names:
-        v = rec[0][n]
-        if is_numlike(v):
-            sout += string.ljust(n,10) + string.ljust('  %.3g' %  v,6)
-        elif is_string_like(v):
-            sout += v
-        sout +='\n'
-    return sout
-
-gcf().text( 0.88, 0.05, p1elrec(info), size=12, name='monospace',
+gcf().text( 0.88, 0.05, info, size=12, name='monospace',
             bbox=dict(visible=True,fc='white'))
 
 tight_layout()

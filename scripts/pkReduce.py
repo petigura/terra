@@ -20,8 +20,9 @@ files = args.inp
 print "reducing %i files" % len(files)
 
 rL  = []
-import pdb;pdb.set_trace()
 for i in range(len(args.inp)):
+    if np.mod(i,100) == 0:
+        print "%i files reduced" % i 
     f = files[i]
     try:
         p = tval.Peak(f,quick=True)
