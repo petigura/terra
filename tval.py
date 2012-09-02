@@ -24,7 +24,6 @@ import h5py
 import os
 from matplotlib.cbook import is_string_like,is_numlike
 
-
 import config
 
 def gridPk(rg,width=1000):
@@ -178,6 +177,11 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
     tRegLbl  : numerical labels for transit region starting at 0
     cRegLbl  : numerical labels for continuum region starting at 0
 
+    Notes
+    -----
+    tLbl might not be the best way to find the mid transit index.  In
+    many cases, dM[rec['tLbl']] will decrease with time, meaning there
+    is a cumulative error that's building up.
     """
 
     t = t.copy()
@@ -206,7 +210,7 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
 
     return rec
 
-def LDT(t,fm,cLbl,tLbl):
+def LDT(t,fm,cLbl,tLbl,verbose=False):
     """
     Local Detrending
 
@@ -221,7 +225,10 @@ def LDT(t,fm,cLbl,tLbl):
     fm   : masked flux array
     cLbl : Labels for continuum regions.  Computed using `transLabel`
     cLbl : Labels for transit regions.  Computed using `transLabel`
-    
+
+    verbose
+         : list bad transit.
+
     Returns
     -------
     fldt : local detrended flux
@@ -256,9 +263,11 @@ def LDT(t,fm,cLbl,tLbl):
             pfit = np.polyfit(tc,fc,1)
             fldt[bldt] = fm[bldt] - np.polyval(pfit,tldt)
             fldt.mask[bldt] = fm.mask[bldt]
+        elif verbose==True:
+            print "no data for trans # %i" % (i)
         else:
-            print "trans # %i failed: ncB %i ncA %i" % (i,ncBefore,ncAfter)
-
+            pass
+        
     return fldt
 
 def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
@@ -358,7 +367,7 @@ class Peak():
         if len(args) is 3:
             # Pull the peak information
             rgpk = gridPk(self.res)
-            rpk = rgpk[-2:-1]
+            rpk = rgpk[-1:]
             for k in ['t0','Pcad','twd','mean','s2n','noise']:
                 attrs[k] = rpk[k][0]
             attrs['tdur'] = attrs['twd']*keptoy.lc
@@ -405,7 +414,7 @@ class Peak():
                 res = (PF['fPF']-model(pL))/(attrs['noise']*attrs['twd'])
                 return (res**2).sum()/PF.size
             pL1,fopt,iter,warnflag,funcalls  \
-                = optimize.fmin(obj,pL0,full_output=True) 
+                = optimize.fmin(obj,pL0,full_output=True,disp=False) 
             fit = model(pL1)
             self.ds['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
             self.attrs['pL%i' % ph]  = pL1
@@ -415,7 +424,6 @@ class Peak():
         """
         Cut out the transit and recomput S/N.  It s2ncut should be low.
         """
-
         lbl = transLabel(self.t,self.P,self.t0,self.tdur)
         attrs = self.attrs
         # Notch out the transit and recompute

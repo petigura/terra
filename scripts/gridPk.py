@@ -26,12 +26,9 @@ db   = args.db
 grid = args.grid
 out  = args.out
 
-print "%s: %s" % (args.cal,os.environ['PYTHONPATH'])
-
 p = tval.Peak(cal,grid,db)
 p.phaseFold()
 p.fit()
 p.s2ncut()
 p.write(out,overwrite=True)
-
-print "pk: %s" % out
+print "pk %s: %s" % (p.attrs['skic'],out)

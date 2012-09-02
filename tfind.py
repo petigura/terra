@@ -232,7 +232,7 @@ def ep(dM,Pcad0):
     rep   = np.empty(M,dtype=epdtype)
 
     # Take maximum epoch
-    idColMa      = meanF.argmax(axis=1)
+    idColMa      = np.nanargmax(meanF,axis=1)
     rep['mean']  = meanF[idRow,idColMa]
     rep['count'] = countF[idRow,idColMa]
     rep['t0cad'] = t0cad[idColMa]

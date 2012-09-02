@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
-from matplotlib.pylab import *
-from matplotlib.gridspec import GridSpec
+
 import h5py
 import numpy as np
+from numpy import ma
+
 import atpy
 from scipy.optimize import fmin
-
 import sketch
 import tfind
 import keptoy
@@ -14,46 +14,8 @@ import tval
 import string
 import keplerio
 
-nbins = 20
-prsr = ArgumentParser()
+### Helper Functions ###
 
-phelp = """
-Parameters
-if db is set: KIC, pknum 
-else        : P (days), t0 (days), tdur (hours), Depth (ppm)'
-"""
-prsr.add_argument('p',nargs='+',type=str,help=phelp)
-prsr.add_argument('cal' ,type=str,)
-prsr.add_argument('grid',type=str,)
-prsr.add_argument('pk'  ,type=str,)
-prsr.add_argument('-o',type=str,default=None,help='png')
-prsr.add_argument('--epoch',type=int,default=0,help='shift wrt fits epoch')
-args  = prsr.parse_args()
-
-cal  = args.cal
-grid = args.grid
-pk   = args.pk
-
-info = pk.__str__()
-pk   = tval.Peak(pk)
-
-t0 = pk.attrs['t0']
-P  = pk.attrs['P']
-
-fig = figure(figsize=(18,10))
-hgrd = h5py.File(grid,'r+') 
-res = hgrd['RES']
-
-hcal = h5py.File(cal,'r+') 
-lc   = hcal['LIGHTCURVE']
-fcal = ma.masked_array(lc['fcal'],lc['fmask'])
-t    = lc['t']
-tdur = pk.attrs['tdur']
-df   = pk.attrs['pL0'][0]**2
-
-rec = tval.transLabel(t,P,t0,tdur)
-tdurcad = int(np.round(tdur / keptoy.lc))
-dM = tfind.mtd(t,fcal,tdurcad)
 def plotPF(PF):
     # Plot phase folded LC
     x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
@@ -87,6 +49,70 @@ def plotGrid():
     plot(x[id],res['s2n'][id],'ro')
     autoscale(tight=True)
 
+
+###########################
+
+nbins = 20
+prsr = ArgumentParser()
+
+phelp = """
+Parameters
+pk file
+"""
+prsr.add_argument('pk'  ,type=str,)
+prsr.add_argument('-o',type=str,default=None,help='png')
+prsr.add_argument('--epoch',type=int,default=0,help='shift wrt fits epoch')
+args  = prsr.parse_args()
+
+### Load up the data
+pk   = args.pk
+pk   = tval.Peak(pk)
+t0 = pk.attrs['t0']
+P  = pk.attrs['P']
+
+hgrd = h5py.File(pk.attrs['gridfile'],'r+') 
+res = hgrd['RES']
+
+hcal = h5py.File(pk.attrs['mqcalfile'],'r+') 
+lc   = hcal['LIGHTCURVE']
+fcal = ma.masked_array(lc['fcal'],lc['fmask'])
+t    = lc['t']
+tdur = pk.attrs['tdur']
+df   = pk.attrs['pL0'][0]**2
+
+rec = tval.transLabel(t,P,t0,tdur*2)
+tdurcad = int(np.round(tdur / keptoy.lc))
+dM = tfind.mtd(t,fcal,tdurcad)
+qrec = keplerio.qStartStop()
+q = np.zeros(t.size) - 1
+for r in qrec:
+    b = (t > r['tstart']) & (t < r['tstop'])
+    q[b] = r['q']
+
+tRegLbl = rec['tRegLbl']
+
+btmid = np.zeros(tRegLbl.size,dtype=bool) # True if transit mid point.
+for iTrans in range(0,tRegLbl.max()+1):
+    tRegSES = dM[ tRegLbl==iTrans ] 
+    if tRegSES.count() > 0:
+        maSES = np.nanmax( tRegSES.compressed() )
+        btmid[(dM==maSES) & (tRegLbl==iTrans)] = True
+
+tnum = tRegLbl[btmid]
+ses  = dM[btmid]
+q    = q[btmid]
+season = np.mod(q,4)
+
+### Now plot ###
+# Whether or not we save determines which backend we want to use.
+
+import matplotlib
+from matplotlib.gridspec import GridSpec
+if args.o:
+    matplotlib.use('Agg')
+from matplotlib.pylab import *
+
+fig = figure(figsize=(18,10))
 gs = GridSpec(5,10)
 axGrid  = fig.add_subplot(gs[0,0:8])
 axStack = fig.add_subplot(gs[2: ,0:8])
@@ -96,19 +122,16 @@ axScar  = fig.add_subplot(gs[0,-1])
 axSES   = fig.add_subplot(gs[1,-1])
 axSeason= fig.add_subplot(gs[2,-1])
 
-
 sca(axGrid)
 plotGrid()
 
 sca(axPF180)
 plotPF(pk.ds['lcPF180'])
-
 gca().xaxis.set_visible(False)
 gca().yaxis.set_visible(False)
 
 sca(axPF)
 plotPF(pk.ds['lcPF0'])
-
 gca().xaxis.set_visible(False)
 gca().yaxis.set_visible(False)
 ylim(-5*df,3*df)
@@ -118,29 +141,17 @@ plotSES()
 
 sca(axScar)
 sketch.scar(res)
+gca().xaxis.set_visible(False)
+gca().yaxis.set_visible(False)
 
 
-qrec = keplerio.qStartStop()
-q = np.zeros(t.size) - 1
-for r in qrec:
-    b = (t > r['tstart']) & (t < r['tstop'])
-    q[b] = r['q']
-
-tLbl = rec['tLbl']
-b = tLbl >= 0
-
-tnum = tLbl[b]
-ses  = dM[b]
-q    = q[b]
-season = mod(q,4)
 axSeason.set_xlim(-1,4)
+axSES.plot(tnum,ses*1e6,'.')
+axSES.xaxis.set_visible(False)
+axSeason.plot(season,ses*1e6,'.')
+axSeason.xaxis.set_visible(False)
 
-
-axSES.plot(tnum,ses)
-axSeason.plot(season,ses,'.')
-
-
-gcf().text( 0.88, 0.05, info, size=12, name='monospace',
+gcf().text( 0.88, 0.05, pk.__str__() , size=12, name='monospace',
             bbox=dict(visible=True,fc='white'))
 
 tight_layout()

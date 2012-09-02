@@ -6,9 +6,10 @@ The idea is to keep it rough.
 import atpy
 from numpy import *
 import glob
-import matplotlib.pylab as plt
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib.pylab import *
-
+    
 from matplotlib import rcParams
 from matplotlib.gridspec import GridSpec,GridSpecFromSubplotSpec
 from keptoy import *
@@ -25,7 +26,7 @@ def inspectT(t0,f0,P,ph,darr=None):
     """
 
     
-def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50):
+def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50,**kwargs):
     """
     Plot the SES    
     """
@@ -60,9 +61,8 @@ def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50):
         phseg = phseg[sid]
         yseg  = yseg[sid]
 
-
         color = cL[ np.mod( l , len(cL) ) ]
-        ax.plot(phseg+xshift,yseg+yshift,color=color)
+        ax.plot(phseg+xshift,yseg+yshift,color=color,**kwargs)
 
     xlim(-.25,.75)
     axvline(0,alpha=.3)
