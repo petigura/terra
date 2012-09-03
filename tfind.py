@@ -133,7 +133,6 @@ def mtd(t,fm,twd):
     bws = ws[:-2*twd]
     tws = ws[twd:-twd]
     aws = ws[2*twd:]
-
     dM = 0.5*(bws/bc + aws/ac) - tws/tc
     dM = ma.masked_invalid(dM)
     dM.fill_value =0

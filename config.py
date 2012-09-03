@@ -8,7 +8,8 @@ epochlim =  0.1 # Epochs must agree to 0.1 days
 G = 6.67e-8 # cgs
 R_sun = 6.9e10 # cm
 M_sun = 2.0e33 # g
-lc = 0.0204343960431288
+sc = 58.8488 /60./60./24. # SC time in days
+lc = sc*30 # LC exp time in days
 c = 100   # Parameter that controls how sharp P05 edge is.
 
 # sim

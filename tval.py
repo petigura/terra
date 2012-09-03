@@ -13,6 +13,8 @@ import numpy as np
 from numpy import ma
 from scipy import optimize
 from scipy import ndimage as nd
+from scipy.stats import ks_2samp
+
 import qalg
 
 import copy
@@ -22,10 +24,17 @@ from numpy.polynomial import Legendre
 from matplotlib import mlab
 import h5py
 import os
+import matplotlib
+if os.environ.keys().index('PBS_QUEUE')!=-1:
+    matplotlib.use('Agg')
 from matplotlib.cbook import is_string_like,is_numlike
+from matplotlib.pylab import plt
+from matplotlib.gridspec import GridSpec
+import sketch
+
+import keplerio
 
 import config
-
 def gridPk(rg,width=1000):
     """
     Grid Peak
@@ -375,12 +384,16 @@ class Peak():
             attrs['skic'] = skic
 
         # Add commonly used values as attrs
-        self.t    = self.lc['t']
-        self.fm   = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
-        self.P    = attrs['P']
-        self.t0   = attrs['t0']
-        self.tdur = attrs['tdur']
+        self.t     = self.lc['t']
+        self.fm    = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
+        self.P     = attrs['P']
+        self.t0    = attrs['t0']
+        self.tdur  = attrs['tdur']
         self.attrs = attrs
+        self.tdurcad = int(np.round(self.tdur / config.lc))
+        self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
+
+
 
     def phaseFold(self):
         """
@@ -396,6 +409,43 @@ class Peak():
             tPF += keptoy.lc
             lcPF = np.array(zip(tPF,fPF),dtype=[('tPF',float),('fPF',float)] )
             self.ds['lcPF%i' % ph] = lcPF
+
+    def binPhaseFold(self):
+        for ph in [0,180]:
+            lcPF = self.ds['lcPF%i' % ph]
+            x,y = lcPF['tPF'],lcPF['fPF']
+            bv = ~np.isnan(x) & ~np.isnan(y)
+
+            # Remove the nans from phase folded light curve.
+            try:
+                assert x[bv].size==x.size
+            except AssertionError:
+                print 'nans in the arrays.  Removing them.'
+                x = x[bv]
+                y = y[bv]
+                yfit = yfit[bv]
+
+            def bavg(nb_per_trans):
+                bins = np.linspace(x.min(),x.max(),
+                                   np.round(x.ptp()/self.tdur*nb_per_trans) +1 )
+                s,bins = np.histogram(x,weights=y,bins=bins)
+                c,bins = np.histogram(x,bins=bins)
+                bx = bins[:-1]+0.5*(bins[1]-bins[0])
+                by = s/c 
+                dtype = [('tPF',float),('fPF',float)]
+                r = np.array(zip(bx,by),dtype=dtype)
+                return r
+
+            self.ds['lgbinPF%i' %ph ] = bavg(5)        
+            self.ds['smbinPF%i' %ph ] = bavg(1)
+
+    def cut_stat(self):
+        lgbinPF = self.ds['lgbinPF0']
+        lgbx,lgby = lgbinPF['tPF'],lgbinPF['fPF']
+        lgmbx = ma.masked_inside(lgbx,-2*self.tdur,2*self.tdur)
+        lgmby = ma.masked_array(lgby,lgmbx.mask)
+        self.attrs['mean_cut'] = ma.mean(lgmby)
+        self.attrs['std_cut']  = ma.std(lgmby)
 
     def fit(self):
         """
@@ -419,6 +469,7 @@ class Peak():
             self.ds['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
             self.attrs['pL%i' % ph]  = pL1
             self.attrs['X2_%i' % ph] = fopt
+
             
     def s2ncut(self):
         """
@@ -441,7 +492,129 @@ class Peak():
             s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
 
         self.attrs['s2ncut'] = s2n
+
+
+    def SES(self):
+        """
+        Look at individual transits SES.
+
+        Using the global overall period as a starting point, find the
+        cadence corresponding to the peak of the SES timeseries in
+        that region.
+        """
+        t = self.t
+        rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
+        qrec = keplerio.qStartStop()
+        q = np.zeros(t.size) - 1
+        for r in qrec:
+            b = (t > r['tstart']) & (t < r['tstop'])
+            q[b] = r['q']
+
+        tRegLbl = rLbl['tRegLbl']
+        dM = self.dM
+        # Find the index of the SES peak.
+        btmid = np.zeros(tRegLbl.size,dtype=bool) # True if transit mid point.
+        for iTrans in range(0,tRegLbl.max()+1):
+            tRegSES = dM[ tRegLbl==iTrans ] 
+            if tRegSES.count() > 0:
+                maSES = np.nanmax( tRegSES.compressed() )
+                btmid[(dM==maSES) & (tRegLbl==iTrans)] = True
+
+        tnum = tRegLbl[btmid]
+        ses  = dM[btmid]
+        q    = q[btmid]
+        season = np.mod(q,4)
+
+        dtype = [('ses',float),('tnum',int),('season',int)]
+        rses = np.array(zip(ses,tnum,season),dtype=dtype )
+
+        self.ds['SES'] = rses
+        ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
+        self.attrs['SES_even'] = np.median(ses_e) 
+        self.attrs['SES_odd']  = np.median(ses_o) 
+        self.attrs['KS_eo']    = ks_2samp(ses_e,ses_o)[1]
+
+        for i in range(4):
+            ses_i = ses[season % 4  == i]
+            ses_not_i = ses[season % 4  != i]
+            self.attrs['SES_%i' %i] = np.median(ses_i)
+            self.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
         
+    def plot_diag(self):
+        fig = plt.figure(figsize=(18,10))
+        gs = GridSpec(5,10)
+        axGrid  = fig.add_subplot(gs[0,0:8])
+        axStack = fig.add_subplot(gs[2: ,0:8])
+        axPF    = fig.add_subplot(gs[1,0:4])
+        axPF180 = fig.add_subplot(gs[1,4:8],sharex=axPF,sharey=axPF)
+        axScar  = fig.add_subplot(gs[0,-1])
+        axSES   = fig.add_subplot(gs[1,-1])
+        axSeason= fig.add_subplot(gs[2,-1])
+
+        plt.sca(axGrid)
+        self.plotGrid()
+
+        plt.sca(axPF180)
+        self.plotPF(0)
+        plt.gca().xaxis.set_visible(False)
+        plt.gca().yaxis.set_visible(False)
+
+        plt.sca(axPF)
+        self.plotPF(180)
+        plt.gca().xaxis.set_visible(False)
+        plt.gca().yaxis.set_visible(False)
+        df = self.attrs['pL0'][0]**2
+        plt.ylim(-5*df,3*df)
+
+        plt.sca(axStack)
+        self.plotSES()
+
+        plt.sca(axScar)
+        sketch.scar(self.res)
+        plt.gca().xaxis.set_visible(False)
+        plt.gca().yaxis.set_visible(False)
+
+        axSeason.set_xlim(-1,4)
+        rses = self.ds['SES']
+        axSES.plot(rses['tnum'],rses['ses']*1e6,'.')
+        axSES.xaxis.set_visible(False)
+        axSeason.plot(rses['season'],rses['ses']*1e6,'.')
+        axSeason.xaxis.set_visible(False)
+
+        plt.gcf().text( 0.75, 0.05, self.__str__() , size=12, name='monospace',
+                    bbox=dict(visible=True,fc='white'))
+
+        plt.tight_layout()
+        plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
+
+
+    def plotPF(self,ph):
+        PF      = self.ds['lcPF%i' % ph]
+        smbinPF = self.ds['smbinPF%i' % ph]
+
+        # Plot phase folded LC
+        x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
+        plt.plot(x,y,',',alpha=.5)
+        plt.plot(x,yfit,alpha=.5)        
+        plt.axhline(0,alpha=.3)
+        plt.plot(smbinPF['tPF'],smbinPF['fPF'],'o',mew=0,color='red')
+
+    def plotSES(self):
+        df = self.attrs['pL0'][0]**2
+        sketch.stack(self.t,self.dM,self.P,self.t0,step=df)
+        plt.autoscale(tight=True)
+
+    def plotGrid(self):
+        x = self.res['Pcad']*config.lc
+        plt.plot(x,self.res['s2n'])
+        id = np.argsort( np.abs(x - self.P) )[0]
+        plt.plot(x[id],self.res['s2n'][id],'ro')
+        plt.autoscale(tight=True)
+
+
+
+
+
     def write(self,pkfile,**kwargs):
         hpk = h5plus.File(pkfile,**kwargs)
 
@@ -470,7 +643,6 @@ class Peak():
                         
     def pL2d(self,pL):
         return dict(df=pL[0],tau=pL[1],b=pL[2])
-
         
     def __str__(self):
         dprint = self.flatten(self.noPrintRE)
@@ -479,7 +651,10 @@ class Peak():
 %s
 -------------
 """ % self.attrs['skic']
-        for k in dprint.keys():
+
+        keys = dprint.keys()
+        keys.sort()
+        for k in keys:
             v = dprint[k]
             strout += '%s %.4g\n' % (k.ljust(8),v)
 
@@ -503,6 +678,9 @@ class Peak():
             
         t = tuple(d.values())
         return np.array([t,],dtype=dtype)
+
+
+
 
 
 

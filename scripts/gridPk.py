@@ -28,7 +28,11 @@ out  = args.out
 
 p = tval.Peak(cal,grid,db)
 p.phaseFold()
+p.binPhaseFold()
 p.fit()
 p.s2ncut()
+p.cut_stat()
+p.SES()
+
 p.write(out,overwrite=True)
 print "pk %s: %s" % (p.attrs['skic'],out)

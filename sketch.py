@@ -6,8 +6,6 @@ The idea is to keep it rough.
 import atpy
 from numpy import *
 import glob
-import matplotlib
-matplotlib.use('Agg')
 from matplotlib.pylab import *
     
 from matplotlib import rcParams

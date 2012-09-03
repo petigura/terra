@@ -1,6 +1,4 @@
-import sim
 import h5py
-import glob
 import numpy as np
 import os
 from matplotlib import mlab
