@@ -25,13 +25,15 @@ from matplotlib import mlab
 import h5py
 import os
 import matplotlib
-if os.environ.keys().index('PBS_QUEUE')!=-1:
+envlist = os.environ.keys()
+if envlist.count('PBS_QUEUE')!=0:
     matplotlib.use('Agg')
 from matplotlib.cbook import is_string_like,is_numlike
 from matplotlib.pylab import plt
 from matplotlib.gridspec import GridSpec
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 import sketch
-
+tprop = dict(size=10,name='monospace')
 import keplerio
 
 import config
@@ -324,7 +326,10 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
 class Peak():
     noPrintRE = '.*?file|climb|skic'
+    noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180'
     noDBRE    = 'climb'
+
+
     def __init__(self,*args,**kwargs):
         """
         Peak Object
@@ -393,13 +398,12 @@ class Peak():
         self.tdurcad = int(np.round(self.tdur / config.lc))
         self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
 
-
-
     def phaseFold(self):
         """
         Phase Fold
 
-        Add the phase-folded light curve to the peak object.
+        Locally detrend each transit.  Store a piece of transit for
+        quick look.
         """
         attrs = self.attrs
         for ph in [0,180]:
@@ -428,16 +432,46 @@ class Peak():
             def bavg(nb_per_trans):
                 bins = np.linspace(x.min(),x.max(),
                                    np.round(x.ptp()/self.tdur*nb_per_trans) +1 )
-                s,bins = np.histogram(x,weights=y,bins=bins)
-                c,bins = np.histogram(x,bins=bins)
-                bx = bins[:-1]+0.5*(bins[1]-bins[0])
-                by = s/c 
+                bx,by = hbinavg(x,y,bins)
                 dtype = [('tPF',float),('fPF',float)]
                 r = np.array(zip(bx,by),dtype=dtype)
                 return r
 
-            self.ds['lgbinPF%i' %ph ] = bavg(5)        
-            self.ds['smbinPF%i' %ph ] = bavg(1)
+            self.ds['lgbinPF%i' %ph ] = bavg(1)        
+            self.ds['smbinPF%i' %ph ] = bavg(5)
+
+    def med_filt(self):
+        from scipy.ndimage import median_filter
+        y = self.fm-median_filter(self.fm,size=self.tdurcad*3)
+        self.ds['fmed'] = y
+
+        # Shift t-series so first transit is at t = 0 
+        dt = t0shft(self.t,self.P,self.t0)
+        tf = self.t + dt
+        phase = np.mod(tf+self.P/4,self.P)/self.P-1./4
+        x = phase * self.P
+        
+        self.ds['tPF'] = x
+
+        # bin up the points
+        for nb_per_trans in [1,5]:
+            bins = np.linspace(x.min(),x.max(),
+                               np.round(x.ptp()/self.tdur*nb_per_trans) +1 )
+
+            y = ma.masked_invalid(y)
+            bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
+            self.ds['bx%i'%nb_per_trans] = bx
+            self.ds['by%i'%nb_per_trans] = by
+
+
+            bout = np.abs(bx) > self.tdur
+            self.attrs['std_out%i' % nb_per_trans] = np.std(by[bout])
+            self.attrs['max_out%i' % nb_per_trans] = np.max(by[bout])
+            self.attrs['min_out%i' % nb_per_trans] = np.min(by[bout])
+            self.attrs['p5_out%i'  % nb_per_trans]  = np.percentile(by[bout],5)
+            self.attrs['p5_out%i'  % nb_per_trans]  = np.percentile(by[bout],5)
+
+
 
     def cut_stat(self):
         lgbinPF = self.ds['lgbinPF0']
@@ -541,33 +575,56 @@ class Peak():
             self.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
         
     def plot_diag(self):
-        fig = plt.figure(figsize=(18,10))
-        gs = GridSpec(5,10)
+        fig = plt.figure(figsize=(20,12))
+        gs = GridSpec(8,10)
         axGrid  = fig.add_subplot(gs[0,0:8])
-        axStack = fig.add_subplot(gs[2: ,0:8])
-        axPF    = fig.add_subplot(gs[1,0:4])
-        axPF180 = fig.add_subplot(gs[1,4:8],sharex=axPF,sharey=axPF)
+        axStack = fig.add_subplot(gs[3: ,0:8])
+        axPFAll = fig.add_subplot(gs[1,0:8])
+        axPF    = fig.add_subplot(gs[2,0:4])
+        axPF180 = fig.add_subplot(gs[2,4:8],sharex=axPF,sharey=axPF)
         axScar  = fig.add_subplot(gs[0,-1])
         axSES   = fig.add_subplot(gs[1,-1])
         axSeason= fig.add_subplot(gs[2,-1])
+        axAutoCorr = fig.add_subplot(gs[3,-1])
 
         plt.sca(axGrid)
         self.plotGrid()
+        at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
+        axGrid.add_artist(at)
+        axGrid.xaxis.set_ticks_position('top')
+        plt.title('Period (days)')
+        plt.ylabel('MES')
+
+        plt.sca(axPFAll)
+        plt.plot(self.ds['tPF'],self.ds['fmed'],',',alpha=.5)
+        plt.plot(self.ds['bx1'],self.ds['by1'],'o',mew=0)
+        plt.plot(self.ds['bx5'],self.ds['by5'],'.',mew=0)
+        y = self.ds['fmed']
+        axPFAll.set_ylim( (np.percentile(y,5),np.percentile(y,95) ) )
+
 
         plt.sca(axPF180)
-        self.plotPF(0)
-        plt.gca().xaxis.set_visible(False)
-        plt.gca().yaxis.set_visible(False)
+        self.plotPF(180)
+        cax = plt.gca()
+        cax.xaxis.set_visible(False)
+        cax.yaxis.set_visible(False)
+        at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
+        cax.add_artist(at)
 
         plt.sca(axPF)
-        self.plotPF(180)
-        plt.gca().xaxis.set_visible(False)
-        plt.gca().yaxis.set_visible(False)
+        self.plotPF(0)
+        cax = plt.gca()
+        cax.xaxis.set_visible(False)
+        cax.yaxis.set_visible(False)
+        at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
+        cax.add_artist(at)
         df = self.attrs['pL0'][0]**2
         plt.ylim(-5*df,3*df)
 
         plt.sca(axStack)
         self.plotSES()
+        plt.xlabel('Phase')
+        plt.ylabel('SES (ppm)')
 
         plt.sca(axScar)
         sketch.scar(self.res)
@@ -578,19 +635,33 @@ class Peak():
         rses = self.ds['SES']
         axSES.plot(rses['tnum'],rses['ses']*1e6,'.')
         axSES.xaxis.set_visible(False)
+        at = AnchoredText('Transit SES',prop=tprop, frameon=True,loc=2)
+        axSES.add_artist(at)
+
         axSeason.plot(rses['season'],rses['ses']*1e6,'.')
         axSeason.xaxis.set_visible(False)
+        at = AnchoredText('Season SES',prop=tprop, frameon=True,loc=2)
+        axSeason.add_artist(at)
 
-        plt.gcf().text( 0.75, 0.05, self.__str__() , size=12, name='monospace',
+        bx5fft = np.fft.fft( self.ds['by5'].flatten() )
+        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
+        axAutoCorr.plot(np.roll(corr,corr.size/2))
+
+        
+
+
+        plt.gcf().text( 0.75, 0.05, self.diag_leg() , size=12, name='monospace',
                     bbox=dict(visible=True,fc='white'))
 
         plt.tight_layout()
         plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
-
+    ###########################
+    # Helper fuctions to plot #
+    ###########################
     def plotPF(self,ph):
         PF      = self.ds['lcPF%i' % ph]
-        smbinPF = self.ds['smbinPF%i' % ph]
+        smbinPF = self.ds['lgbinPF%i' % ph]
 
         # Plot phase folded LC
         x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
@@ -601,7 +672,7 @@ class Peak():
 
     def plotSES(self):
         df = self.attrs['pL0'][0]**2
-        sketch.stack(self.t,self.dM,self.P,self.t0,step=df)
+        sketch.stack(self.t,self.dM*1e6,self.P,self.t0,step=3*df*1e6)
         plt.autoscale(tight=True)
 
     def plotGrid(self):
@@ -611,9 +682,9 @@ class Peak():
         plt.plot(x[id],self.res['s2n'][id],'ro')
         plt.autoscale(tight=True)
 
-
-
-
+    ######
+    # IO #
+    ######
 
     def write(self,pkfile,**kwargs):
         hpk = h5plus.File(pkfile,**kwargs)
@@ -634,7 +705,7 @@ class Peak():
             v = self.attrs[k]
             if k.find('pL') != -1:
                 suffix = k.split('pL')[-1]
-                d['df'+suffix]  = v[0]
+                d['df'+suffix]  = v[0]**2
                 d['tau'+suffix] = v[1]
                 d['b'+suffix]   = v[2]
             else:
@@ -646,6 +717,15 @@ class Peak():
         
     def __str__(self):
         dprint = self.flatten(self.noPrintRE)
+
+    def diag_leg(self):
+        dprint = self.flatten(self.noDiagRE)
+        return self.dict2str(dprint)
+
+    def dict2str(self,dprint):
+        """
+        """
+
         strout = \
 """
 %s
@@ -680,10 +760,24 @@ class Peak():
         return np.array([t,],dtype=dtype)
 
 
+def hbinavg(x,y,bins):
+    """
+    Computes the average value of y on a bin by bin basis.
+
+    x - array of x values
+    y - array 
+    bins - array of bins in x
+    """
+
+    binx = bins[:-1] + (bins[1:] - bins[:-1])/2.
+    bsum = ( np.histogram(x,bins=bins,weights=y) )[0]
+    bn   = ( np.histogram(x,bins=bins) )[0]
+    biny = bsum/bn
+
+    return binx,biny
 
 
-
-
+################################################################
 def window(fl,PcadG):
     """
     Compute the window function.
