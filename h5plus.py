@@ -1,4 +1,6 @@
+import sim
 import h5py
+import glob
 import numpy as np
 import os
 from matplotlib import mlab
@@ -18,6 +20,12 @@ class File(h5py.File):
             os.remove(name)
          print 'removing %s ' % name
       h5py.File.__init__(self,name,**kwargs)
+
+   def __setitem__(self,key,val):
+      if self.keys().count(unicode(key)) is 1:
+         print "removing %s " % key
+         del self[key]      
+      h5py.File.__setitem__(self,key,val)
 
 def compChunks(elsize,ncolmax):
    """
