@@ -376,6 +376,7 @@ class Peak(h5plus.File):
         self.fm    = ma.masked_array(lc['fcal'],lc['fmask'])
         self.P     = self.attrs['P']
         self.t0    = self.attrs['t0']
+        self.df    = self.attrs['mean']
         self.tdur  = self.attrs['tdur']
         self.tdurcad = int(np.round(self.tdur / config.lc))
         self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
@@ -415,32 +416,28 @@ class Peak(h5plus.File):
 
         # bin up the points
         for nbpt in [1,5]:
-            bins = self.get_bins(nbpt)
+            bins = self.get_bins(x,nbpt)
             y = ma.masked_invalid(y)
             bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
             self['bx%i'%nbpt] = bx
             self['by%i'%nbpt] = by
 
             bout = np.abs(bx) > self.tdur
-            self.attrs['std_out%i' % nbpt] = np.std(by[bout])
+            noise = np.std(by[bout])
+            self.attrs['std_out%i' % nbpt] = noise
             self.attrs['max_out%i' % nbpt] = np.max(by[bout])
             self.attrs['min_out%i' % nbpt] = np.min(by[bout])
-            self.attrs['p5_out%i'  % nbpt]  = np.percentile(by[bout],5)
-            self.attrs['p5_out%i'  % nbpt]  = np.percentile(by[bout],5)
+            for per in [5,50,95]:
+                k = 'p%i_out%i'% (per,nbpt)
+                self.attrs[k] = np.percentile(by[bout],per)
+
+            self.attrs['s2n%i' % nbpt] = self.df / noise
 
 
     def get_bins(self,x,nbpt):
         """Return bins of a so that nbpt fit in a transit"""
         return np.linspace(x.min(),x.max(),
                            np.round(x.ptp()/self.tdur*nbpt) +1 )
-
-    def at_cut_stat(self):
-        lgbinPF = self['lgbinPF0']
-        lgbx,lgby = lgbinPF['tPF'],lgbinPF['fPF']
-        lgmbx = ma.masked_inside(lgbx,-2*self.tdur,2*self.tdur)
-        lgmby = ma.masked_array(lgby,lgmbx.mask)
-        self.attrs['mean_cut'] = ma.mean(lgmby)
-        self.attrs['std_cut']  = ma.std(lgmby)
 
     def at_fit(self):
         """
@@ -467,7 +464,6 @@ class Peak(h5plus.File):
             self['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
             self.attrs['pL%i' % ph]  = pL1
             self.attrs['X2_%i' % ph] = fopt
-
             
     def at_s2ncut(self):
         """
@@ -540,8 +536,6 @@ class Peak(h5plus.File):
 
     def at_all(self):
         self.at_phaseFold()
-        self.at_binPhaseFold()
-        self.at_cut_stat()
         self.at_fit()
         self.at_med_filt()
         self.at_s2ncut()
