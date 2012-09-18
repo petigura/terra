@@ -30,7 +30,6 @@ for i in range(len(args.inp)):
     except:
         print "%s failed" % f
         pass
-
 rL = np.hstack(rL)
 
 tpk = qalg.rec2tab(rL)

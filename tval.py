@@ -369,17 +369,20 @@ class Peak(h5plus.File):
             self.attrs['tdur'] = self.attrs['twd']*config.lc
             self.attrs['P']    = self.attrs['Pcad']*config.lc
 
-        # Add commonly used values as attrs
-        lc = self['lc'][:]
-        self.res   = self['res'][:]
-        self.t     = lc['t']
-        self.fm    = ma.masked_array(lc['fcal'],lc['fmask'])
-        self.P     = self.attrs['P']
-        self.t0    = self.attrs['t0']
-        self.df    = self.attrs['mean']
-        self.tdur  = self.attrs['tdur']
-        self.tdurcad = int(np.round(self.tdur / config.lc))
-        self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
+        try:
+            kwargs['quick']
+        except KeyError:
+            # Add commonly used values as attrs
+            lc = self['lc'][:]
+            self.res   = self['res'][:]
+            self.t     = lc['t']
+            self.fm    = ma.masked_array(lc['fcal'],lc['fmask'])
+            self.P     = self.attrs['P']
+            self.t0    = self.attrs['t0']
+            self.df    = self.attrs['mean']
+            self.tdur  = self.attrs['tdur']
+            self.tdurcad = int(np.round(self.tdur / config.lc))
+            self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
 
     def at_phaseFold(self):
         """ Add locally detrended light curve"""
@@ -539,7 +542,7 @@ class Peak(h5plus.File):
         self.at_fit()
         self.at_med_filt()
         self.at_s2ncut()
-
+        self.at_SES()
         
     def plot_diag(self):
         """
@@ -638,9 +641,6 @@ class Peak(h5plus.File):
 
     def plotPF(self,ph):
         PF      = self['lcPF%i' % ph]
-        smbinPF = self['lgbinPF%i' % ph]
-
-        # Plot phase folded LC
         x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
         plt.plot(x,y,',',alpha=.5)
         plt.plot(x,yfit,alpha=.5)        
@@ -683,7 +683,10 @@ class Peak(h5plus.File):
         """
         Return a flat dictionary with exclRE keys excluded.
         """
-        pkeys = [k for k in self.attrs.keys() if re.match(exclRE,k) is None]
+        pkeys = self.attrs.keys() 
+        pkeys = [k for k in pkeys if re.match(exclRE,k) is None]
+        pkeys.sort()
+
         d = {}
         for k in pkeys:
             v = self.attrs[k]

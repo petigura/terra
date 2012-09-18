@@ -1,18 +1,9 @@
 #!/usr/bin/env python
 """
 Effectively a wrapper around tval.pkInfo()
-
 """
 from argparse import ArgumentParser
-import h5py
-import h5plus
 import tval
-import numpy as np
-import keptoy
-import sqlite3
-import os
-import logging
-
 
 prsr = ArgumentParser(description='Find peaks in grid file')
 prsr.add_argument('cal',type=str, help=".cal.h5 file")
@@ -25,14 +16,6 @@ cal  = args.cal
 db   = args.db
 grid = args.grid
 out  = args.out
-
-p = tval.Peak(cal,grid,db)
-p.phaseFold()
-p.binPhaseFold()
-p.fit()
-p.s2ncut()
-p.cut_stat()
-p.SES()
-
-p.write(out,overwrite=True)
+p = tval.Peak(out,cal,grid,db)
+p.at_all()
 print "pk %s: %s" % (p.attrs['skic'],out)
