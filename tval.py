@@ -36,6 +36,8 @@ import sketch
 tprop = dict(size=10,name='monospace')
 import keplerio
 
+
+
 import config
 def gridPk(rg,width=1000):
     """
@@ -324,87 +326,62 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     fPF = fPF[bg]
     return tPF,fPF
 
-class Peak():
+class Peak(h5plus.File):
     noPrintRE = '.*?file|climb|skic'
     noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180'
     noDBRE    = 'climb'
-
 
     def __init__(self,*args,**kwargs):
         """
         Peak Object
 
         Can intialize from mqcal,grid,db files or from a previous pk file.
-        """
-        if len(args) is 3:
-            attrs = {}
-            attrs['mqcalfile'] = args[0]
-            attrs['gridfile']  = args[1]
-            attrs['dbfile']    = args[2]
-
-        self.ds = {}    
+        """        
         if len(args) is 1:
-            self.pkfile    = args[0]
-            hpk            = h5py.File(self.pkfile)
-            attrs          = dict(hpk.attrs) 
-            self.ds = {}
-            for k in hpk.keys():
-                self.ds[k] = hpk[k][:]
-            hpk.close()
-        # If the quick kwarg is set, return the attributes specified in h5file.
-        try:
-            if kwargs['quick']:
-                self.attrs = attrs
-                return
-        except KeyError:
-            pass
+            h5plus.File.__init__(self,args[0],overwrite=False)
+        elif len(args) is 4:
+            h5plus.File.__init__(self,args[0],overwrite=False)
+            mqcalfile,gridfile,dbfile = args[1],args[2],args[3]
+            self.attrs['mqcalfile'] = mqcalfile
+            self.attrs['gridfile']  = gridfile
+            self.attrs['dbfile']    = dbfile
 
-        hlc = h5py.File(attrs['mqcalfile'],'r+')
-        hgd = h5py.File(attrs['gridfile'],'r+')
-        self.lc  = hlc['LIGHTCURVE'][:]
-        self.res = hgd['RES'][:]
-        hlc.close()
-        hgd.close()
+            self['lc'] = h5py.File(mqcalfile)['LIGHTCURVE'][:]
+            self['res'] =  h5py.File(gridfile)['RES'][:]
 
-        # Add important values to attrs dict
-        if attrs.keys().count('sKIC') == 0:
-            skic = os.path.basename(attrs['gridfile']).split('.')[0]
-            attrs['skic'] = skic
-        if attrs.keys().count('climb') == 0:
-            # Pull limb darkening coeff from database
-            con = sqlite3.connect(attrs['dbfile'])
+            # Add star name
+            skic = os.path.basename(gridfile).split('.')[0]
+            self.attrs['skic'] = skic
+            
+            # Add limb darkening coeffs
+            con = sqlite3.connect(dbfile)
             cur = con.cursor()
-            cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % attrs['skic']
+            cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % skic
             cur.execute(cmd)
-            attrs['climb'] = np.array(cur.fetchall()[0])
-        
-        if len(args) is 3:
+            self.attrs['climb'] = np.array(cur.fetchall()[0])
+
+
             # Pull the peak information
-            rgpk = gridPk(self.res)
+            rgpk = gridPk(self['res'][:])
             rpk = rgpk[-1:]
             for k in ['t0','Pcad','twd','mean','s2n','noise']:
-                attrs[k] = rpk[k][0]
-            attrs['tdur'] = attrs['twd']*keptoy.lc
-            attrs['P']    = attrs['Pcad']*keptoy.lc
-            attrs['skic'] = skic
+                self.attrs[k] = rpk[k][0]
+            self.attrs['tdur'] = self.attrs['twd']*config.lc
+            self.attrs['P']    = self.attrs['Pcad']*config.lc
 
         # Add commonly used values as attrs
-        self.t     = self.lc['t']
-        self.fm    = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
-        self.P     = attrs['P']
-        self.t0    = attrs['t0']
-        self.tdur  = attrs['tdur']
-        self.attrs = attrs
+        lc = self['lc'][:]
+        self.res   = self['res'][:]
+        self.t     = lc['t']
+        self.fm    = ma.masked_array(lc['fcal'],lc['fmask'])
+        self.P     = self.attrs['P']
+        self.t0    = self.attrs['t0']
+        self.tdur  = self.attrs['tdur']
         self.tdurcad = int(np.round(self.tdur / config.lc))
         self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
 
-    def phaseFold(self):
-        """
-        Phase Fold
-
-        Locally detrend each transit.  Store a piece of transit for
-        quick look.
-        """
+    def at_phaseFold(self):
+        """ Add locally detrended light curve"""
         attrs = self.attrs
         for ph in [0,180]:
             P,tdur = attrs['P'],attrs['tdur']
@@ -412,38 +389,21 @@ class Peak():
             tPF,fPF = PF(self.t,self.fm,P,t0,tdur)
             tPF += keptoy.lc
             lcPF = np.array(zip(tPF,fPF),dtype=[('tPF',float),('fPF',float)] )
-            self.ds['lcPF%i' % ph] = lcPF
-
-    def binPhaseFold(self):
-        for ph in [0,180]:
-            lcPF = self.ds['lcPF%i' % ph]
+            self['lcPF%i' % ph] = lcPF
+            lcPF = self['lcPF%i' % ph]
             x,y = lcPF['tPF'],lcPF['fPF']
-            bv = ~np.isnan(x) & ~np.isnan(y)
 
-            # Remove the nans from phase folded light curve.
-            try:
-                assert x[bv].size==x.size
-            except AssertionError:
-                print 'nans in the arrays.  Removing them.'
-                x = x[bv]
-                y = y[bv]
-                yfit = yfit[bv]
+            for nbpt in [1,5]: # Number of Bins Per Transit
+                bins = self.get_bins(x,nbpt)
+                y = ma.masked_invalid(y)
+                bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
+                self['bx%i_%i'% (ph,nbpt)] = bx
+                self['by%i_%i'% (ph,nbpt)] = by
 
-            def bavg(nb_per_trans):
-                bins = np.linspace(x.min(),x.max(),
-                                   np.round(x.ptp()/self.tdur*nb_per_trans) +1 )
-                bx,by = hbinavg(x,y,bins)
-                dtype = [('tPF',float),('fPF',float)]
-                r = np.array(zip(bx,by),dtype=dtype)
-                return r
-
-            self.ds['lgbinPF%i' %ph ] = bavg(1)        
-            self.ds['smbinPF%i' %ph ] = bavg(5)
-
-    def med_filt(self):
-        from scipy.ndimage import median_filter
-        y = self.fm-median_filter(self.fm,size=self.tdurcad*3)
-        self.ds['fmed'] = y
+    def at_med_filt(self):
+        """Add median detrended lc"""
+        y = self.fm-nd.median_filter(self.fm,size=self.tdurcad*3)
+        self['fmed'] = y
 
         # Shift t-series so first transit is at t = 0 
         dt = t0shft(self.t,self.P,self.t0)
@@ -451,37 +411,38 @@ class Peak():
         phase = np.mod(tf+self.P/4,self.P)/self.P-1./4
         x = phase * self.P
         
-        self.ds['tPF'] = x
+        self['tPF'] = x
 
         # bin up the points
-        for nb_per_trans in [1,5]:
-            bins = np.linspace(x.min(),x.max(),
-                               np.round(x.ptp()/self.tdur*nb_per_trans) +1 )
-
+        for nbpt in [1,5]:
+            bins = self.get_bins(nbpt)
             y = ma.masked_invalid(y)
             bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
-            self.ds['bx%i'%nb_per_trans] = bx
-            self.ds['by%i'%nb_per_trans] = by
-
+            self['bx%i'%nbpt] = bx
+            self['by%i'%nbpt] = by
 
             bout = np.abs(bx) > self.tdur
-            self.attrs['std_out%i' % nb_per_trans] = np.std(by[bout])
-            self.attrs['max_out%i' % nb_per_trans] = np.max(by[bout])
-            self.attrs['min_out%i' % nb_per_trans] = np.min(by[bout])
-            self.attrs['p5_out%i'  % nb_per_trans]  = np.percentile(by[bout],5)
-            self.attrs['p5_out%i'  % nb_per_trans]  = np.percentile(by[bout],5)
+            self.attrs['std_out%i' % nbpt] = np.std(by[bout])
+            self.attrs['max_out%i' % nbpt] = np.max(by[bout])
+            self.attrs['min_out%i' % nbpt] = np.min(by[bout])
+            self.attrs['p5_out%i'  % nbpt]  = np.percentile(by[bout],5)
+            self.attrs['p5_out%i'  % nbpt]  = np.percentile(by[bout],5)
 
 
+    def get_bins(self,x,nbpt):
+        """Return bins of a so that nbpt fit in a transit"""
+        return np.linspace(x.min(),x.max(),
+                           np.round(x.ptp()/self.tdur*nbpt) +1 )
 
-    def cut_stat(self):
-        lgbinPF = self.ds['lgbinPF0']
+    def at_cut_stat(self):
+        lgbinPF = self['lgbinPF0']
         lgbx,lgby = lgbinPF['tPF'],lgbinPF['fPF']
         lgmbx = ma.masked_inside(lgbx,-2*self.tdur,2*self.tdur)
         lgmby = ma.masked_array(lgby,lgmbx.mask)
         self.attrs['mean_cut'] = ma.mean(lgmby)
         self.attrs['std_cut']  = ma.std(lgmby)
 
-    def fit(self):
+    def at_fit(self):
         """
         Fit MA model to PF light curves
         
@@ -489,9 +450,12 @@ class Peak():
         noise per point is ~ np.sqrt(twd) * noise
         """
         attrs = self.attrs
+
+        tdur = self.attrs['mean']
+        mean = self.attrs['tdur']
         pL0 = [np.sqrt(attrs['mean']),attrs['tdur']/2.,.3 ]
         for ph in [0,180]:
-            PF = self.ds['lcPF%i' % ph]
+            PF = self['lcPF%i' % ph][:]
             def model(pL):
                 return keptoy.MAfast(pL,attrs['climb'],PF['tPF'],usamp=11)
             def obj(pL):
@@ -500,12 +464,12 @@ class Peak():
             pL1,fopt,iter,warnflag,funcalls  \
                 = optimize.fmin(obj,pL0,full_output=True,disp=False) 
             fit = model(pL1)
-            self.ds['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
+            self['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
             self.attrs['pL%i' % ph]  = pL1
             self.attrs['X2_%i' % ph] = fopt
 
             
-    def s2ncut(self):
+    def at_s2ncut(self):
         """
         Cut out the transit and recomput S/N.  It s2ncut should be low.
         """
@@ -528,7 +492,7 @@ class Peak():
         self.attrs['s2ncut'] = s2n
 
 
-    def SES(self):
+    def at_SES(self):
         """
         Look at individual transits SES.
 
@@ -562,7 +526,7 @@ class Peak():
         dtype = [('ses',float),('tnum',int),('season',int)]
         rses = np.array(zip(ses,tnum,season),dtype=dtype )
 
-        self.ds['SES'] = rses
+        self['SES'] = rses
         ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
         self.attrs['SES_even'] = np.median(ses_e) 
         self.attrs['SES_odd']  = np.median(ses_o) 
@@ -573,18 +537,31 @@ class Peak():
             ses_not_i = ses[season % 4  != i]
             self.attrs['SES_%i' %i] = np.median(ses_i)
             self.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
+
+    def at_all(self):
+        self.at_phaseFold()
+        self.at_binPhaseFold()
+        self.at_cut_stat()
+        self.at_fit()
+        self.at_med_filt()
+        self.at_s2ncut()
+
         
     def plot_diag(self):
+        """
+        Print a 1-page diagnostic plot of a given pk.
+
+        """
         fig = plt.figure(figsize=(20,12))
         gs = GridSpec(8,10)
-        axGrid  = fig.add_subplot(gs[0,0:8])
-        axStack = fig.add_subplot(gs[3: ,0:8])
-        axPFAll = fig.add_subplot(gs[1,0:8])
-        axPF    = fig.add_subplot(gs[2,0:4])
-        axPF180 = fig.add_subplot(gs[2,4:8],sharex=axPF,sharey=axPF)
-        axScar  = fig.add_subplot(gs[0,-1])
-        axSES   = fig.add_subplot(gs[1,-1])
-        axSeason= fig.add_subplot(gs[2,-1])
+        axGrid     = fig.add_subplot(gs[0,0:8])
+        axStack    = fig.add_subplot(gs[3: ,0:8])
+        axPFAll    = fig.add_subplot(gs[1,0:8])
+        axPF       = fig.add_subplot(gs[2,0:4])
+        axPF180    = fig.add_subplot(gs[2,4:8],sharex=axPF,sharey=axPF)
+        axScar     = fig.add_subplot(gs[0,-1])
+        axSES      = fig.add_subplot(gs[1,-1])
+        axSeason   = fig.add_subplot(gs[2,-1])
         axAutoCorr = fig.add_subplot(gs[3,-1])
 
         plt.sca(axGrid)
@@ -596,10 +573,10 @@ class Peak():
         plt.ylabel('MES')
 
         plt.sca(axPFAll)
-        plt.plot(self.ds['tPF'],self.ds['fmed'],',',alpha=.5)
-        plt.plot(self.ds['bx1'],self.ds['by1'],'o',mew=0)
-        plt.plot(self.ds['bx5'],self.ds['by5'],'.',mew=0)
-        y = self.ds['fmed']
+        plt.plot(self['tPF'],self['fmed'],',',alpha=.5)
+        plt.plot(self['bx1'],self['by1'],'o',mew=0)
+        plt.plot(self['bx5'],self['by5'],'.',mew=0)
+        y = self['fmed']
         axPFAll.set_ylim( (np.percentile(y,5),np.percentile(y,95) ) )
 
 
@@ -632,7 +609,7 @@ class Peak():
         plt.gca().yaxis.set_visible(False)
 
         axSeason.set_xlim(-1,4)
-        rses = self.ds['SES']
+        rses = self['SES']
         axSES.plot(rses['tnum'],rses['ses']*1e6,'.')
         axSES.xaxis.set_visible(False)
         at = AnchoredText('Transit SES',prop=tprop, frameon=True,loc=2)
@@ -643,10 +620,10 @@ class Peak():
         at = AnchoredText('Season SES',prop=tprop, frameon=True,loc=2)
         axSeason.add_artist(at)
 
-        bx5fft = np.fft.fft( self.ds['by5'].flatten() )
-        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
-        axAutoCorr.plot(np.roll(corr,corr.size/2))
-
+        plt.sca(axAutoCorr)
+        self.plotAutoCorr()
+        plt.gca().xaxis.set_visible(False)
+        plt.gca().yaxis.set_visible(False)
         
 
 
@@ -659,16 +636,29 @@ class Peak():
     ###########################
     # Helper fuctions to plot #
     ###########################
+    def plotAutoCorr(self):
+        bx5fft = np.fft.fft( self['by5'][:].flatten() )
+        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
+        plt.plot(np.roll(corr,corr.size/2))
+        plt.xlabel('Displacement')
+
     def plotPF(self,ph):
-        PF      = self.ds['lcPF%i' % ph]
-        smbinPF = self.ds['lgbinPF%i' % ph]
+        PF      = self['lcPF%i' % ph]
+        smbinPF = self['lgbinPF%i' % ph]
 
         # Plot phase folded LC
         x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
         plt.plot(x,y,',',alpha=.5)
         plt.plot(x,yfit,alpha=.5)        
         plt.axhline(0,alpha=.3)
-        plt.plot(smbinPF['tPF'],smbinPF['fPF'],'o',mew=0,color='red')
+
+        x,y = self['bx%i_%i'% (ph,1)],self['by%i_%i'% (ph,1)]
+        plt.plot(x,y,'o',mew=0,color='red')
+
+        x,y = self['bx%i_%i'% (ph,5)],self['by%i_%i'% (ph,5)]
+        plt.plot(x,y,'.',mew=0,color='purple')
+
+
 
     def plotSES(self):
         df = self.attrs['pL0'][0]**2
@@ -691,8 +681,8 @@ class Peak():
 
         for k in self.attrs.keys():
             hpk.attrs[k] = self.attrs[k]
-        for k in self.ds.keys():
-            hpk.create_dataset(k,data=self.ds[k])
+        for k in self.keys():
+            hpk.create_dataset(k,data=self[k])
         hpk.close()
     
     def flatten(self,exclRE):
