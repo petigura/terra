@@ -25,10 +25,8 @@ depoch = 0.5
 hs2n   = 5   # Search for harmonics if signal has S/N larger than this.
 
 # Try the following harmonics in harm.
-harmL = np.arange(2,5)
-harmL = np.vstack([harmL,1./harmL])
-harmL = harmL.T.flatten()
-
+from fractions import Fraction
+harmL = np.array([1,Fraction('1/2'),Fraction('1/3'),2,3])
 nCheck = 10 # Number of peaks in periodogram to fit.
 
 #modesDiag

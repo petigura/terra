@@ -16,6 +16,45 @@ from scipy import ndimage as nd
 
 from config import *
 
+import sqlite3
+import pandas
+
+def mc_init():
+    """
+    Return a list of simulation parameters.
+
+    """
+    n = 100
+
+    # Load in the star list
+    con = sqlite3.connect('eb10k_clean.db')
+    cur = con.cursor()
+    cmd = "SELECT skic,a1,a2,a3,a4 from b10k_clean"
+    cur.execute(cmd)
+    res = cur.fetchall()
+    res = pandas.DataFrame(res,columns=['skic','a1','a2','a3','a4'])
+
+
+    # Randomly draw n stars from the list
+    stars = res.ix[np.random.random_integers(0,res.shape[0],n)]
+
+    Plo,Phi = 5,50    
+    P = random(n)
+    P = (log10(Phi)-log10(Plo)) * P + log10(Plo)
+    P = 10**P
+    stars['P'] = P
+
+    dflo,dfhi = 50,500
+    df = random(n)
+    df = (log10(dfhi)-log10(dflo)) * df + log10(dflo)
+    df = 10**df
+    stars['df'] = df
+
+    stars['b']     = random(n)
+    stars['phase'] = random(n) 
+    stars.index    = np.arange(n)
+    return stars
+
 def init(**kwargs):
     """
     Initializes simulation parameters.

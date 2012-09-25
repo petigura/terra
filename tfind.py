@@ -2,6 +2,9 @@
 Transit finder.
 
 Evaluate a figure of merit at each point in P,epoch,tdur space.
+
+Future work: implement a general linear function that works along folded columns.  Right now I'm doing a weighted mean. 
+
 """
 from scipy import ndimage as nd
 import scipy

@@ -17,6 +17,7 @@ from scipy.stats import ks_2samp
 
 import qalg
 
+import FFA
 import copy
 import keptoy
 import tfind
@@ -384,6 +385,21 @@ class Peak(h5plus.File):
             self.tdurcad = int(np.round(self.tdur / config.lc))
             self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
 
+
+
+    def checkHarm(self):
+        """
+        If one of the harmonics has higher MES, update P,epoch
+        """
+        harmL,MESL = checkHarm(self.dM,self.P,ver=False)
+        idma = np.nanargmax(MESL)
+        if idma != 0:
+            harm = harmL[idma]
+            print "%s P has higher MES" % harm
+            self.attrs['P']    *= harm
+            self.attrs['Pcad'] *= harm
+            self.P    *= harm
+
     def at_phaseFold(self):
         """ Add locally detrended light curve"""
         attrs = self.attrs
@@ -453,11 +469,11 @@ class Peak(h5plus.File):
 
         tdur = self.attrs['mean']
         mean = self.attrs['tdur']
-        pL0 = [np.sqrt(attrs['mean']),attrs['tdur']/2.,.3 ]
+        pL0 = [np.sqrt(attrs['mean']),attrs['tdur']/2.,.3,0]
         for ph in [0,180]:
             PF = self['lcPF%i' % ph][:]
             def model(pL):
-                return keptoy.MAfast(pL,attrs['climb'],PF['tPF'],usamp=11)
+                return keptoy.MAfast(pL[:3],attrs['climb'],PF['tPF']-pL[-1],usamp=11)
             def obj(pL):
                 res = (PF['fPF']-model(pL))/(attrs['noise']*attrs['twd'])
                 return (res**2).sum()/PF.size
@@ -536,6 +552,16 @@ class Peak(h5plus.File):
             ses_not_i = ses[season % 4  != i]
             self.attrs['SES_%i' %i] = np.median(ses_i)
             self.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
+
+    def at_rSNR(self):
+        """
+        Robust Signal to Noise Ratio
+        """
+        ses = self['SES'][:]['ses'].copy()
+        ses.sort()
+        self.attrs['clipSNR'] = np.mean(ses[:-3]) / self.attrs['noise'] *np.sqrt(ses.size)
+        x = np.median(ses) 
+        self.attrs['medSNR'] =  np.median(ses) / self.attrs['noise'] *np.sqrt(ses.size)
 
     def at_all(self):
         self.at_phaseFold()
@@ -622,11 +648,8 @@ class Peak(h5plus.File):
         plt.gca().xaxis.set_visible(False)
         plt.gca().yaxis.set_visible(False)
         
-
-
-        plt.gcf().text( 0.75, 0.05, self.diag_leg() , size=12, name='monospace',
-                    bbox=dict(visible=True,fc='white'))
-
+        plt.gcf().text( 0.75, 0.05, self.diag_leg() , size=10, name='monospace',
+                        bbox=dict(visible=True,fc='white'))
         plt.tight_layout()
         plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
@@ -642,15 +665,11 @@ class Peak(h5plus.File):
     def plotPF(self,ph):
         PF      = self['lcPF%i' % ph]
         x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
-        plt.plot(x,y,',',alpha=.5)
-        plt.plot(x,yfit,alpha=.5)        
-        plt.axhline(0,alpha=.3)
-
-        x,y = self['bx%i_%i'% (ph,1)],self['by%i_%i'% (ph,1)]
-        plt.plot(x,y,'o',mew=0,color='red')
+        plt.plot(x,y,',',color='k')
+        plt.plot(x,yfit,lw=3,color='c')        
 
         x,y = self['bx%i_%i'% (ph,5)],self['by%i_%i'% (ph,5)]
-        plt.plot(x,y,'.',mew=0,color='purple')
+        plt.plot(x,y,'o',mew=0,color='red')
 
 
 
@@ -723,7 +742,11 @@ class Peak(h5plus.File):
         keys.sort()
         for k in keys:
             v = dprint[k]
-            strout += '%s %.4g\n' % (k.ljust(8),v)
+            if v<1e-3:
+                vstr = '%.4g [ppm] \n' % (v*1e6)
+            else: 
+                vstr = '%.4g \n' % v
+            strout += k.ljust(12) + vstr
 
         return strout
 
@@ -764,6 +787,36 @@ def hbinavg(x,y,bins):
     return binx,biny
 
 
+
+
+
+
+def checkHarm(dM,P,harmL=config.harmL,ver=True):
+    """
+    Evaluate S/N for (sub)/harmonics
+    """
+    MESL  = []
+    Pcad  = P / keptoy.lc
+
+    dMW = FFA.XWrap(dM , Pcad)
+    for harm in harmL:
+        # Fold dM on the harmonic
+        dMW_harm = FFA.XWrap(dM,Pcad*float(harm) )
+        sig  = dMW_harm.mean(axis=0)
+        c    = dMW_harm.count(axis=0)
+        MES = sig * np.sqrt(c) 
+        MESL.append(MES.max())
+
+    MESL = np.array(MESL)
+    MESL /= MESL[0]
+
+    if ver:
+        print harmL
+        print MESL
+    return harmL,MESL
+
+
+
 ################################################################
 def window(fl,PcadG):
     """
@@ -782,74 +835,6 @@ def window(fl,PcadG):
 
     return winL
 
-def harmSearch(res,t,fm,Pcad0,ver=False):
-    """
-    Harmonic Search
-
-    Look for harmonics of P by computing MES at 1/4, 1/3, 1/2, 2, 3, 4.
-
-    Parameters
-    ----------
-    
-    res   : result from the grid searh
-    t     : time
-    fm    : flux
-    Pcad0 : initial period in
-    
-    Returns
-    -------
-
-    rLarr : Same format as grid output.  If the code conveged on the
-            correct harmonic, the true peak will be in here.
-    """
-
-    harmL = np.hstack([1,config.harmL])
-
-    imax = 4    
-    i = 0 # iteration counter
-    bfund = False # Is Pcad0 the fundemental?
-
-    while (bfund is False) and (i < imax):
-        def harmres(h):
-            Ph = Pcad0 * h
-            pkwd = Ph / t.size # proxy for peak width
-            pkwdThresh = 0.03
-            if pkwd > pkwdThresh:
-                dP = np.ceil(pkwd / pkwdThresh)
-            else: 
-                dP = 1
-
-            P1 = np.floor(Ph) - dP
-            P2 = np.ceil(Ph)  + dP
-
-            isStep = np.zeros(fm.size).astype(bool)
-            twdG = [3,5,7,10,14,18]
-            rtd = tfind.tdpep(t,fm,P1,P2,twdG)
-            r   = tfind.tdmarg(rtd)
-            return r
-
-        rL = map(harmres,harmL)
-        hs2n = [np.nanmax(r['s2n']) for r in rL]
-        rLarr = np.hstack(rL)
-        
-        hs2n = ma.masked_invalid(hs2n)
-        hs2n.fill_value=0
-        hs2n = hs2n.filled()
-
-        if ver is True:
-            np.set_printoptions(precision=1)
-            print harmL*Pcad0*keptoy.lc
-            print hs2n
-
-        if np.argmax(hs2n) == 0:
-            bfund =True
-        else:
-            jmax = np.nanargmax(rLarr['s2n'])
-            Pcad0 = rLarr['Pcad'][jmax]
-
-        i+=1
-
-    return rLarr
 
 
 

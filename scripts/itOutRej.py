@@ -42,7 +42,7 @@ bn = os.path.basename(args.grid)
 res0 = hgd['RES'][:]
 lc0  = hlc['LIGHTCURVE'][:]
 
-h5out = h5plus.File(args.out)
+h5out = h5plus.File(args.out,overwrite=True)
 
 h5out.create_dataset('RES',data=res0)
 

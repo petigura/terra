@@ -1,6 +1,4 @@
-import sim
 import h5py
-import glob
 import numpy as np
 import os
 from matplotlib import mlab
@@ -15,10 +13,14 @@ class File(h5py.File):
 
       If overwrite=True, remove file before returning the file handel.
       """
-      if kwargs['overwrite']==True:
-         if os.path.exists(name):
-            os.remove(name)
-         print 'removing %s ' % name
+      try:
+         kwargs['overwrite']
+         if kwargs['overwrite']==True:
+            if os.path.exists(name):
+               os.remove(name)
+               print 'removing %s ' % name
+      except KeyError:
+         pass
       h5py.File.__init__(self,name,**kwargs)
 
    def __setitem__(self,key,val):

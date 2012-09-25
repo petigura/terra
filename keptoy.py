@@ -318,6 +318,13 @@ def occultsmallt(t,p,c1,c2,c3,c4,tau,b):
     z =  np.sqrt( (t/tau)**2 + b**2 )
     return occultsmall(p,c1,c2,c3,c4,z)
 
+def genMALC(d):
+    # Covert P, R* to tau.
+
+    
+
+    a = (G*Mstar*P / (4*pi**2))**(1/3.)
+    n = 2*pi / P
 
 def MA(pL,climb,t,usamp=11):
     """

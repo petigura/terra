@@ -17,5 +17,6 @@ db   = args.db
 grid = args.grid
 out  = args.out
 p = tval.Peak(out,cal,grid,db)
+p.checkHarm()
 p.at_all()
 print "pk %s: %s" % (p.attrs['skic'],out)
