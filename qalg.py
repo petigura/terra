@@ -19,7 +19,7 @@ from config import *
 import sqlite3
 import pandas
 
-def mc_init():
+def mc_init(starlist=None):
     """
     Return a list of simulation parameters.
 
@@ -29,11 +29,27 @@ def mc_init():
     # Load in the star list
     con = sqlite3.connect('eb10k_clean.db')
     cur = con.cursor()
-    cmd = "SELECT skic,a1,a2,a3,a4 from b10k_clean"
+    if starlist is None:
+        cmd = """
+SELECT skic,a1,a2,a3,a4
+FROM
+b10k_clean
+"""
+    else:
+        cmd = """
+SELECT skic,a1,a2,a3,a4
+FROM
+b10k_clean
+WHERE
+skic in %s
+""" % str(tuple(starlist))
+    
+
+
     cur.execute(cmd)
     res = cur.fetchall()
     res = pandas.DataFrame(res,columns=['skic','a1','a2','a3','a4'])
-
+#    import pdb;pdb.set_trace()
 
     # Randomly draw n stars from the list
     stars = res.ix[np.random.random_integers(0,res.shape[0],n)]

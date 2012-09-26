@@ -1,31 +1,41 @@
 import argparse
 import atpy
 import sim
+import pandas
+import glob
+import keptoy
+from numpy import ma
 
 parser = argparse.ArgumentParser(
     description='Inject transit into template light curve.')
 
-parser.add_argument('inp',  type=str   , help='input file')
-parser.add_argument('out',  type=str   , help='output file')
-parser.add_argument('P',    type=float , help='Period (days)')
-parser.add_argument('epoch',type=float , help='Epoch (days)')
-parser.add_argument('df',   type=float , help='Depth (ppm)')
-parser.add_argument('tdur', type=float , help='Transit Duration (days)')
-parser.add_argument('-f'  , type=str   , default='f',dest='fluxField')
-
+parser.add_argument('inp',  type=str   , help='input folder')
+parser.add_argument('out',  type=str   , help='output folder')
+parser.add_argument('parfile', type=str, help='file with the transit parameters')
+parser.add_argument('parrow',  type=int , help='row of the transit parameter')
 args = parser.parse_args()
-d = dict(P=args.P,epoch=args.epoch,tdur=args.tdur,df=args.df)
+inp =args.inp
+out = args.out
+stars = pandas.read_table(args.parfile,sep='\s*',index_col=0)
 
-tinp = atpy.TableSet(args.inp,type='fits')
-nt   = len(tinp.tables.keys)
-print "number of tables = %i" % nt
-if nt==1:
-    tinp = tinp[0]
-    tout = sim.tinject(tinp,d,fluxField=args.fluxField)
-else:
-    func = lambda t : sim.tinject(t,d,fluxField=args.fluxField)
-    tout = map(func,tinp)
-    tout = atpy.TableSet(tout)
+d = dict(stars.ix[args.parrow])
+d['skic'] = "%09d" % d['skic']
 
-tout.write(args.out,overwrite=True,type='fits')
-print "inject: Created %s" % args.out
+
+searchstr = inp+'Q*/kplr%s-*_llc.fits' % (d['skic'] ) 
+
+files = glob.glob(searchstr)
+for file in files:
+    t = atpy.Table(file,type='fits')
+    fmed = ma.masked_invalid(t.data['SAP_FLUX'])
+    fmed = ma.median(fmed)
+
+    ft = keptoy.synMA(d,t.TIME)
+    ft *= fmed # Scale the flux to the median quarterly flux
+    t.data['SAP_FLUX'] += ft
+
+    outfile =file.replace(inp,out)    
+    outfile = outfile[:outfile.find('kplr')]
+    outfile += '%s_%06d.fits' % (d['skic'],args.parrow) 
+    t.write(outfile,type='fits',overwrite=True)
+    print "inject: Created %s"  % outfile

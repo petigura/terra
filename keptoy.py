@@ -286,20 +286,25 @@ def occultsmall(p,c1,c2,c3,c4,z):
 
     nb=z.size
     mu=np.ones(nb)
-    indx=np.where( (z > 1.-p) & (z < 1.+p) ) 
+    # edges overlap
+    bedge =  (z > 1.-p) & (z < 1.+p) 
+
     i1=1.-c1-c2-c3-c4
 
     norm = np.pi*(1.-c1/5.-c2/3.-3.*c3/7.-c4/2.)
     sig  = np.sqrt( np.sqrt( 1. - (1.-p)**2 ) )
-    x    = 1.-(z[indx]-p)**2
+    x    = 1.-(z[bedge]-p)**2
 
     tmp  = (1.-c1*(1.-4./5.*x**0.25) - c2*(1.-2./3.*x**0.5) - c3*(1.-4./7.*x**0.75)-c4*(1.-4./8.*x))
-    mu[indx] = 1. - tmp*(p**2*np.arccos((z[indx]-1.)/p)-(z[indx]-1.)*np.sqrt(p**2-(z[indx]-1.)**2))/norm
-    indx = np.where( (z < 1.-p) & (z != 0.) )
-    mu[indx] = 1.-np.pi*p**2*iofr(c1,c2,c3,c4,z[indx],p)/norm
-    indx=np.where(z == 0.)
-    if sum(indx) >= 0. :
-        mu[indx] =1. - np.pi*p**2/norm
+    mu[bedge] = 1. - tmp*(p**2*np.arccos((z[bedge]-1.)/p)-(z[bedge]-1.)*np.sqrt(p**2-(z[bedge]-1.)**2))/norm
+
+    # inside disk
+    bin =  (z < 1.-p) & (z != 0.) 
+    mu[bin] = 1.-np.pi*p**2*iofr(c1,c2,c3,c4,z[bin],p)/norm
+
+    # div by 0 special case
+    b0 = z == 0.
+    mu[b0] =1. - np.pi*p**2/norm
     return mu
 
 
@@ -382,3 +387,42 @@ def MAfast(pL,climb,t,**kwargs):
     yint = np.interp(t,tg,yg)
 
     return yint
+
+import tval
+
+def synMA(d,t):
+    """
+    Inject MA light curve into light curve
+ 
+    d : dictionary with the transit parameters
+        - Mstar
+        - Rstar
+        - df
+        - b
+        - P
+        - phase
+        - a1, ... ,a4
+    t : time
+    f : initial photometry
+    """
+    d = dict(d)
+    d['Mstar'] = 1
+    d['Rstar'] = 1
+
+
+    G = 2945.19343823 #  [R_sun^3, M_sun^-1, days^-2]
+
+
+
+    P = d['P']
+    p = np.sqrt(d['df']*1e-6)
+    b = d['b']
+    a = (G*d['Mstar']*P**2 / (4*pi**2))**(1/3.)
+    n = 2*pi / d['P']
+    tau = d['Rstar'] / a / n
+    pL = [p,tau,b]
+    climb = np.array([d['a%i' %i] for i in range(1,5)])
+    tval.t0shft(t,P,d['phase']*P)
+    tPF = np.mod(t+P/2,P)-P/2
+    ft = MA(pL,climb,tPF)
+    return ft
