@@ -351,7 +351,12 @@ class Peak(h5plus.File):
             self['res'] =  h5py.File(gridfile)['RES'][:]
 
             # Add star name
-            skic = os.path.basename(gridfile).split('.')[0]
+            bname = os.path.basename(gridfile).split('.')[0]
+            if len(bname) == 9:
+                skic = bname
+            elif len(bname) == 16:
+                skic = bname[:9]
+
             self.attrs['skic'] = skic
             
             # Add limb darkening coeffs

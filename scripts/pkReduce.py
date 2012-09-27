@@ -32,7 +32,7 @@ for i in range(len(args.inp)):
         pass
 dL = pandas.concat(dL)
 rL = dL.to_records()
-
+import pdb;pdb.set_trace()
 tpk = qalg.rec2tab(rL)
 tpk.table_name = 'pk'
 tpk.write('sqlite',args.out,overwrite=True)
