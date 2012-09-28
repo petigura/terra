@@ -24,16 +24,17 @@ for i in range(len(args.inp)):
     if np.mod(i,100) == 0:
         print "%i files reduced" % i 
     f = files[i]
+    print f
     try:
         p = tval.Peak(f,quick=True)
-        dL.append( pandas.DataFrame(p.get_db()) )
+        d = pandas.DataFrame(p.get_db())
+        d['bname'] = os.path.basename(f).split('.')[0]
+        dL.append( d )
     except:
         print "%s failed" % f
         pass
 dL = pandas.concat(dL)
-rL = dL.to_records()
-import pdb;pdb.set_trace()
-tpk = qalg.rec2tab(rL)
-tpk.table_name = 'pk'
-tpk.write('sqlite',args.out,overwrite=True)
+f = open(args.out,'w')
+f.writelines( dL.to_string() )
+f.close()
 print "pkReduce: %s" % args.out
