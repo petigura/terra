@@ -6,8 +6,8 @@ import h5plus
 import numpy as np
 import tfind
 import cotrend
+from config import twdG
 
-twdG = [3,5,7,10,14,18]
 P1 = int(np.floor(5./keptoy.lc))
 P2 = int(np.floor(50./keptoy.lc))
 

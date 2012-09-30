@@ -20,8 +20,8 @@ import tfind
 import cotrend
 from scipy import ndimage as nd
 import os
+from config import twdG
 
-twdG = [3,5,7,10,14,18]
 P1 = int(np.floor(5./lc))
 P2 = int(np.floor(50./lc))
 cut = 5e3

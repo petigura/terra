@@ -200,14 +200,13 @@ def tdpep(t,fm,P1,P2,twdG):
 
 def ep(dM,Pcad0):
     """
-    Search in Epoch
+    Search from Pcad0 to Pcad0+1
 
     Parameters
     ----------
-    t0   : Time of first cadance.  This is needed to set the epoch.
-    dM   : Transit depth estimator
-    Pcad0: Number of cadances to foldon
-
+    dM    : Transit depth estimator
+    Pcad0 : Number of cadances to foldon
+ 
     Returns the following information:
     - 'mean'   : Average of the folded columns (does not count masked items)
     - 'count'  : Number of non-masked items.
@@ -215,11 +214,49 @@ def ep(dM,Pcad0):
     - 'Pcad'   : Periods that the FFA computed MES 
     """
     
+    t0cad,Pcad,meanF,countF = fold(dM,Pcad0)
+    rep = epmarg(t0cad,Pcad,meanF,countF)
+    return rep
+
+def fold(dM,Pcad0):
+    """
+    Fold on M periods from Pcad0 to Pcad+1 where M is N / Pcad0
+    rounded up to the nearest power of 2.
+
+    Parameters
+    ----------
+    dM    : Transit depth estimator
+    Pcad0 : Number of cadances to foldon
+ 
+    Returns
+    -------
+    t0cad : Array with the trial epochs  [0, ...,  P0]
+    Pcad  : Array with the trial periods [P0, ..., P0]
+
+    meanF  : Average of the folded columns (does not count masked items)
+    countF : Number of non-masked items.    
+
+
+    Notes
+    -----
+    meanF and coundF have the following shape:
+
+        ep1 ep2 ep3 ... epP1
+        --- --- ---     ----
+    P0 |  .   .   .       .
+    P1 |  .   .   .       .
+    P2 |  .   .   .       .
+    .  |            .
+    .  |              .
+    .  |                .
+    P3 |  .   .   .       .
+    """
+
     dMW = FFA.XWrap2(dM,Pcad0,pow2=True)
     M   = dMW.shape[0]  # number of rows
 
     idCol = np.arange(Pcad0,dtype=int)   # id of each column
-    idRow = np.arange(M,dtype=int)   # id of each row
+    idRow = np.arange(M,dtype=int)       # id of each row
 
     t0cad = idCol.astype(float)
     Pcad  = Pcad0 + idRow.astype(float) / (M - 1)
@@ -231,15 +268,23 @@ def ep(dM,Pcad0):
     sumF   = FFA.FFA(data) # Sum of array elements folded on P0, P0 + i/(1-M)
     countF = FFA.FFA(mask) # Number of valid data points
     meanF  = sumF/countF
-    rep   = np.empty(M,dtype=epdtype)
+    return t0cad,Pcad,meanF,countF
 
-    # Take maximum epoch
+def epmarg(t0cad,Pcad,meanF,countF):
+    """
+    Epoch Marginalize
+    
+    Reduce the M x Pcad0 array returned by the FFA to a M length
+    array.  For all the trial periods choose the epoch,mean,count of
+    the maximum mean.
+    """
     idColMa      = np.nanargmax(meanF,axis=1)
+    idRow        = np.arange(Pcad.size,dtype=int)
+    rep          = np.empty(Pcad.size,dtype=epdtype)
     rep['mean']  = meanF[idRow,idColMa]
     rep['count'] = countF[idRow,idColMa]
     rep['t0cad'] = t0cad[idColMa]
-    rep['Pcad']  = Pcad
-
+    rep['Pcad']  = Pcad    
     return rep
 
 def tdmarg(rtd):

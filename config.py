@@ -18,6 +18,7 @@ blockSize = 1000
 # tfind
 miTransMES = 3 # Minimum number of transits to even be included in MES
 miSES      = 0 # All transits must have SES larger than this.
+twdG       = [3,5,7,10,14,18]
 
 # tval
 dP     = 0.5
@@ -64,3 +65,5 @@ wd        = 4    # Width of the median filter used to determine step
 # After identifying problem cadences, we expand the region which we
 # consider bad data by the following amounts in both directions.
 cadGrow = dict(desat=1,atTwk=4,isStep=100)
+
+
