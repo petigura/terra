@@ -574,7 +574,22 @@ class Peak(h5plus.File):
         self.at_med_filt()
         self.at_s2ncut()
         self.at_SES()
+
+    def at_s2n_known(self,d):
+        """
+        When running a simulation, we know a priori where the transit
+        will fall.  This function attaches the s2n_known given the
+        closest P,t0,twd
+        """                
+        tup = s2n_known(d,self.t,self.fm)
+            
+        self.attrs['twd_close']   = tup[2]
+        self.attrs['P_close']     = tup[3]
+        self.attrs['phase_close'] = tup[4]
+        self.attrs['s2n_close']   = tup[5]
         
+        
+
     def plot_diag(self):
         """
         Print a 1-page diagnostic plot of a given pk.
@@ -791,9 +806,58 @@ def hbinavg(x,y,bins):
 
     return binx,biny
 
+def s2n_known(d,t,fm):
+    """
+    Compute the FFA S/N assuming we knew where the signal was before hand
 
+    Parameters
+    ----------
 
+    d  : Simulation Parameters
+    t  : time
+    fm : lightcurve (maksed)
 
+    """
+    # Compute the twd from the twdG with the closest to the injected tdur
+    tdur       = keptoy.tdurMA(d)
+    itwd_close = np.argmin(np.abs(np.array(config.twdG) - tdur/config.lc))
+    twd_close  = config.twdG[itwd_close]
+    dM         = tfind.mtd(t,fm,twd_close)
+
+    # Fold the LC on the closest period we're computing all the FFA
+    # periods around the P closest.  This is a little complicated, but
+    # it allows us to use the same functions as we do in the complete
+    # period scan.
+
+    Pcad0 = int(np.floor(d['P'] / config.lc))
+    t0cad,Pcad,meanF,countF = tfind.fold(dM,Pcad0)
+
+    iPcad_close  = np.argmin(np.abs(Pcad - d['P']/config.lc  ))
+    Pcad_close   = Pcad[iPcad_close]
+    P_close      = Pcad_close * config.lc
+    
+    # Find the epoch that is closest to the injected phase. 
+    t0    = t[0]+ t0cad * config.lc # Epochs in days.
+    phase = np.mod(t0,P_close)/P_close    # Phases [0,1)
+
+    # The following 3 lines compute the difference between the FFA
+    # phases and the injected phase.  Phases can be measured going
+    # clockwise or counter clockwise, so we must choose the minmum
+    # value.  No phases are more distant than 0.5.
+    dP    = np.abs(phase-d['phase']) 
+    dP    = np.vstack([dP,1-dP])
+    dP    = dP.min(axis=0)      
+
+    iphase_close = np.argmin(dP)
+    phase_close  = phase[iphase_close]
+
+    # s2n for the closest twd,P,phas
+    noise = ma.median( ma.abs(dM) )   
+    s2nF = meanF / noise *np.sqrt(countF) 
+    s2nP = s2nF[iPcad_close] # length Pcad0 array with s2n for all the
+                             # P at P_closest
+    s2n_close =  s2nP[iphase_close]    
+    return phase,s2nP,twd_close,P_close,phase_close,s2n_close
 
 
 def checkHarm(dM,P,harmL=config.harmL,ver=True):

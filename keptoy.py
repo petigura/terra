@@ -426,3 +426,20 @@ def synMA(d,t):
     tPF = np.mod(t+P/2,P)-P/2
     ft = MA(pL,climb,tPF)
     return ft
+
+def tdurMA(d):
+    """
+    Transit duration for Mandel Agol LC
+
+    Given the standard dictionary with the MA parameters, return the
+    length of the transit (first contact to last contact).
+
+    Parameters
+    ----------
+    d - dictionary with MA LC parameters.
+    """
+    
+    t = np.linspace(-2,2,200)
+    ft = synMA(d,t)
+    tdur = t[ft < 0.].ptp()
+    return tdur
