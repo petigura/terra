@@ -857,6 +857,7 @@ def s2n_known(d,t,fm):
     s2nP = s2nF[iPcad_close] # length Pcad0 array with s2n for all the
                              # P at P_closest
     s2n_close =  s2nP[iphase_close]    
+
     return phase,s2nP,twd_close,P_close,phase_close,s2n_close
 
 

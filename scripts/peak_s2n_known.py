@@ -19,5 +19,7 @@ bname = os.path.basename(peak).split('.')[0]
 p = tval.Peak(peak)
 sim = pandas.read_table(simfile,sep='\s*')
 id = np.where(sim.bname==bname)[0][0]
-p.at_s2n_known(dict(sim.ix[id]) )
+d = dict(sim.ix[id]) 
+d['phase'] = 0
+p.at_s2n_known(d)
 print "at_s2n_known: %s" % (p.attrs['skic'])

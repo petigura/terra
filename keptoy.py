@@ -393,7 +393,10 @@ import tval
 def synMA(d,t):
     """
     Inject MA light curve into light curve
- 
+
+    Parameters
+    ----------
+
     d : dictionary with the transit parameters
         - Mstar
         - Rstar
@@ -406,14 +409,10 @@ def synMA(d,t):
     f : initial photometry
     """
     d = dict(d)
-    d['Mstar'] = 1
     d['Rstar'] = 1
-
+    d['Mstar'] = 1
 
     G = 2945.19343823 #  [R_sun^3, M_sun^-1, days^-2]
-
-
-
     P = d['P']
     p = np.sqrt(d['df']*1e-6)
     b = d['b']
