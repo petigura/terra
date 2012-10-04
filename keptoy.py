@@ -408,20 +408,11 @@ def synMA(d,t):
     t : time
     f : initial photometry
     """
-    d = dict(d)
-    d['Rstar'] = 1
-    d['Mstar'] = 1
-
-    G = 2945.19343823 #  [R_sun^3, M_sun^-1, days^-2]
-    P = d['P']
-    p = np.sqrt(d['df']*1e-6)
-    b = d['b']
-    a = (G*d['Mstar']*P**2 / (4*pi**2))**(1/3.)
-    n = 2*pi / d['P']
-    tau = d['Rstar'] / a / n
-    pL = [p,tau,b]
+    pL = [ d[k] for k in ['p','tau','b'] ]
     climb = np.array([d['a%i' %i] for i in range(1,5)])
-    tval.t0shft(t,P,d['phase']*P)
+    P = d['P']
+    dt = tval.t0shft(t,P,d['phase']*P)
+    t += dt
     tPF = np.mod(t+P/2,P)-P/2
     ft = MA(pL,climb,tPF)
     return ft
