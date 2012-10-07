@@ -569,12 +569,14 @@ class Peak(h5plus.File):
         self.attrs['medSNR'] =  np.median(ses) / self.attrs['noise'] *np.sqrt(ses.size)
 
     def at_all(self):
+        self.checkHarm()
         self.at_phaseFold()
         self.at_fit()
         self.at_med_filt()
         self.at_s2ncut()
         self.at_SES()
-
+        self.at_rSNR(self)
+            
     def at_s2n_known(self,d):
         """
         When running a simulation, we know a priori where the transit
