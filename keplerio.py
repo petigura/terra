@@ -284,6 +284,11 @@ def rsQ(rL):
     -------
     rLC : Record array of all the joined quarters.
 
+
+    Notes
+    -----
+    Will join put quarters in the proper order
+
     """
     startTimes = np.array([ r['t'][0] for r in rL] )
     sid = np.argsort(startTimes)

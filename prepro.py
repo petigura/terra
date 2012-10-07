@@ -22,7 +22,10 @@ import detrend
 import tfind
 from keplerio import update_column
 import qalg
-from config import stepThrsh,wd,cadGrow
+import config
+
+import h5plus
+import h5py
 
 kepdir = os.environ['KEPDIR']
 cbvdir = os.path.join(kepdir,'CBV/')
@@ -35,6 +38,71 @@ sapdtype = zip( sapkey['key'],[bool]*sapkey['key'].size )
 cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
 cutList = atpy.Table(cutpath,type='ascii').data
 
+class Lightcurve(h5plus.File):
+    def dt(self):
+        """
+        Iterates over the quarters stored in raw
+        
+        Applies the detrending
+        """
+        raw = self['/raw']
+        dt  = self.create_group('/dt')
+        for item in raw.items():
+            quarter = item[0]
+            ds      = item[1]
+            r = modcols(ds[:])
+            r = rqmask(r)
+            r = rdt(r)               
+            dt[quarter] = r
+
+    def cal(self,svd_folder):
+        """
+        Wrap over the calibration step
+
+        Parameters
+        ----------
+
+        svd_folder : Where to find the SVD matricies.  They must be
+                     named in the following fashion Q1.svd.h5,
+                     Q2.svd.h5 ...
+        """
+        dt = self['/dt']
+        cal = self.create_group('/cal')
+        for item in dt.items():
+            quarter = item[0]
+            ds      = item[1]
+
+            fdt = ma.masked_array(ds['fdt'][:],ds['fmask'][:])
+            hsvd = h5py.File(os.path.join(svd_folder,'%s.svd.h5' % quarter))
+
+            bv   = hsvd['V'][:config.nMode]
+            fit    = ma.zeros(fdt.shape)
+            p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
+            fcal  = fdt - fit
+            rcal = mlab.rec_append_fields(ds[:],['fit','fcal'],[fit,fcal])
+            cal[quarter] = rcal        
+
+    def mqcal(self):
+        """
+        Stitch Quarters
+        """
+        cal   = self['cal']
+        rL = []
+        for item in cal.items():
+            quarter = item[0]
+            ds      = item[1]
+            rL.append(ds[:])
+
+        rLC = keplerio.rsQ(rL)
+        binlen = [3,6,12]
+        for b in binlen:
+            bcad = 2*b
+            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
+            dM = tfind.mtd(rLC['t'],fcal,bcad)
+            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+        self['mqcal'] = rLC
+
+        
 def prepLC(tLC):
     """
     Take raw photometry and prepare it for the grid search.
@@ -283,8 +351,8 @@ def rqmask(r0):
 
 
     # Grow masks for bad regions
-    for k in cadGrow.keys():
-        nGrow = cadGrow[k] * 2 # Expand in both directions
+    for k in config.cadGrow.keys():
+        nGrow = config.cadGrow[k] * 2 # Expand in both directions
         b = r[k]
         b = nd.convolve( b.astype(float) , np.ones(nGrow,float) )
         r[k] = b > 0
@@ -382,14 +450,14 @@ def isStep(f):
 
     Identify steps in the LC
     """
-    medf = nd.median_filter(f,size=wd)
+    medf = nd.median_filter(f,size=config.wd)
 
-    kern = np.zeros(wd)
+    kern = np.zeros(config.wd)
     kern[0] = 1
     kern[-1] = -1
 
     diff   = nd.convolve(medf,kern)
-    return np.abs(diff) > stepThrsh
+    return np.abs(diff) > config.stepThrsh
 
 def isOutlier(f):
     """
