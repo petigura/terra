@@ -39,6 +39,29 @@ cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
 cutList = atpy.Table(cutpath,type='ascii').data
 
 class Lightcurve(h5plus.File):
+    def raw(self,files):
+        """
+        Take list of .fits files and store them in the raw group
+        """
+
+        raw  = self.create_group('/raw')
+
+        hduL = []
+        kicL = []
+        qL   = []
+        for f in files:
+            h = pyfits.open(f)
+            hduL += [h]
+            kicL += [h[0].header['KEPLERID'] ]
+            qL   += [h[0].header['QUARTER'] ]
+
+        assert np.unique(kicL).size == 1,'KEPLERID not the same'
+        assert np.unique(qL).size == len(qL),'duplicate quarters'
+
+        self.attrs['KEPLERID'] = kicL[0] 
+        for h,q in zip(hduL,qL):
+            raw['Q%i'  % q] = np.array(h[1].data)
+
     def dt(self):
         """
         Iterates over the quarters stored in raw
