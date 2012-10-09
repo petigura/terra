@@ -2,41 +2,36 @@
 Pre-Processing
 
 Process photometry before running the grid search.
+
+>>> Computational Module; No Plotting <<<
 """
+import os
+
 import numpy as np
 from numpy import ma
 from scipy import ndimage as nd
-
-import atpy
-import keplerio
-import copy
-import os
-
 from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
-import glob
+import atpy  # Could get rid of this, just need to change cutpath
 import pyfits
-
-import cotrend
-import detrend
-import tfind
-from keplerio import update_column
-import qalg
-import config
-
-import h5plus
 import h5py
 
-kepdir = os.environ['KEPDIR']
-cbvdir = os.path.join(kepdir,'CBV/')
-kepfiles = os.path.join(os.environ['KEPBASE'],'files')
-qsfx = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
-sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
-sapkey = csv2rec(sapkeypath,delimiter=' ')
-sapdtype = zip( sapkey['key'],[bool]*sapkey['key'].size )
+import cotrend
+import config
+import detrend
+import h5plus
+import keplerio
+import tfind
 
-cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
-cutList = atpy.Table(cutpath,type='ascii').data
+kepdir     = os.environ['KEPDIR']
+cbvdir     = os.path.join(kepdir,'CBV/')
+kepfiles   = os.path.join(os.environ['KEPBASE'],'files')
+qsfx       = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
+sapkey     = csv2rec(sapkeypath,delimiter=' ')
+sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
+cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
+cutList    = atpy.Table(cutpath,type='ascii').data
 
 def rec_zip(rL):
     """
@@ -53,9 +48,7 @@ class Lightcurve(h5plus.File):
         """
         Take list of .fits files and store them in the raw group
         """
-
         raw  = self.create_group('/raw')
-
         hduL = []
         kicL = []
         qL   = []
@@ -74,7 +67,6 @@ class Lightcurve(h5plus.File):
             r = modcols(r)
             raw['Q%i'  % q] = np.array(r)
             
-
     def dt(self):
         """
         Iterates over the quarters stored in raw
@@ -94,7 +86,6 @@ class Lightcurve(h5plus.File):
             dtFields = list(r.dtype.names)
             dtFields = [f for f in dtFields if rawFields.count(f) ==0]
             dt[quarter] = mlab.rec_keep_fields(r,dtFields)
-
 
     def cal(self,svd_folder):
         """
@@ -153,78 +144,6 @@ class Lightcurve(h5plus.File):
             dM = tfind.mtd(rLC['t'],fcal,bcad)
             rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
         self['mqcal'] = rLC
-
-def tcbvdt(tQLC0,fcol,efcol,q,cadmask=None,dt=False,ver=True):
-    """
-    Table CBV Detrending
-
-    My implimentation of CBV detrending.  Assumes the relavent
-    lightcurve has been detrended.
-
-    Paramaters
-    ----------
-
-    tQLC    : Table for single quarter.
-    fcol    : string.  name of the flux column
-    efol    : string.  name of the flux_err colunm
-    cadmask : Boolean array specifying a subregion
-    ver     : Verbose output (turn off for batch).
-
-    Returns
-    -------
-
-    ffit    : The CBV fit to the fluxes.
-    """
-    minseg = 100
-    tQLC = copy.deepcopy(tQLC0)
-    cbv = [1,2,3,4,5,6] # Which CBVs to use.
-    ncbv = len(cbv)
-
-    kw = tQLC.keywords
-    assert kw['NQ'],'Assumes lightcurve has been normalized.' 
-
-    t     = tQLC['t'  ]
-    f     = tQLC[fcol ]
-    ferr  = tQLC[efcol]
-
-    mod,out = keplerio.idQ2mo(kw['KEPLERID'],q)
-    tBV = bvload(q,mod,out)
-    bv = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
-
-    mask = tQLC.fmask
-
-    fm   = ma.masked_array(f,mask=mask,copy=True)
-    fdt  = ma.masked_array(f,mask=mask,copy=True)
-    fcbv = ma.masked_array(f,mask=mask,copy=True)
-    tm   = ma.masked_array(t,mask=mask,copy=True)
-
-    # Detrend each each CBV segment individually
-    label   = detrend.sepseg(tm)
-    sL   = ma.notmasked_contiguous(label)
-    sL   = [s for s in sL if s.stop-s.start > minseg]
-    for s in sL:
-        a1,a2= cotrend.dtbvfitm(t[s],fm[s],bv[:,s])
-        fdt[s]  = a1.astype('>f4') 
-        fcbv[s] = a2.astype('>f4')
-
-    update_column(tQLC,'fdt',fdt.data)
-    update_column(tQLC,'fcbv',fcbv.data)
-
-    return tQLC
-
-def bvload(quarter,module,output):
-    """
-    Load basis vector.
-
-    """    
-    bvfile = os.path.join( cbvdir,'kplr*-q%02d-*.fits' % quarter)
-    bvfile = glob.glob(bvfile)[0]
-    bvhdu  = pyfits.open(bvfile)
-    bvkw   = bvhdu[0].header
-    bvcolname = 'MODOUT_%i_%i' % (module,output)
-    tBV    = atpy.Table(bvfile,hdu=bvcolname,type='fits')
-    return tBV
-
 
 def rdt(r0):
     """
@@ -325,7 +244,6 @@ def rqmask(r0):
     r = rec_append_fields(r,'desat'    ,rqual['desat']  )
     r = rec_append_fields(r,'atTwk'    ,rqual['atTwk']  )
 
-
     # Grow masks for bad regions
     for k in config.cadGrow.keys():
         nGrow = config.cadGrow[k] * 2 # Expand in both directions
@@ -347,7 +265,6 @@ def rqmask(r0):
     r = rec_append_fields(r,'segEnd',segEnd)
 
     return r
-
 
 def parseQual(SAP_QUALITY):
     """
@@ -411,9 +328,8 @@ def isBadReg(t):
     Returns
     -------
     mask : mask indicating bad values. True is bad.
+
     """
-
-
     tm = ma.masked_array(t,copy=True)
     for r in cutList:
         tm = ma.masked_inside(tm,r['start'],r['stop'])
@@ -426,6 +342,7 @@ def isStep(f):
 
     Identify steps in the LC
     """
+
     medf = nd.median_filter(f,size=config.wd)
 
     kern = np.zeros(config.wd)

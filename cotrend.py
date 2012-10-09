@@ -385,46 +385,6 @@ def medfit(fdt,vec):
 
 
 
-
-def coTrend(t,alg):
-    kw = t.keywords
-
-    if alg is 'RawCBV':
-        fm = ma.masked_invalid(t.f)
-    else:
-        fm = ma.masked_array(t.f,mask=t.fmask)
-
-    bg = ~fm.mask # shorthand for the good indecies
-
-    cbv = [1,2,3,4,5,6]   
-    q = kw['QUARTER']
-    mod,out = keplerio.idQ2mo(kw['KEPLERID'],q)
-    tBV = prepro.bvload(q,mod,out)
-
-    bv  = np.vstack( [tBV['VECTOR_%i' % i] for i in cbv] )
-    tDtCBV   = prepro.tcbvdt(t,'f','ef',q)
-    fdt      = ma.masked_array(tDtCBV.fdt,mask=fm.mask)
-    
-    if (alg is 'RawCBV') or (alg is 'ClipCBV') :
-        p1 = np.linalg.lstsq( bv[:,bg].T , fm[bg] )[0]
-        tnd     = fm.copy()
-        tnd[bg] = np.dot( p1 , bv[:,bg] )
-        data,tnd = fm,tnd
-    elif alg is 'DtSpl':
-        data,tnd = fm,fm-fdt
-    elif alg is 'DtCBV':
-        tndDtCBV = ma.masked_array(tDtCBV.fcbv,mask=fm.mask)
-        data,tnd = fdt,tndDtCBV
-    elif alg is 'DtMed':
-        vec = np.load('mom_cycle_q%i.npy' % kw['QUARTER'])
-        tndMedCT = medfit(fdt,vec)
-        data,tnd  = fdt,tndMedCT
-    else:
-        raise IOError('alg is not correct type')
-
-    return data,tnd
-
-
 twd = 20
 #from matplotlib import gridspec
 #from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
