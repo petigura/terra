@@ -426,8 +426,8 @@ def coTrend(t,alg):
 
 
 twd = 20
-from matplotlib import gridspec
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+#from matplotlib import gridspec
+#from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 tprop = dict(size=10,name='monospace')
 

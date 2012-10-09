@@ -139,7 +139,6 @@ class Lightcurve(h5plus.File):
         cal   = self['cal']
         
         rL = []
-        
         for item in cal.items():
             quarter = item[0]
             ds      = item[1]

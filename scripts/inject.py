@@ -1,11 +1,8 @@
 import argparse
-import atpy
-import sim
-import pandas
-import glob
 import keptoy
-from numpy import ma
+import pandas
 import os
+import prepro
 
 parser = argparse.ArgumentParser(
     description='Inject transit into template light curve.')
@@ -18,20 +15,22 @@ parser.add_argument('parrow',  type=int , help='row of the transit parameter')
 args = parser.parse_args()
 inp = args.inp
 out = args.out
-store = HDFStore('simPar.h5')
-simPar = store['simPar']
+simPar = pandas.read_csv('simPar.csv',index_col=0)
+d = dict(simPar.ix[args.parrow])
 
-d = dict(stars.ix[args.parrow])
-inpfile = os.path.join(inp,d['skic']+'.h5')
+inpfile = os.path.join(inp,"%09d.h5" % d['skic'])
 outfile = os.path.join(out,d['bname']+'.h5')
 
 os.system('cp %s %s' % (inpfile,outfile ) )
 raw = prepro.Lightcurve(outfile)['raw']
 for i in raw.items():
-    ds = i[0]
-    quarter = q[1]
-    
-    ft = keptoy.synMA(d,t.TIME)
-    ds['f'] += ft
+    quarter = i[0]
+    ds = i[1]
+    r = ds[:]
+    ft = keptoy.synMA(d,r['t'])
+    r['f'] += ft
+    ds[:] = r
+
+
 
 print "inject: Created %s"  % outfile

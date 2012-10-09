@@ -390,7 +390,7 @@ def MAfast(pL,climb,t,**kwargs):
 
 import tval
 
-def synMA(d,t):
+def synMA(d,t0):
     """
     Inject MA light curve into light curve
 
@@ -405,9 +405,10 @@ def synMA(d,t):
         - P
         - phase
         - a1, ... ,a4
-    t : time
+    t0 : time
     f : initial photometry
     """
+    t = t0.copy()
     pL = [ d[k] for k in ['p','tau','b'] ]
     climb = np.array([d['a%i' %i] for i in range(1,5)])
     P = d['P']

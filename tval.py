@@ -27,13 +27,11 @@ import h5py
 import os
 import matplotlib
 envlist = os.environ.keys()
-if envlist.count('PBS_QUEUE')!=0:
-    matplotlib.use('Agg')
-from matplotlib.cbook import is_string_like,is_numlike
-from matplotlib.pylab import plt
-from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-import sketch
+#from matplotlib.cbook import is_string_like,is_numlike
+#from matplotlib.pylab import plt
+#from matplotlib.gridspec import GridSpec
+#from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+#import sketch
 tprop = dict(size=10,name='monospace')
 import keplerio
 
@@ -340,15 +338,15 @@ class Peak(h5plus.File):
         """        
         if len(args) is 1:
             h5plus.File.__init__(self,args[0],overwrite=False)
-        elif len(args) is 4:
+        elif len(args) is 3:
             h5plus.File.__init__(self,args[0],overwrite=False)
-            mqcalfile,gridfile,dbfile = args[1],args[2],args[3]
-            self.attrs['mqcalfile'] = mqcalfile
+            gridfile,dbfile = args[1],args[2]
             self.attrs['gridfile']  = gridfile
             self.attrs['dbfile']    = dbfile
 
-            self['lc'] = h5py.File(mqcalfile)['LIGHTCURVE'][:]
-            self['res'] =  h5py.File(gridfile)['RES'][:]
+            grid = tfind.Grid(gridfile)
+            self['lc']  = grid['mqcal'][:]
+            self['res'] = grid['RES'][:]
 
             # Add star name
             bname = os.path.basename(gridfile).split('.')[0]
@@ -575,7 +573,7 @@ class Peak(h5plus.File):
         self.at_med_filt()
         self.at_s2ncut()
         self.at_SES()
-        self.at_rSNR(self)
+        self.at_rSNR()
             
     def at_s2n_known(self,d):
         """

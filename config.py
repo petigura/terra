@@ -20,6 +20,11 @@ miTransMES = 3 # Minimum number of transits to even be included in MES
 miSES      = 0 # All transits must have SES larger than this.
 twdG       = [3,5,7,10,14,18]
 P1,P2      = 5,50 # Days over which to compute periodogram 
+maCadCnt   = 5e3 # cadCount counts up the number of times a particular
+                 # cadence goes into the MES calculation.  If a
+                 # certain cadence is drastically over represented,
+                 # clip it.
+
 
 # tval
 dP     = 0.5
@@ -60,7 +65,7 @@ sigOut    = 10
 maxIt     = 10 # Maximum number of iterations for robust-SVD
 
 # Prepro
-stepThrsh = 1e-3 # Threshold steps must be larger than.  
+stepThrsh = 5e-3 # Threshold steps must be larger than.  
 wd        = 4    # Width of the median filter used to determine step
 
 # After identifying problem cadences, we expand the region which we

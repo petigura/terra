@@ -21,6 +21,10 @@ import FFA_cy as FFA
 
 from config import *
 
+import config
+import prepro
+import h5plus
+
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
 epdtype = zip(epnames,[float]*len(epnames) )
@@ -30,6 +34,66 @@ epdtype = np.dtype(epdtype)
 tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
+
+class Grid(h5plus.File):
+    # Default period limits.  Can change after instaniation.
+    P1 = int(np.floor(config.P1/keptoy.lc))
+    P2 = int(np.floor(config.P2/keptoy.lc))
+    cut = 5e3
+
+    def grid(self,lcfile):
+        """
+        Run the grid search
+        """
+        lc = prepro.Lightcurve(lcfile)['mqcal']
+        fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0,copy=True)
+        rtd = tdpep(lc['t'],fm,self.P1,self.P2,config.twdG)
+        r   = tdmarg(rtd)
+        self['RES'] = r
+        self['mqcal'] = lc[:]
+
+    def itOutRej(self):
+        """
+        Run the iterative outlier rejection
+
+        """
+        it = 0 
+        done = False
+        res0 = self['RES'][:]
+        lc0  = self['mqcal'][:]
+
+        while done is False:
+            cad = lc0['cad']
+            c = cadCount(cad,res0)
+            bout = c > config.maCadCnt
+            nout = c[bout].size
+            print "%s: it%i maCadCnt = %i, %i outliers" % (self,it,max(c),nout)
+            if (nout==0 ) or (it > 2):
+                done = True
+            else:
+                lc1   = lc0.copy()
+
+                # Update the mask
+                bout = nd.convolve(bout.astype(float),np.ones(20) ) >  0
+                lc1['fmask']  = lc1['fmask'] | bout
+                fm  = ma.masked_array(lc1['fcal'],lc1['fmask'],fill_value=0)
+                
+                # Rerun the grid search 
+                rtd  = tdpep(lc1['t'],fm,self.P1,self.P2,twdG)
+                res1 = tdmarg(rtd)
+                self['RES'][:] = res1
+
+                gpname = 'it%i' % it
+                grp = self.create_group(gpname)
+
+                print "Storing Previous Iteration to Group %s" % gpname
+                grp['RES'] = res0 
+                grp['mqcal'] = lc0
+
+                lc0  = lc1.copy()
+                res0 = res1.copy()
+
+            it +=1
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
     """
