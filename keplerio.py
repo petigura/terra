@@ -48,45 +48,6 @@ xtraCol = ['TIMECORR','SAP_BKG','SAP_BKG_ERR',
 # File IO #
 ###########
 
-def KICPath(KIC, QL=range(1,9) ):
-    pathL = []
-    for Q in QL:
-        tQ = qsfx[ np.where(qsfx['q'] == Q) ]
-        path = 'Q%i/kplr%09d-%s_llc.fits' % ( Q,KIC,tQ.suffix[0] ) 
-        path = 'archive/data3/privkep/EX/' + path
-        pathL.append(path)
-    return pathL
-
-def tarXL(filesL):
-    """
-    Extract List of files from tar archive.
-    """
-    qfunc = lambda s : int(s.split('Q')[1].split('/kplr')[0])
-    QL = map(qfunc,filesL)
-    t = atpy.Table()
-    t.add_column('file',filesL)
-    t.add_column('Q',QL)
-    for q in np.unique(QL):
-        tQ = t.where(t.Q == q)
-        tar  = os.path.join(kepdat,'EX_Q%i.tar' % q)
-        nload = 0
-        nfail = 0
-
-        try:
-            tar  = tarfile.open(tar)
-            for file in tQ.data['file']:
-                try:
-                    tar.extract(file)
-                    print "Extracted %s" % file
-                    nload +=1 
-                except KeyError:
-                    print sys.exc_info()[1]
-                    nfail +=1
-            tar.close()
-            print "Loaded %i, Failed %i" %(nload,nfail)
-        except IOError:
-            print sys.exc_info()[1]
-
 def qload(file,allCol=False):
     """
     Quarter Load
