@@ -7,28 +7,26 @@ import sys
 import pyfits
 
 class File(h5py.File):
-   def __init__(self,name,**kwargs):
+   def __init__(self,name,mode=None):
       """
       Simple extension to h5py.File
 
-      If overwrite=True, remove file before returning the file handel.
-      """
-      try:
-         kwargs['overwrite']
-         if kwargs['overwrite']==True:
-            if os.path.exists(name):
-               os.remove(name)
-               print 'removing %s ' % name
-      except KeyError:
-         pass
-      h5py.File.__init__(self,name,**kwargs)
+      Additional mode 'c' will 
 
+      """
+      if mode == 'c':
+         if os.path.exists(name):
+            os.remove(name)
+            print 'removing %s ' % name
+         h5py.File.__init__(self,name,mode='a')
+      else:
+         h5py.File.__init__(self,name,mode=mode)
+      
    def __setitem__(self,key,val):
       if self.keys().count(unicode(key)) is 1:
          print "removing %s " % key
          del self[key]      
       h5py.File.__setitem__(self,key,val)
-
 
    def create_group(self,name):
       try:

@@ -27,7 +27,8 @@ import h5py
 import os
 import matplotlib
 envlist = os.environ.keys()
-#from matplotlib.cbook import is_string_like,is_numlike
+from matplotlib.cbook import is_string_like,is_numlike
+
 #from matplotlib.pylab import plt
 #from matplotlib.gridspec import GridSpec
 #from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
@@ -743,6 +744,7 @@ class Peak(h5plus.File):
         
     def __str__(self):
         dprint = self.flatten(self.noPrintRE)
+        return self.dict2str(dprint)
 
     def diag_leg(self):
         dprint = self.flatten(self.noDiagRE)

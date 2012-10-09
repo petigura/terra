@@ -24,6 +24,7 @@ from config import *
 import config
 import prepro
 import h5plus
+import h5py
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
@@ -41,16 +42,21 @@ class Grid(h5plus.File):
     P2 = int(np.floor(config.P2/keptoy.lc))
     cut = 5e3
 
-    def grid(self,lcfile):
+    def __init__(self,*args):
+        h5plus.File.__init__(self,args[0])
+        if len(args) is 2:
+            hlc      = h5py.File(args[1],mode='r')
+            self['mqcal'] = hlc['mqcal'][:]
+
+    def grid(self):
         """
         Run the grid search
         """
-        lc = prepro.Lightcurve(lcfile)['mqcal']
+        lc = self['mqcal'][:]
         fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0,copy=True)
         rtd = tdpep(lc['t'],fm,self.P1,self.P2,config.twdG)
         r   = tdmarg(rtd)
         self['RES'] = r
-        self['mqcal'] = lc[:]
 
     def itOutRej(self):
         """
