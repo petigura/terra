@@ -29,6 +29,15 @@ class File(h5py.File):
          del self[key]      
       h5py.File.__setitem__(self,key,val)
 
+
+   def create_group(self,name):
+      try:
+         group = h5py.File.create_group(self,name)
+      except ValueError:
+         del self[name]
+         group = h5py.File.create_group(self,name)
+      return group
+
 def compChunks(elsize,ncolmax):
    """
    Compute Chunck Size

@@ -6,29 +6,24 @@ import h5plus
 import numpy as np
 import tfind
 import cotrend
-from config import twdG
+import config
 
-P1 = int(np.floor(5./keptoy.lc))
-P2 = int(np.floor(50./keptoy.lc))
+P1 = int(np.floor(config.P1/keptoy.lc))
+P2 = int(np.floor(config.P2/keptoy.lc))
 
 prsr = ArgumentParser(description='Run grid search')
 prsr.add_argument('inp',type=str,help='input file')
-prsr.add_argument('out',nargs='?',type=str,help="""
-output file. If none specified .cal.h5 -> .grid.h5""")
-prsr.add_argument('--flux',type=str,default='fcal',help= 'Name of flux field to process.  Default is cal')
+prsr.add_argument('out',type=str,help='output file')
 args = prsr.parse_args()
 
-h5     = h5py.File(args.inp,'r+')
-out    = h5plus.ext(args.inp,'.grid.h5',out=args.out)
+h5    = h5py.File(args.inp,'r+')
+h5out = h5plus.File(args.out)
 
-lc   = h5['LIGHTCURVE'][:]
-t = lc['t']
+lc  = h5['mqcal'][:]
 
-fm  = ma.masked_array(lc[args.flux],lc['fmask'],fill_value=0)
-rtd = tfind.tdpep(t,fm,P1,P2,twdG)
+fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+rtd = tfind.tdpep(lc['t'],fm,P1,P2,config.twdG)
 r   = tfind.tdmarg(rtd)
-
-h5out = h5plus.File(out)
-h5out.create_dataset('RES',data=r)
+h5out['RES'] = r
+print "grid: Created %s" % h5out
 h5out.close()
-print "grid: Created %s" % out

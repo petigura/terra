@@ -19,6 +19,7 @@ blockSize = 1000
 miTransMES = 3 # Minimum number of transits to even be included in MES
 miSES      = 0 # All transits must have SES larger than this.
 twdG       = [3,5,7,10,14,18]
+P1,P2      = 5,50 # Days over which to compute periodogram 
 
 # tval
 dP     = 0.5

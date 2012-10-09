@@ -38,6 +38,16 @@ sapdtype = zip( sapkey['key'],[bool]*sapkey['key'].size )
 cutpath = os.path.join(kepfiles,'ranges/cut_time.txt')
 cutList = atpy.Table(cutpath,type='ascii').data
 
+def rec_zip(rL):
+    """
+    """
+    ro =rL[0]
+    for i in range(1,len(rL)):
+        fields = list(rL[i].dtype.names)
+        vals   = [rL[i][f] for f in fields ]
+        ro = mlab.rec_append_fields(ro,fields,vals)
+    return ro
+
 class Lightcurve(h5plus.File):
     def raw(self,files):
         """
@@ -60,7 +70,10 @@ class Lightcurve(h5plus.File):
 
         self.attrs['KEPLERID'] = kicL[0] 
         for h,q in zip(hduL,qL):
-            raw['Q%i'  % q] = np.array(h[1].data)
+            r = np.array(h[1].data)
+            r = modcols(r)
+            raw['Q%i'  % q] = np.array(r)
+            
 
     def dt(self):
         """
@@ -73,10 +86,15 @@ class Lightcurve(h5plus.File):
         for item in raw.items():
             quarter = item[0]
             ds      = item[1]
-            r = modcols(ds[:])
+            r = ds[:]
+            rawFields = list(r.dtype.names)            
+
             r = rqmask(r)
             r = rdt(r)               
-            dt[quarter] = r
+            dtFields = list(r.dtype.names)
+            dtFields = [f for f in dtFields if rawFields.count(f) ==0]
+            dt[quarter] = mlab.rec_keep_fields(r,dtFields)
+
 
     def cal(self,svd_folder):
         """
@@ -94,8 +112,11 @@ class Lightcurve(h5plus.File):
         for item in dt.items():
             quarter = item[0]
             ds      = item[1]
-
-            fdt = ma.masked_array(ds['fdt'][:],ds['fmask'][:])
+            rdt     = ds[:]
+            dtFields = list(rdt.dtype.names)
+            
+            
+            fdt = ma.masked_array(rdt['fdt'],rdt['fmask'])
             hsvd = h5py.File(os.path.join(svd_folder,'%s.svd.h5' % quarter))
 
             bv   = hsvd['V'][:config.nMode]
@@ -103,18 +124,27 @@ class Lightcurve(h5plus.File):
             p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
             fcal  = fdt - fit
             rcal = mlab.rec_append_fields(ds[:],['fit','fcal'],[fit,fcal])
-            cal[quarter] = rcal        
+
+            calFields = list(rcal.dtype.names)
+            calFields = [f for f in calFields if dtFields.count(f) ==0]
+
+            cal[quarter] = mlab.rec_keep_fields(rcal,calFields)
 
     def mqcal(self):
         """
         Stitch Quarters
         """
+        raw   = self['raw']
+        dt    = self['dt']
         cal   = self['cal']
+        
         rL = []
+        
         for item in cal.items():
             quarter = item[0]
             ds      = item[1]
-            rL.append(ds[:])
+            r = rec_zip([ raw[quarter],dt[quarter],cal[quarter] ] )
+            rL.append(r)
 
         rLC = keplerio.rsQ(rL)
         binlen = [3,6,12]
