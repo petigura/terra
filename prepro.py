@@ -154,69 +154,6 @@ class Lightcurve(h5plus.File):
             rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
         self['mqcal'] = rLC
 
-        
-def prepLC(tLC):
-    """
-    Take raw photometry and prepare it for the grid search.
-
-    This function is called by the prepro script.
-
-    2.  Cut out bad regions.
-    3.  Interpolate over the short gaps in the timeseries.
-
-    """
-    ##################
-    # Build the mask #
-    ##################
-
-    tLC = mapq(qmask,tLC)
-
-    ##############################################
-    # Detrend the light curve quarter by quarter #
-    ##############################################
-
-    def cbvfunc(t):
-        # Figure out what quarter we're dealing with
-        q = np.unique(t.q)[0]
-        return tcbvdt(t,'f','ef',q)
-        
-    tLC = mapq(cbvfunc,tLC)
-
-    f = ma.masked_invalid(tLC.fdt-tLC.fcbv)
-    f.fill_value=0
-
-    dM6 = tfind.mtd(tLC.t,f.filled(),tLC.isStep,tLC.fmask,12)
-    isNoisey = noiseyReg(tLC.t,dM6)
-    update_column(tLC,'isNoisey',isNoisey)
-
-    dM6.mask = dM6.mask | isNoisey
-    update_column(tLC,'dM6',dM6)
-    update_column(tLC,'dM6mask',dM6.mask)
-    
-    tLC.fmask = tLC.fmask | tLC.isNoisey
-
-    return tLC
-
-def mapq(func,tLC):
-    """
-    Map to Quarter
-
-    Breaks apart the tLC on the q column and applys a function to each
-    quarter individually.  Then it repackages it up with sQ.    
-    """
-
-    qL = np.sort(np.unique(tLC.q))
-    qL = qL[~np.isnan(qL)] # remove the nans
-    tLCtemp = []
-
-    for q in qL:
-        tQ = copy.deepcopy( tLC.where( tLC.q == q) )
-        tQ = func(tQ)
-        tLCtemp.append(tQ)
-
-    tLC = keplerio.sQ(tLCtemp)
-    return tLC
-
 def tcbvdt(tQLC0,fcol,efcol,q,cadmask=None,dt=False,ver=True):
     """
     Table CBV Detrending
@@ -348,19 +285,6 @@ def modcols(r0):
     r = keplerio.rnQ(r)
     r = keplerio.rnanTime(r)
     return r
-
-def qmask(t0):
-    """
-    Quarter mask
-
-    Determine the masked regions for the quarter.
-    """
-    t = copy.deepcopy(t0)
-    r = rqmask(t.data)
-    t = qalg.rec2tab(r)
-    t.keywords = t0.keywords
-    return t
-
 
 def rqmask(r0):
     """
