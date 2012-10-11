@@ -9,6 +9,7 @@ prsr = ArgumentParser(description='Find peaks in grid file')
 prsr.add_argument('out',type=str,nargs='?', help="output file")
 prsr.add_argument('grid',type=str, help=".grid.h5 file")
 prsr.add_argument('db',type=str, help='Database with limb-darkening coeffs')
+prsr.add_argument('--debug',type=bool,default=False,help='Shorter run')
 args  = prsr.parse_args()
 
 db   = args.db
