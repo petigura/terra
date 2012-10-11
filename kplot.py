@@ -12,10 +12,12 @@ possible on some non-interactive platforms
 
 from matplotlib.pylab import plt
 from matplotlib.gridspec import GridSpec
-#from mpl_toolkits.axes_grid.anchored_artists import AnchoredText"""
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 import tval
 import sketch
+import config
+import numpy as np
 
 tprop = dict(size=10,name='monospace')
 

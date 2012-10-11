@@ -9,10 +9,8 @@ import atpy
 import tfind
 import detrend
 import keplerio
-import scipy.cluster as cluster
 from scipy import optimize
 import ebls
-import prepro
 
 from matplotlib import mlab
 
@@ -546,18 +544,11 @@ def mcorr(fdtL):
 
     return corrmat
 
-def reorder(X):
-    Z = cluster.hierarchy.linkage(X)
-    dend = cluster.hierarchy.dendrogram(Z,no_plot=True)
-    ind = array(dend['leaves'])
-    return ind
-
 def indord(ind):
     n = len(ind)
     x,y = np.mgrid[0:n,0:n]
     xs = x[ind]
     return xs
-
 
 def corrplot(cms,t,fdts,binsize=20):
     """

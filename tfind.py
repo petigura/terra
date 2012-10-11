@@ -16,13 +16,11 @@ from matplotlib import mlab
 from keptoy import *
 import keptoy
 import keplerio
-import detrend
 import FFA_cy as FFA
 
 from config import *
 
 import config
-import prepro
 import h5plus
 import h5py
 

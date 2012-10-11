@@ -15,7 +15,7 @@ parser.add_argument('parrow',  type=int , help='row of the transit parameter')
 args = parser.parse_args()
 inp = args.inp
 out = args.out
-simPar = pandas.read_csv('simPar.csv',index_col=0)
+simPar = pandas.read_csv(args.parfile,index_col=0)
 d = dict(simPar.ix[args.parrow])
 
 inpfile = os.path.join(inp,"%09d.h5" % d['skic'])

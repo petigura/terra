@@ -325,10 +325,10 @@ class Peak(h5plus.File):
 
         Can intialize from mqcal,grid,db files or from a previous pk file.
         """        
-        if len(args) is 1:
-            h5plus.File.__init__(self,args[0],overwrite=False)
-        elif len(args) is 3:
-            h5plus.File.__init__(self,args[0],overwrite=False)
+        
+        h5plus.File.__init__(self,args[0])
+
+        if len(args) is 3:            
             gridfile,dbfile = args[1],args[2]
             self.attrs['gridfile']  = gridfile
             self.attrs['dbfile']    = dbfile
