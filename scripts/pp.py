@@ -14,6 +14,7 @@ parser.add_argument('--fits',nargs='+',type=str,help='list of input fits files')
 args = parser.parse_args()
 
 lc = prepro.Lightcurve(args.lc)
+import pdb;pdb.set_trace()
 for cmd in args.cmds:
     if cmd=='cal':
         eval_str = "lc.%s('%s')" % (cmd,args.svd_folder)

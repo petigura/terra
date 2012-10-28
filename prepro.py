@@ -121,28 +121,31 @@ class Lightcurve(h5plus.File):
 
             cal[quarter] = mlab.rec_keep_fields(rcal,calFields)
 
-    def mqcal(self):
+    def sQ(self):
         """
         Stitch Quarters
+
+        Look at all of the groups. Zip all of the column together and
+        stich the quarters together.
+
         """
-        raw   = self['raw']
-        dt    = self['dt']
-        cal   = self['cal']
+        groups = [ i[1] for i in h5.items() ]
+        quarters = [i[0] for i in groups[0].items()]
         
         rL = []
-        for item in cal.items():
-            quarter = item[0]
-            ds      = item[1]
-            r = rec_zip([ raw[quarter],dt[quarter],cal[quarter] ] )
-            rL.append(r)
+        for q in quarters:
+            dsL = rec_zip([ g[quarter] for g in groups ])
+            rL.append(dsL)
 
         rLC = keplerio.rsQ(rL)
-        binlen = [3,6,12]
-        for b in binlen:
-            bcad = 2*b
-            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
-            dM = tfind.mtd(rLC['t'],fcal,bcad)
-            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+
+
+#        binlen = [3,6,12]
+#        for b in binlen:
+#            bcad = 2*b
+#            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
+#            dM = tfind.mtd(rLC['t'],fcal,bcad)
+#            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
         self['mqcal'] = rLC
 
 def rdt(r0):
