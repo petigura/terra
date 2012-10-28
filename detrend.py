@@ -6,7 +6,6 @@ from scipy.optimize import fmin
 import os
 
 import keptoy
-import atpy
 import copy
 
 dmi = 1.    # remove strips of data that are less than 1 day long.

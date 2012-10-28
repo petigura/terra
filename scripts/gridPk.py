@@ -18,4 +18,5 @@ out  = args.out
 p = tval.Peak(out,grid,db)
 p.checkHarm()
 p.at_all()
+p.at_autocorr()
 print "pk %s: %s" % (p.attrs['skic'],out)

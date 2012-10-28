@@ -2,7 +2,6 @@ import h5py
 import numpy as np
 import os
 from matplotlib import mlab
-import atpy
 import sys
 import pyfits
 

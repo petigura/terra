@@ -1,11 +1,9 @@
-
 import itertools
 import cPickle as pickle
 from numpy import *
 from numpy.random import random
 import sys
 from scipy.special import erfc
-import atpy
 import copy
 
 import ebls

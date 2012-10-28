@@ -17,7 +17,6 @@ from numpy import ma
 from scipy.interpolate import UnivariateSpline
 from scipy import ndimage as nd
 import copy
-import atpy
 import os
 import sys
 import tarfile

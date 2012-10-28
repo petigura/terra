@@ -108,10 +108,8 @@ class Peak(tval.Peak):
     # Helper fuctions to plot #
     ###########################
     def plotAutoCorr(self):
-        bx5fft = np.fft.fft( self['by5'][:].flatten() )
-        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
-        plt.plot(np.roll(corr,corr.size/2))
         plt.xlabel('Displacement')
+        plt.plot(self['lag'],self['corr'])
 
     def plotPF(self,ph):
         PF      = self['lcPF%i' % ph]

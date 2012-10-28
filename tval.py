@@ -576,7 +576,19 @@ class Peak(h5plus.File):
         self.attrs['P_close']     = tup[3]
         self.attrs['phase_close'] = tup[4]
         self.attrs['s2n_close']   = tup[5]
-        
+
+    def at_autocorr(self):
+        bx5fft = np.fft.fft(self['by5'][:].flatten() )
+        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
+        corr = corr.real
+        lag  = np.fft.fftfreq(corr.size,1./corr.size)
+        lag  = np.fft.fftshift(lag)
+        corr = np.fft.fftshift(corr)
+        b = np.abs(lag > 6) # Bigger than the size of the fit.
+
+        self['lag'] = lag
+        self['corr'] = corr
+        self.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
 
     ######
     # IO #
