@@ -12,7 +12,6 @@ from numpy import ma
 from scipy import ndimage as nd
 from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
-import atpy  # Could get rid of this, just need to change cutpath
 import pyfits
 import h5py
 
@@ -31,7 +30,7 @@ sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
 sapkey     = csv2rec(sapkeypath,delimiter=' ')
 sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
 cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
-cutList    = atpy.Table(cutpath,type='ascii').data
+cutList    = csv2rec(cutpath)
 
 def rec_zip(rL):
     """
@@ -44,9 +43,11 @@ def rec_zip(rL):
     return ro
 
 class Lightcurve(h5plus.File):
-    def raw(self,files):
+    def raw(self,files,fields=[]):
         """
         Take list of .fits files and store them in the raw group
+
+        fields - list of fields to keep. Use a subset for smaller file size.
         """
         raw  = self.create_group('/raw')
         hduL = []
@@ -65,8 +66,54 @@ class Lightcurve(h5plus.File):
         for h,q in zip(hduL,qL):
             r = np.array(h[1].data)
             r = modcols(r)
-            raw['Q%i'  % q] = np.array(r)
+            raw['Q%i'  % q] = r
+            if fields!=[]:
+                r = mlab.rec_keep_fields(r,fields)
+
+    def mapgroup(self,f,inpG,outG,**kwd):
+        """
+        Map function over groups
+
+        Parameters
+        ----------
+        f   :  function.  must have the following signature
+               rout = f(*args)
+               where rout is an array and
+               args is a list of arrays
+
+        inpG : Input group name (or sequence of names)
+        outG : Output group name.
+        kwd  : dictionary of keyword dictionaries. Method by which
+               we pass non-record array arguments to `f`
+
+        """
+        
+        if inpG==outG:
+            same=True
+        else:
+            same=False
+        if type(inpG)==str:
+            inpG = [inpG]
             
+        qL = [i[0] for i in self[inpG[0]].items() ]
+
+        for q in qL:
+            rinpL = [self[i][q][:] for i in inpG]
+
+            kwargs={}
+            if kwd!={}:
+                kwargs  = kwd[q]
+
+            rout    = f(*rinpL,**kwargs)
+
+            if same:
+                del self[outG][q]
+            self[outG][q] = rout
+
+
+    def mask(self):
+        self.mapgroup(rqmask,'raw','raw')
+
     def dt(self):
         """
         Iterates over the quarters stored in raw
@@ -75,19 +122,9 @@ class Lightcurve(h5plus.File):
         """
         raw = self['/raw']
         dt  = self.create_group('/dt')
-        for item in raw.items():
-            quarter = item[0]
-            ds      = item[1]
-            r = ds[:]
-            rawFields = list(r.dtype.names)            
+        self.mapgroup(qdt,'raw','dt')
 
-            r = rqmask(r)
-            r = rdt(r)               
-            dtFields = list(r.dtype.names)
-            dtFields = [f for f in dtFields if rawFields.count(f) ==0]
-            dt[quarter] = mlab.rec_keep_fields(r,dtFields)
-
-    def cal(self,svd_folder):
+    def cal(self):
         """
         Wrap over the calibration step
 
@@ -98,28 +135,16 @@ class Lightcurve(h5plus.File):
                      named in the following fashion Q1.svd.h5,
                      Q2.svd.h5 ...
         """
-        dt = self['/dt']
+        raw = self['/raw']
+        dt  = self['/dt']
         cal = self.create_group('/cal')
-        for item in dt.items():
-            quarter = item[0]
-            ds      = item[1]
-            rdt     = ds[:]
-            dtFields = list(rdt.dtype.names)
-            
-            
-            fdt = ma.masked_array(rdt['fdt'],rdt['fmask'])
-            hsvd = h5py.File(os.path.join(svd_folder,'%s.svd.h5' % quarter))
 
-            bv   = hsvd['V'][:config.nMode]
-            fit    = ma.zeros(fdt.shape)
-            p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
-            fcal  = fdt - fit
-            rcal = mlab.rec_append_fields(ds[:],['fit','fcal'],[fit,fcal])
-
-            calFields = list(rcal.dtype.names)
-            calFields = [f for f in calFields if dtFields.count(f) ==0]
-
-            cal[quarter] = mlab.rec_keep_fields(rcal,calFields)
+        kwd = {}
+        for i in raw.items():
+            q = i[0]
+            svdpath = os.path.join(self.attrs['svd_folder'],'%s.svd.h5' % q)
+            kwd[q] = dict(svdpath=svdpath)
+        self.mapgroup(qcal,['raw','dt'],'cal',**kwd)
 
     def sQ(self):
         """
@@ -127,31 +152,30 @@ class Lightcurve(h5plus.File):
 
         Look at all of the groups. Zip all of the column together and
         stich the quarters together.
-
         """
-        groups = [ i[1] for i in h5.items() ]
+        groups = [ i[1] for i in self.items() ]
+        groups = [g for g in groups if g.name!='/mqcal']
+
         quarters = [i[0] for i in groups[0].items()]
         
         rL = []
         for q in quarters:
-            dsL = rec_zip([ g[quarter] for g in groups ])
+            dsL = rec_zip([ g[q] for g in groups ])
             rL.append(dsL)
 
         rLC = keplerio.rsQ(rL)
 
-
-#        binlen = [3,6,12]
-#        for b in binlen:
-#            bcad = 2*b
-#            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
-#            dM = tfind.mtd(rLC['t'],fcal,bcad)
-#            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+        binlen = [3,6,12]
+        for b in binlen:
+            bcad = 2*b
+            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
+            dM = tfind.mtd(rLC['t'],fcal,bcad)
+            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
         self['mqcal'] = rLC
 
 def rdt(r0):
     """
     Detrend light curve
-
     Parameters
     ----------
     r0 : with `f`, `fmask`, `t`, `segEnd` fields
@@ -187,6 +211,33 @@ def rdt(r0):
     r = mlab.rec_append_fields(r,'ftnd',ftnd.data)
     r = mlab.rec_append_fields(r,'fdt',fdt.data)
     return r
+
+def qdt(r):
+    """
+    Small wrapper around rdt that removes duplicate names
+    """
+    
+    rawFields = list(r.dtype.names)            
+    r = rdt(r)               
+    dtFields = list(r.dtype.names)
+    dtFields = [f for f in dtFields if rawFields.count(f) ==0]
+    return mlab.rec_keep_fields(r,dtFields)
+
+def qcal(rraw,rdt,svdpath=None):
+    fmask = rraw['fmask']
+    fdt = ma.masked_array(rdt['fdt'],fmask)
+
+    hsvd = h5py.File(svdpath,'r')
+    bv   = hsvd['V'][:config.nMode]
+    hsvd.close()
+
+    fit    = ma.zeros(fdt.shape)
+    p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
+    fcal  = fdt - fit
+    rcal = np.array(zip(fit.data,fcal.data),
+                    dtype=[('fit', '<f8'), ('fcal', '<f8')]  )
+    return rcal
+
 
 def modcols(r0):
     """

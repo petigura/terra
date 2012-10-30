@@ -4,7 +4,6 @@ Erik's cotrending functions.
 from scipy import ndimage as nd
 from scipy import stats
 import glob
-import atpy
 
 import tfind
 import detrend

@@ -237,7 +237,7 @@ def LDT(t,fm,cLbl,tLbl,verbose=False):
 
     fldt    = ma.masked_array( np.zeros(t.size) , True ) 
     assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
-    
+
     for i in range(cLbl.max() + 1):
         # Points corresponding to continuum region.
         bc = (cLbl == i ) 
@@ -261,6 +261,10 @@ def LDT(t,fm,cLbl,tLbl,verbose=False):
             shft = - np.mean(tc)
             tc   -= shft 
             tldt -= shft
+
+            tc = tc[~fc.mask]
+            fc = fc[~fc.mask]
+
             pfit = np.polyfit(tc,fc,1)
             fldt[bldt] = fm[bldt] - np.polyval(pfit,tldt)
             fldt.mask[bldt] = fm.mask[bldt]
@@ -295,7 +299,6 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
     rec = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
     tLbl,cLbl = rec['tRegLbl'],rec['cRegLbl']
-
     fldt     = LDT(t,fm,cLbl,tLbl)
 
     tm = ma.masked_array(t,fldt.mask,copy=True)
@@ -377,8 +380,6 @@ class Peak(h5plus.File):
             self.tdurcad = int(np.round(self.tdur / config.lc))
             self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
 
-
-
     def checkHarm(self):
         """
         If one of the harmonics has higher MES, update P,epoch
@@ -395,10 +396,14 @@ class Peak(h5plus.File):
     def at_phaseFold(self):
         """ Add locally detrended light curve"""
         attrs = self.attrs
+        lc = self['mqcal'][:]
+        t  = lc['t']
+        fm = ma.masked_array(lc['f'],lc['fmask'])
+
         for ph in [0,180]:
             P,tdur = attrs['P'],attrs['tdur']
             t0     = attrs['t0'] + ph / 360. * P 
-            tPF,fPF = PF(self.t,self.fm,P,t0,tdur)
+            tPF,fPF = PF(t,fm,P,t0,tdur)
             tPF += config.lc
             lcPF = np.array(zip(tPF,fPF),dtype=[('tPF',float),('fPF',float)] )
             self['lcPF%i' % ph] = lcPF
@@ -414,14 +419,27 @@ class Peak(h5plus.File):
 
     def at_med_filt(self):
         """Add median detrended lc"""
-        y = self.fm-nd.median_filter(self.fm,size=self.tdurcad*3)
+        lc = self['mqcal']
+        fm = ma.masked_array(lc['fcal'],lc['fmask'])
+
+        t  = lc['t']
+        P  = self.attrs['P']
+        t0 = self.attrs['t0']
+        tdur= self.attrs['tdur']
+        df= self.attrs['df']
+        tdurcad = tdur/config.lc
+
+
+        y = fm-nd.median_filter(fm,size=tdurcad*3)
+        
+
         self['fmed'] = y
 
         # Shift t-series so first transit is at t = 0 
-        dt = t0shft(self.t,self.P,self.t0)
-        tf = self.t + dt
-        phase = np.mod(tf+self.P/4,self.P)/self.P-1./4
-        x = phase * self.P
+        dt = t0shft(t,P,t0)
+        tf = t + dt
+        phase = np.mod(tf+P/4,P)/P-1./4
+        x = phase * P
         
         self['tPF'] = x
 
@@ -433,7 +451,7 @@ class Peak(h5plus.File):
             self['bx%i'%nbpt] = bx
             self['by%i'%nbpt] = by
 
-            bout = np.abs(bx) > self.tdur
+            bout = np.abs(bx) > tdur
             noise = np.std(by[bout])
             self.attrs['std_out%i' % nbpt] = noise
             self.attrs['max_out%i' % nbpt] = np.max(by[bout])
@@ -442,13 +460,14 @@ class Peak(h5plus.File):
                 k = 'p%i_out%i'% (per,nbpt)
                 self.attrs[k] = np.percentile(by[bout],per)
 
-            self.attrs['s2n%i' % nbpt] = self.df / noise
+            self.attrs['s2n%i' % nbpt] = df / noise
 
 
     def get_bins(self,x,nbpt):
         """Return bins of a so that nbpt fit in a transit"""
-        return np.linspace(x.min(),x.max(),
-                           np.round(x.ptp()/self.tdur*nbpt) +1 )
+        nbins = np.round( x.ptp()/self.attrs['tdur']*nbpt ) 
+        return np.linspace(x.min(),x.max(),nbins+1)
+                           
 
     def at_fit(self):
         """

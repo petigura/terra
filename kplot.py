@@ -18,6 +18,7 @@ import tval
 import sketch
 import config
 import numpy as np
+from numpy import ma
 
 tprop = dict(size=10,name='monospace')
 
@@ -113,12 +114,23 @@ class Peak(tval.Peak):
 
     def plotPF(self,ph):
         PF      = self['lcPF%i' % ph]
-        x,y,yfit = PF['tPF'],PF['fPF'],PF['fit']
-        plt.plot(x,y,',',color='k')
-        plt.plot(x,yfit,lw=3,color='c')        
+        x = PF['tPF']
 
-        x,y = self['bx%i_%i'% (ph,5)],self['by%i_%i'% (ph,5)]
-        plt.plot(x,y,'o',mew=0,color='red')
+        try:
+            plt.plot(x,PF['fPF'],',',color='k')
+        except:
+            pass
+
+        try:
+            plt.plot(x,PF['fit'],lw=3,color='c')
+        except:
+            pass
+
+        try:
+            x,y = self['bx%i_%i'% (ph,5)],self['by%i_%i'% (ph,5)]
+            plt.plot(x,y,'o',mew=0,color='red')
+        except:
+            pass
 
     def plotSES(self):
         df = self.attrs['pL0'][0]**2
@@ -131,3 +143,53 @@ class Peak(tval.Peak):
         id = np.argsort( np.abs(x - self.P) )[0]
         plt.plot(x[id],self.res['s2n'][id],'ro')
         plt.autoscale(tight=True)
+
+    def plotMed(self):
+        lc = self['mqcal'][:]
+        t = lc['t']
+        fmed = ma.masked_array(self['fmed'][:],lc['fmask'])
+        P = self.attrs['P']
+        t0 = self.attrs['t0']
+        df = self.attrs['df']
+        sketch.stack(t,fmed*1e6,P,t0,step=5*df)
+        plt.autoscale(tight=True)
+
+    def morton(self):
+        """
+        Print a 1-page diagnostic plot of a given pk.
+        """
+
+        fig = plt.figure(figsize=(20,12))
+        gs = GridSpec(4,4)
+
+        axPF       = fig.add_subplot(gs[0,0:2])
+        axPF180    = fig.add_subplot(gs[0,2:],sharex=axPF,sharey=axPF)
+        axStack    = fig.add_subplot(gs[1:,:])
+
+        plt.sca(axPF180)
+        self.plotPF(180)
+        cax = plt.gca()
+        cax.xaxis.set_visible(False)
+        cax.yaxis.set_visible(False)
+        at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
+        cax.add_artist(at)
+
+        plt.sca(axPF)
+        self.plotPF(0)
+        cax = plt.gca()
+        at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
+        cax.add_artist(at)
+        plt.xlabel('t - t0 (days)')
+        plt.ylabel('flux')
+        df = self.attrs['df']*1e-6
+        plt.ylim(-5*df,3*df)
+
+        plt.sca(axStack)
+        self.plotMed()
+        plt.xlabel('phase')
+        plt.ylabel('flux (ppm)')
+
+#        plt.gcf().text( 0.85, 0.05, self.diag_leg() , size=10, name='monospace',
+#                        bbox=dict(visible=True,fc='white'))
+#        plt.tight_layout()
+        plt.gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)

@@ -3,7 +3,6 @@ A module for visualizing Kepler data.
 
 The idea is to keep it rough.
 """
-import atpy
 from numpy import *
 import glob
 from matplotlib.pylab import *

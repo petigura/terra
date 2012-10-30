@@ -6,7 +6,7 @@ import sys
 import pyfits
 
 class File(h5py.File):
-   def __init__(self,name,mode=None):
+   def __init__(self,name,mode=None,driver=None,**kwds):
       """
       Simple extension to h5py.File
 
@@ -17,9 +17,9 @@ class File(h5py.File):
          if os.path.exists(name):
             os.remove(name)
             print 'removing %s ' % name
-         h5py.File.__init__(self,name,mode='a')
-      else:
-         h5py.File.__init__(self,name,mode=mode)
+         mode = 'a'
+
+      h5py.File.__init__(self,name,mode=mode,driver=driver,**kwds)
       
    def __setitem__(self,key,val):
       if self.keys().count(unicode(key)) is 1:
