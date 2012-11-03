@@ -1,36 +1,41 @@
-import argparse
-import keptoy
+from argparse import ArgumentParser
+import sys
+import sim
 import pandas
-import os
-import prepro
 
-parser = argparse.ArgumentParser(
-    description='Inject transit into template light curve.')
+class WritableObject:
+    def __init__(self):
+        self.content = []
+    def write(self, string):
+        self.content.append(string)
 
-parser.add_argument('inp',  type=str   , help='input folder')
-parser.add_argument('out',  type=str   , help='output folder')
-parser.add_argument('parfile', type=str, help='file with the transit parameters')
-parser.add_argument('parrow',  type=int , help='row of the transit parameter')
+def injRecW(pardict):
+    prefix = pardict['bname']+': '
+    foo = WritableObject()                   # a writable object
+    sys.stdout = foo                         # redirection
+    out = {}
+    try:
+        p = sim.injRec(pardict)
+        out = p.flatten(p.noDBRE)
+    except:
+        import traceback    
+        print traceback.format_exc()
 
+    out['id'] = pardict['id']
+    sys.stdout = sys.__stdout__
+    ostr = prefix+"".join(foo.content)
+    ostr = ostr.replace('\n','\n'+prefix)
+    print ostr
+    return out
+
+parser = ArgumentParser(description='Inject in raw LC; compute DV parameters')
+parser.add_argument('parfile',type=str,help='file with the transit parameters')
+parser.add_argument('outfile',type=str,help='output data here')
 args = parser.parse_args()
-inp = args.inp
-out = args.out
 simPar = pandas.read_csv(args.parfile,index_col=0)
-d = dict(simPar.ix[args.parrow])
-
-inpfile = os.path.join(inp,"%09d.h5" % d['skic'])
-outfile = os.path.join(out,d['bname']+'.h5')
-
-os.system('cp %s %s' % (inpfile,outfile ) )
-raw = prepro.Lightcurve(outfile)['raw']
-for i in raw.items():
-    quarter = i[0]
-    ds = i[1]
-    r = ds[:]
-    ft = keptoy.synMA(d,r['t'])
-    r['f'] += ft
-    ds[:] = r
-
-
-
-print "inject: Created %s"  % outfile
+simPar['id'] = simPar.index
+dL = map(injRecW,[simPar.ix[i] for i in simPar.index ] )
+#dL = map(sim.injRec,[simPar.ix[i] for i in simPar.index ] )
+dL = pandas.DataFrame(dL)
+simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))
+simPar.to_csv(args.outfile)
