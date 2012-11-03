@@ -326,8 +326,6 @@ def occultsmallt(t,p,c1,c2,c3,c4,tau,b):
 def genMALC(d):
     # Covert P, R* to tau.
 
-    
-
     a = (G*Mstar*P / (4*pi**2))**(1/3.)
     n = 2*pi / P
 

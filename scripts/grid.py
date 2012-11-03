@@ -30,7 +30,8 @@ if args.qstart != None:
         q[b] = r['q']
 
     lc['fmask'][q < args.qstart] = True
-    grid['mqcal'] = lc
+
+grid.copy(lc['mqcal'],'mqcal')
 
 if args.debug:
     print "shorter run"
