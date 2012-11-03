@@ -15,8 +15,15 @@ args  = prsr.parse_args()
 db   = args.db
 grid = args.grid
 out  = args.out
+
 p = tval.Peak(out,grid,db)
 p.checkHarm()
-p.at_all()
+p.at_phaseFold()
+p.at_fit()
+p.at_med_filt()
+p.at_s2ncut()
+p.at_SES()
+p.at_rSNR()
 p.at_autocorr()
+
 print "pk %s: %s" % (p.attrs['skic'],out)

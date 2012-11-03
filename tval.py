@@ -322,76 +322,45 @@ class Peak(h5plus.File):
     noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180'
     noDBRE    = 'climb'
 
-    def __init__(self,*args,**kwargs):
+    # Must add the following attributes
+    # 't0','Pcad','twd','mean','s2n','noise'
+    # tdur
+    # climb
+
+    def findPeak(self):
+        # Pull the peak information
+        res = self['RES'][:]
+        id  = np.argmax(res['s2n'])        
+        for k in ['t0','Pcad','twd','mean','s2n','noise']:
+            self.attrs[k] =  res[k][id]
+        self.attrs['tdur'] = self.attrs['twd']*config.lc
+        self.attrs['P']    = self.attrs['Pcad']*config.lc
+
+    def conv(self):
         """
-        Peak Object
+        Store variables accessed frequently at the top level.
+        """
 
-        Can intialize from mqcal,grid,db files or from a previous pk file.
-        """        
-        
-        h5plus.File.__init__(self,args[0])
+        self.tdurcad  = int (self.attrs['tdur'] / config.lc)
+        lc = self['mqcal'][:]
 
-        if len(args) is 3:            
-            gridfile,dbfile = args[1],args[2]
-            self.attrs['gridfile']  = gridfile
-            self.attrs['dbfile']    = dbfile
-
-            grid = tfind.Grid(gridfile)
-            self['lc']  = grid['mqcal'][:]
-            self['res'] = grid['RES'][:]
-
-            # Add star name
-            bname = os.path.basename(gridfile).split('.')[0]
-            if len(bname) == 9:
-                skic = bname
-            elif len(bname) == 16:
-                skic = bname[:9]
-
-            self.attrs['skic'] = skic
-            
-            # Add limb darkening coeffs
-            con = sqlite3.connect(dbfile)
-            cur = con.cursor()
-            cmd = "select a1,a2,a3,a4 from b10k where skic='%s' " % skic
-            cur.execute(cmd)
-            self.attrs['climb'] = np.array(cur.fetchall()[0])
-
-
-            # Pull the peak information
-            rgpk = gridPk(self['res'][:])
-            rpk = rgpk[-1:]
-            for k in ['t0','Pcad','twd','mean','s2n','noise']:
-                self.attrs[k] = rpk[k][0]
-            self.attrs['tdur'] = self.attrs['twd']*config.lc
-            self.attrs['P']    = self.attrs['Pcad']*config.lc
-
-        try:
-            kwargs['quick']
-        except KeyError:
-            # Add commonly used values as attrs
-            lc = self['lc'][:]
-            self.res   = self['res'][:]
-            self.t     = lc['t']
-            self.fm    = ma.masked_array(lc['fcal'],lc['fmask'])
-            self.P     = self.attrs['P']
-            self.t0    = self.attrs['t0']
-            self.df    = self.attrs['mean']
-            self.tdur  = self.attrs['tdur']
-            self.tdurcad = int(np.round(self.tdur / config.lc))
-            self.dM   = tfind.mtd(self.t,self.fm,self.tdurcad)
+        self.fm =  ma.masked_array(lc['fcal'],lc['fmask'])
+        self.dM = tfind.mtd(lc['t'],self.fm,self.tdurcad)
+        self.t  = lc['t']
 
     def checkHarm(self):
         """
         If one of the harmonics has higher MES, update P,epoch
         """
-        harmL,MESL = checkHarm(self.dM,self.P,ver=False)
+        P = self.attrs['P']
+
+        harmL,MESL = checkHarm(self.dM,P,ver=False)
         idma = np.nanargmax(MESL)
         if idma != 0:
             harm = harmL[idma]
             print "%s P has higher MES" % harm
             self.attrs['P']    *= harm
             self.attrs['Pcad'] *= harm
-            self.P    *= harm
 
     def at_phaseFold(self):
         """ Add locally detrended light curve"""
@@ -426,13 +395,8 @@ class Peak(h5plus.File):
         P  = self.attrs['P']
         t0 = self.attrs['t0']
         tdur= self.attrs['tdur']
-        df= self.attrs['df']
-        tdurcad = tdur/config.lc
 
-
-        y = fm-nd.median_filter(fm,size=tdurcad*3)
-        
-
+        y = self.fm-nd.median_filter(self.fm,size=self.tdurcad*3)
         self['fmed'] = y
 
         # Shift t-series so first transit is at t = 0 
@@ -450,18 +414,6 @@ class Peak(h5plus.File):
             bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
             self['bx%i'%nbpt] = bx
             self['by%i'%nbpt] = by
-
-            bout = np.abs(bx) > tdur
-            noise = np.std(by[bout])
-            self.attrs['std_out%i' % nbpt] = noise
-            self.attrs['max_out%i' % nbpt] = np.max(by[bout])
-            self.attrs['min_out%i' % nbpt] = np.min(by[bout])
-            for per in [5,50,95]:
-                k = 'p%i_out%i'% (per,nbpt)
-                self.attrs[k] = np.percentile(by[bout],per)
-
-            self.attrs['s2n%i' % nbpt] = df / noise
-
 
     def get_bins(self,x,nbpt):
         """Return bins of a so that nbpt fit in a transit"""
@@ -499,8 +451,10 @@ class Peak(h5plus.File):
         """
         Cut out the transit and recomput S/N.  It s2ncut should be low.
         """
-        lbl = transLabel(self.t,self.P,self.t0,self.tdur)
         attrs = self.attrs
+
+        lbl = transLabel(self.t,attrs['P'],attrs['t0'],attrs['tdur'])
+
         # Notch out the transit and recompute
         fmcut = self.fm.copy()
         fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
@@ -527,7 +481,8 @@ class Peak(h5plus.File):
         that region.
         """
         t = self.t
-        rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
+        attrs = self.attrs
+        rLbl = transLabel(t,attrs['P'],attrs['t0'],attrs['tdur']*2)
         qrec = keplerio.qStartStop()
         q = np.zeros(t.size) - 1
         for r in qrec:
@@ -574,15 +529,7 @@ class Peak(h5plus.File):
         x = np.median(ses) 
         self.attrs['medSNR'] =  np.median(ses) / self.attrs['noise'] *np.sqrt(ses.size)
 
-    def at_all(self):
-        self.checkHarm()
-        self.at_phaseFold()
-        self.at_fit()
-        self.at_med_filt()
-        self.at_s2ncut()
-        self.at_SES()
-        self.at_rSNR()
-            
+
     def at_s2n_known(self,d):
         """
         When running a simulation, we know a priori where the transit
