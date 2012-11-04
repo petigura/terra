@@ -8,10 +8,13 @@ Injection and recovery pipeline
 
 """
 import os
-
 from matplotlib import mlab
+import matplotlib
+matplotlib.use('Agg')
+import kplot
 from numpy import *
 import pandas
+
 
 import prepro
 import tfind
@@ -33,68 +36,62 @@ def injRec(pardict):
     """
     name = "".join(random.random_integers(0,9,size=10).astype(str))
 
+    # Pull in raw light curve file.
     lc0 = prepro.Lightcurve(pardict['lcfile'],mode='r')
     lc  = prepro.Lightcurve(name+'.h5',driver='core',backing_store=False)
     lc.copy(lc0['raw'],'raw')
-
     raw = lc['raw']
 
+    # Inject transits into individual quarters
     qL = [i[0] for i in raw.items()]
     for q in qL:
         r  = raw[q][:] # pull data out of h5py file
         ft = keptoy.synMA(pardict,r['t'])
         r['f'] +=ft
         r = mlab.rec_append_fields(r,'finj',ft)
-
         del raw[q]
         raw[q] = r
 
+    # Perform detrending and calibration.
     lc.mask()
     lc.dt()
     lc.attrs['svd_folder'] = os.environ['SCRATCH']+'/eb10k/svd/'
     lc.cal()
     lc.sQ()
 
+    # Grid search.
     grid0 = tfind.Grid(pardict['gridfile'],mode='r')
     res0 = grid0['RES'][:]
-
     grid  = tfind.Grid(name+'.grid.h5',driver='core',backing_store=False)
     grid['mqcal'] = lc['mqcal'][:]
 
+    # Only compute the grid over a narrow region in period
     deltaPcad = 10
-
     grid.P1=int(pardict['P']/config.lc - deltaPcad)
     grid.P2=int(pardict['P']/config.lc + deltaPcad)
-
     grid.P1=max(grid.P1 , res0['Pcad'][0] )
     grid.P2=min(grid.P2 , res0['Pcad'][-1] )
-
     grid.grid()
-    grid.itOutRej()
 
+    # Add that narrow region to the already computed grid.
     res  = grid['RES'][:]
-
     start = where(res0['Pcad']==res['Pcad'][0])[0]
     stop  = where(res0['Pcad']==res['Pcad'][-1])[0]
     if len(start) > 1:
         start = start[1]
     if len(stop) > 1:
         stop = stop[0]
-
     res0[start:stop+1] = res
     del grid['RES']
     grid['RES'] = res0
 
-    mqcal =  grid['mqcal']
-    t =  mqcal['t']
+    # Outlier rejection is preformed on the hybrid grid
+    grid.itOutRej()
 
-    fm   = ma.masked_array(mqcal['fcal'],mqcal['fmask'])
-    finj = ma.masked_array(mqcal['finj'],mqcal['fmask'])
-
+    # DV
     p = tval.Peak(name+'.pk.h5',driver='core',backing_store=False)
-    p['RES'] = grid['RES'][:]
+    p['RES']   = grid['RES'][:]
     p['mqcal'] = grid['mqcal'][:]
-
     p.attrs['climb'] = array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
 
     p.findPeak()
@@ -109,5 +106,11 @@ def injRec(pardict):
     p.at_autocorr()
     out = p.flatten(p.noDBRE)
     out['id'] = pardict['id']
+    try:
+        pngfile = out['pngfile']
+        kplot.plot_diag(p)
+        gcf().savefig(pngfile)
+    except KeyError:
+        pass
     return out
 

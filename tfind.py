@@ -62,13 +62,13 @@ class Grid(h5plus.File):
         it = 1
         done = False
         pk_grass_fac = 2 
-        maxit = 10
+        maxit = 5
 
+        # Book keeping
         if self.keys().count(u'it0') is 0:
             print "itOutRej first run. Creating it0"
             self.create_group('it0')
             self['it0']['RES']   = self['RES'][:]
-            
             lc0  = self['mqcal'][:]
             lc0  = mlab.rec_append_fields(lc0,'cadCt',np.zeros(lc0.size) )
             self['it0']['mqcal'] = lc0
@@ -115,17 +115,16 @@ class Grid(h5plus.File):
         maCadCnt= p90+drop10x*4        
         print "p90 p99 outlier"
         print "%i  %i  %i  " % (p90,p99,maCadCnt)
-        print "it nout "
+        print "it nout nfmask"
 
         # Iteratively remove cadences that are over represented in the
         # periodogram
-        # import pdb;pdb.set_trace()
-
         while done is False:
+            fmask0 = lc0['fmask']
             lc0['cadCt'] = cadCount(cad,res0) # Compute new outliers
             bout = lc0['cadCt'] > maCadCnt
             nout = lc0['cadCt'][bout].size
-            print "%i  %i" % (it,nout)
+            print "%i  %i  %i" % (it,nout,fmask0[fmask0].size )
 
             # If there are no outliers on the first 
             # iteration, there is no reason to 
@@ -143,7 +142,7 @@ class Grid(h5plus.File):
 
                 # Update the mask
                 bout = nd.convolve(bout.astype(float),np.ones(20) ) >  0
-                lc1['fmask']  = lc1['fmask'] | bout
+                lc1['fmask']  = fmask0 | bout
                 res1 = lc2res(lc1)
  
                 # Store away the current iteration

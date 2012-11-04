@@ -33,8 +33,9 @@ parser.add_argument('outfile',type=str,help='output data here')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['id'] = simPar.index
-dL = map(injRecW,[simPar.ix[i] for i in simPar.index ] )
-#dL = map(sim.injRec,[simPar.ix[i] for i in simPar.index ] )
+simPar['pngfile'] = simPar['bname']+'.png'
+#dL = map(injRecW,[simPar.ix[i] for i in simPar.index ] )
+dL = map(sim.injRec,[simPar.ix[i] for i in simPar.index ] )
 dL = pandas.DataFrame(dL)
 simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))
 simPar.to_csv(args.outfile)
