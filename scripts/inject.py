@@ -15,13 +15,12 @@ def injRecW(pardict):
     sys.stdout = foo                         # redirection
     out = {}
     try:
-        p = sim.injRec(pardict)
-        out = p.flatten(p.noDBRE)
+        out = sim.injRec(pardict)
     except:
         import traceback    
-        print traceback.format_exc()
+        print  traceback.format_exc()
+        out['id'] = pardict['id']
 
-    out['id'] = pardict['id']
     sys.stdout = sys.__stdout__
     ostr = prefix+"".join(foo.content)
     ostr = ostr.replace('\n','\n'+prefix)

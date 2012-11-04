@@ -55,8 +55,9 @@ class Grid(h5plus.File):
 
     def itOutRej(self):
         """
-        Run the iterative outlier rejection
+        Iterative outlier rejection.
 
+        
         """
         it = 1
         done = False
@@ -118,13 +119,24 @@ class Grid(h5plus.File):
 
         # Iteratively remove cadences that are over represented in the
         # periodogram
+        # import pdb;pdb.set_trace()
+
         while done is False:
             lc0['cadCt'] = cadCount(cad,res0) # Compute new outliers
             bout = lc0['cadCt'] > maCadCnt
             nout = lc0['cadCt'][bout].size
             print "%i  %i" % (it,nout)
 
-            if (nout==0 ) or (it > maxit):
+            # If there are no outliers on the first 
+            # iteration, there is no reason to 
+            # Recompute the full grid. Set the top
+
+            if (nout==0 ) and (it==1):
+                done=True              
+                self['mqcal'] = self['it0']['mqcal'][:]   
+                self['RES']   = self['it0']['RES'][:]
+                return 
+            elif (nout==0 ) or (it > maxit):
                 done = True
             else:
                 lc1   = lc0.copy()

@@ -70,17 +70,12 @@ def injRec(pardict):
     grid.P2=min(grid.P2 , res0['Pcad'][-1] )
 
     grid.grid()
-    def totcad(grid):
-        return sum( grid['mqcal']['t'].ptp() / (grid['RES']['Pcad']*config.lc) )
-
-    # Total number of cadences is ~ sum(tbase / )
-    grid.maCadCnt = config.maCadCnt #* totcad(grid)/totcad(grid0)
     grid.itOutRej()
 
     res  = grid['RES'][:]
 
     start = where(res0['Pcad']==res['Pcad'][0])[0]
-    stop =  where(res0['Pcad']==res['Pcad'][-1])[0]
+    stop  = where(res0['Pcad']==res['Pcad'][-1])[0]
     if len(start) > 1:
         start = start[1]
     if len(stop) > 1:
@@ -93,8 +88,8 @@ def injRec(pardict):
     mqcal =  grid['mqcal']
     t =  mqcal['t']
 
-    fm =  ma.masked_array(mqcal['fcal'],mqcal['fmask'])
-    finj =  ma.masked_array(mqcal['finj'],mqcal['fmask'])
+    fm   = ma.masked_array(mqcal['fcal'],mqcal['fmask'])
+    finj = ma.masked_array(mqcal['finj'],mqcal['fmask'])
 
     p = tval.Peak(name+'.pk.h5',driver='core',backing_store=False)
     p['RES'] = grid['RES'][:]
@@ -113,6 +108,6 @@ def injRec(pardict):
     p.at_rSNR()
     p.at_autocorr()
     out = p.flatten(p.noDBRE)
-
-    return p
+    out['id'] = pardict['id']
+    return out
 
