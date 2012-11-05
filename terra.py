@@ -27,7 +27,8 @@ def terra(pardict):
     """
     if pardict['type']=='mcS':
         assert pardict.has_key('gridfile'),'must point to full res file'
-        
+
+    addPaths(pardict)
     name = "".join(np.random.random_integers(0,9,size=10).astype(str))    
     with h5py.File( pardict['rawfile'],'r+' ) as h5raw, \
          prepro.Lightcurve(name+'.h5',driver='core',backing_store=False) as h5out:
