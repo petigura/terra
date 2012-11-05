@@ -36,7 +36,6 @@ parser.add_argument('outfile',type=str,help='output data here')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['skic'] = ['%09d' %s for s in simPar['skic'] ]
-addPaths(simPar)
 
 dL = map(injRecW,[dict(simPar.ix[i]) for i in simPar.index ] )
 dL = pandas.DataFrame(dL)
