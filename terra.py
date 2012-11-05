@@ -146,6 +146,15 @@ def inj(h5,pardict):
         del raw[q]
         raw[q] = r
         
+def addPaths(df):
+    """
+    Paths are referenced with respect to a base directory, which can
+    changed from machine to machine.
+    """
+    for column in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
+        df[column] = df['wkdir'] + df[column]
+
+
 def gridShort(h5,pardict):
     """
 

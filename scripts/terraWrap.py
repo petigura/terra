@@ -29,13 +29,6 @@ def injRecW(pardict):
     print ostr
     return out
 
-def addPaths(df):
-    """
-    Paths are referenced with respect to a base directory, which can
-    changed from machine to machine.
-    """
-    for column in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
-        df[column] = df['wkdir'] + df[column]
 
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('parfile',type=str,help='file with the transit parameters')
