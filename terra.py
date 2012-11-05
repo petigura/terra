@@ -22,18 +22,18 @@ def terra(pardict):
     ----------
     
     pardict : All the attributes are controlled through this dictionary.
+    out     : Dictionary of scalars. Must contain id key.
+    
     """
     if pardict['type']=='mcS':
         assert pardict.has_key('gridfile'),'must point to full res file'
         
     name = "".join(np.random.random_integers(0,9,size=10).astype(str))    
     with h5py.File( pardict['rawfile'],'r+' ) as h5raw, \
-         prepro.Lightcurve(name+'.h5',driver='core',backing_store=False) as h5out,\
-         tval.Peak(name+'.pk.h5',driver='core',backing_store=False) as p:
+         prepro.Lightcurve(name+'.h5',driver='core',backing_store=False) as h5out:
 
         # Raw photometry
         h5out.copy(h5raw['raw'],'raw')
-        h5raw.close()
         if pardict['type'].find('mc') != -1:
             inj(h5out,pardict)
 
@@ -45,10 +45,11 @@ def terra(pardict):
         h5out.sQ()
 
         # Grid Search and iterative outlier rejection
-#        h5out.attrs['P1'] = 1000
-#        h5out.attrs['P2'] = 1050
         h5out.attrs['P1'] = int(config.P1 / config.lc)
         h5out.attrs['P2'] = int(config.P2 / config.lc)
+        if pardict.has_key('P1'):
+            h5out.attrs['P1'] = pardict['P1']
+            h5out.attrs['P2'] = pardict['P2']
 
         if pardict['type'] == 'mcS':
             gridShort(h5out,pardict)
@@ -57,43 +58,65 @@ def terra(pardict):
 
         tfind.itOutRej(h5out)
 
-        if pardict.has_key('storeGrid'):
-            h5store = h5plus.File(pardict['storeGrid'],mode='c')
-            h5store['RES']   = h5out['RES'][:]
-            h5store['mqcal'] = h5out['mqcal'][:]
-            h5store.close()
-
         # DV
-        p['RES']   = h5out['RES'][:]
-        p['mqcal'] = h5out['mqcal'][:]
+        DV(h5out,pardict)
 
-        climb = np.array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
-        p.attrs['climb'] = climb
-        p.attrs['skic']  = pardict['skic']
-
-        p.findPeak()
-        p.conv()
-        p.checkHarm()
-        p.at_phaseFold()
-        p.at_fit()
-        p.at_med_filt()
-        p.at_s2ncut()
-        p.at_SES()
-        p.at_rSNR()
-        p.at_autocorr()
         if pardict.has_key('pngGrid'):
             import matplotlib
             matplotlib.use('Agg')
             import kplot
             from matplotlib.pylab import plt
-            kplot.plot_diag(p)
+            kplot.plot_diag(h5out)
             plt.gcf().savefig(pardict['pngGrid'])
 
-        out = p.flatten(p.noDBRE)
-        out['id'] = pardict['id']
-        h5out.close()
-        p.close()
+        if pardict.has_key('storeGrid'):
+            with h5plus.File(pardict['storeGrid'],mode='c') as h5store:
+                h5store.copy(h5out,h5store,name='store')
 
+        out = tval.flatten(h5out,h5out.noDBRE)
+        out['id'] = pardict['id']
+    return out
+
+def PP(h5,pardict):
+    """
+    Preprocessing
+
+    Parameters
+    ----------
+    h5 : h5plus object
+
+
+    """
+
+
+def DV(h5,pardict):
+    """
+    Perforn Data Validation
+
+    Parameters
+    ----------
+    h5 : h5plus object
+
+    """
+    
+    climb = np.array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
+    h5.attrs['climb'] = climb
+    h5.attrs['skic']  = pardict['skic']
+
+    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+    h5.noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+    h5.noDBRE    = 'climb'
+
+    tval.findPeak(h5)
+    tval.conv(h5)
+    tval.checkHarmh5(h5)
+    tval.at_phaseFold(h5)
+    tval.at_fit(h5)
+    tval.at_med_filt(h5)
+    tval.at_s2ncut(h5)
+    tval.at_SES(h5)
+    tval.at_rSNR(h5)
+    tval.at_autocorr(h5)
 
 def inj(h5,pardict):
     """

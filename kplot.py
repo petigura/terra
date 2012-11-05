@@ -102,7 +102,7 @@ def plot_diag(pk):
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-    plt.gcf().text( 0.75, 0.05, pk.diag_leg() , size=10, name='monospace',
+    plt.gcf().text( 0.75, 0.05, tval.diag_leg(pk) , size=10, name='monospace',
                     bbox=dict(visible=True,fc='white'))
     #plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
