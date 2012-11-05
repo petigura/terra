@@ -2,6 +2,8 @@
 Simulation
 ----------
 
+
+
 This module implements the transit search pipeline.
 
 Injection and recovery pipeline
@@ -11,6 +13,7 @@ import os
 from matplotlib import mlab
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib.pylab import plt
 import kplot
 from numpy import *
 import pandas
@@ -33,6 +36,7 @@ def injRec(pardict):
               - climb, p, tau, b
               - P, t0
               - id. returned with output.  used in merge at the end
+              - skic
     """
     name = "".join(random.random_integers(0,9,size=10).astype(str))
 
@@ -55,7 +59,8 @@ def injRec(pardict):
     # Perform detrending and calibration.
     lc.mask()
     lc.dt()
-    lc.attrs['svd_folder'] = os.environ['SCRATCH']+'/eb10k/svd/'
+    lc.attrs['svd_folder'] = os.environ['WKDIR']+'/eb10k/svd/'
+
     lc.cal()
     lc.sQ()
 
@@ -93,6 +98,7 @@ def injRec(pardict):
     p['RES']   = grid['RES'][:]
     p['mqcal'] = grid['mqcal'][:]
     p.attrs['climb'] = array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
+    p.attrs['skic'] = pardict['skic']
 
     p.findPeak()
     p.conv()
@@ -106,11 +112,11 @@ def injRec(pardict):
     p.at_autocorr()
     out = p.flatten(p.noDBRE)
     out['id'] = pardict['id']
-    try:
-        pngfile = out['pngfile']
+
+    if pardict.keys().count('pngfile') != 0:
+        pngfile = pardict['pngfile']
         kplot.plot_diag(p)
-        gcf().savefig(pngfile)
-    except KeyError:
-        pass
+        plt.gcf().savefig(pngfile)
+
     return out
 

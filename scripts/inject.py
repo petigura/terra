@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 import sys
 import sim
 import pandas
+import os
 
 class WritableObject:
     def __init__(self):
@@ -32,10 +33,13 @@ parser.add_argument('parfile',type=str,help='file with the transit parameters')
 parser.add_argument('outfile',type=str,help='output data here')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
-simPar['id'] = simPar.index
-simPar['pngfile'] = simPar['bname']+'.png'
+
+# Paths in csv file are relative to WKDIR
+simPar['lcfile']   = simPar['WKDIR']+simPar['lcfile']
+simPar['gridfile'] = simPar['WKDIR']+simPar['gridfile']
+
 #dL = map(injRecW,[simPar.ix[i] for i in simPar.index ] )
-dL = map(sim.injRec,[simPar.ix[i] for i in simPar.index ] )
+dL = map(sim.injRec,[dict(simPar.ix[i]) for i in simPar.index ] )
 dL = pandas.DataFrame(dL)
 simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))
 simPar.to_csv(args.outfile)

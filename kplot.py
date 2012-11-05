@@ -22,18 +22,6 @@ from numpy import ma
 
 tprop = dict(size=10,name='monospace')
 
-#def __init__(pk,*args,**kwargs):
-#    tval.Peak.__init__(pk,*args,**kwargs)
-#    try: 
-#        pk.keys().index('RES')
-#    except ValueError:
-#        pk['RES'] = pk['res']
-#
-#    try: 
-#        pk.keys().index('mqcal')
-#    except ValueError:
-#        pk['mqcal'] = pk['lc']
-
 
 def plot_diag(pk):
     """
@@ -51,8 +39,6 @@ def plot_diag(pk):
     axSES      = fig.add_subplot(gs[1,-1])
     axSeason   = fig.add_subplot(gs[2,-1])
     axAutoCorr = fig.add_subplot(gs[3,-1])
-
-
 
     print pk.items()
 

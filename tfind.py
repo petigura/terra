@@ -35,131 +35,147 @@ tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
-class Grid(h5plus.File):
-    # Default period limits.  Can change after instaniation.
-    P1 = int(np.floor(config.P1/keptoy.lc))
-    P2 = int(np.floor(config.P2/keptoy.lc))
-    maCadCnt = int( np.floor(config.maCadCnt) )
-    cut = 5e3
 
-    def grid(self):
+# Default period limits.  Can change after instaniation.
+P1 = int(np.floor(config.P1/keptoy.lc))
+P2 = int(np.floor(config.P2/keptoy.lc))
+maCadCnt = int( np.floor(config.maCadCnt) )
+cut = 5e3
+
+def grid(h5):
+    """
+    Run the grid search
+
+    Parameters
+    ----------
+    h5 : an h5plus instance
+         P1,P2 must be attributes
+    """
+    P1 = h5.attrs['P1']
+    P2 = h5.attrs['P2']
+
+    lc = h5['mqcal'][:]
+    fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0,copy=True)
+    PcadG = np.arange(P1,P2)
+    rtd = tdpep(lc['t'],fm,PcadG,config.twdG)
+    r   = tdmarg(rtd)
+    h5['RES'] = r
+
+
+def itOutRej(h5):
+    """
+    Iterative outlier rejection.
+
+    Parameters
+    ----------
+    h5 : an h5plus instance
+         P1,P2 must be attributes
+    """
+    P1 = h5.attrs['P1']
+    P2 = h5.attrs['P2']
+
+
+    it = 1
+    done = False
+    pk_grass_fac = 2 
+    maxit = 5
+
+    # Book keeping
+    if h5.keys().count(u'it0') is 0:
+        print "itOutRej first run. Creating it0"
+        h5.create_group('it0')
+        h5['it0']['RES']   = h5['RES'][:]
+        lc0  = h5['mqcal'][:]
+        lc0  = mlab.rec_append_fields(lc0,'cadCt',np.zeros(lc0.size) )
+        h5['it0']['mqcal'] = lc0
+
+    res0 = h5['it0']['RES'][:]   
+    lc0  = h5['it0']['mqcal'][:]
+
+    pks2n = max(res0['s2n'])
+
+    Pcad = res0['Pcad']
+    bins = np.logspace(np.log10(Pcad[0]),np.log10(Pcad[-1]+1),21)
+    id = np.digitize(Pcad,bins)
+    p = [np.percentile(res0['s2n'][id==i],90) for i in np.unique(id)]
+    grass = np.rec.array(zip(p,bins[:-1]),names='p,bins')
+    h5['grass'] = grass
+
+    mgrass = np.median(p)
+    print "Grass = %0.2f, Highest peak = %0.2f" %(mgrass,pks2n)
+    if mgrass * pk_grass_fac < pks2n:
+        return
+
+
+    np.random.seed(0)
+    PcadG = np.random.random_integers(res0['Pcad'][0],
+                                      res0['Pcad'][-1],size=50)
+
+    cad = lc0['cad']
+
+    # Determine the outlier level. Like the computation inside the
+    # loop, we sample the periodogram at 50 points
+    def lc2res(x):
         """
-        Run the grid search
+        Using x so that lc does not conflict with the namespace
         """
-        lc = self['mqcal'][:]
-        fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0,copy=True)
-        PcadG = np.arange(self.P1,self.P2)
-        rtd = tdpep(lc['t'],fm,PcadG,config.twdG)
-        r   = tdmarg(rtd)
-        self['RES'] = r
+        fm  = ma.masked_array(x['fcal'],x['fmask'],fill_value=0)
+        rtd  = tdpep(x['t'],fm,PcadG,twdG)
+        return tdmarg(rtd)
 
-    def itOutRej(self):
-        """
-        Iterative outlier rejection.
+    res0 = lc2res(lc0)
+    lc0['cadCt'] = cadCount(cad,res0)
+    p90 = np.percentile(lc0['cadCt'],90)
+    p99 = np.percentile(lc0['cadCt'],99)
+    drop10x = p99-p90
+    maCadCnt= p90+drop10x*4        
+    print "p90 p99 outlier"
+    print "%i  %i  %i  " % (p90,p99,maCadCnt)
+    print "it nout nfmask"
 
-        
-        """
-        it = 1
-        done = False
-        pk_grass_fac = 2 
-        maxit = 5
+    # Iteratively remove cadences that are over represented in the
+    # periodogram
+    while done is False:
+        fmask0 = lc0['fmask']
+        lc0['cadCt'] = cadCount(cad,res0) # Compute new outliers
+        bout = lc0['cadCt'] > maCadCnt
+        nout = lc0['cadCt'][bout].size
+        print "%i  %i  %i" % (it,nout,fmask0[fmask0].size )
 
-        # Book keeping
-        if self.keys().count(u'it0') is 0:
-            print "itOutRej first run. Creating it0"
-            self.create_group('it0')
-            self['it0']['RES']   = self['RES'][:]
-            lc0  = self['mqcal'][:]
-            lc0  = mlab.rec_append_fields(lc0,'cadCt',np.zeros(lc0.size) )
-            self['it0']['mqcal'] = lc0
+        # If there are no outliers on the first 
+        # iteration, there is no reason to 
+        # Recompute the full grid. Set the top
 
-        res0 = self['it0']['RES'][:]   
-        lc0  = self['it0']['mqcal'][:]
+        if (nout==0 ) and (it==1):
+            done=True              
+            h5['mqcal'] = h5['it0']['mqcal'][:]   
+            h5['RES']   = h5['it0']['RES'][:]
+            return 
+        elif (nout==0 ) or (it > maxit):
+            done = True
+        else:
+            lc1   = lc0.copy()
 
-        pks2n = max(res0['s2n'])
+            # Update the mask
+            bout = nd.convolve(bout.astype(float),np.ones(20) ) >  0
+            lc1['fmask']  = fmask0 | bout
+            res1 = lc2res(lc1)
 
-        Pcad = res0['Pcad']
-        bins = np.logspace(np.log10(Pcad[0]),np.log10(Pcad[-1]+1),21)
-        id = np.digitize(Pcad,bins)
-        p = [np.percentile(res0['s2n'][id==i],90) for i in np.unique(id)]
-        grass = np.rec.array(zip(p,bins[:-1]),names='p,bins')
-        self['grass'] = grass
+            # Store away the current iteration
+            gpname = 'it%i' % it
+            grp = h5.create_group(gpname)
+            grp['RES']   = res1
+            grp['mqcal'] = lc1
 
-        mgrass = np.median(p)
-        print "Grass = %0.2f, Highest peak = %0.2f" %(mgrass,pks2n)
-        if mgrass * pk_grass_fac < pks2n:
-            return
+            lc0  = lc1.copy()
+            res0 = res1.copy()
 
+        it +=1
 
-        np.random.seed(0)
-        PcadG = np.random.random_integers(res0['Pcad'][0],
-                                          res0['Pcad'][-1],size=50)
-
-        cad = lc0['cad']
-
-        # Determine the outlier level. Like the computation inside the
-        # loop, we sample the periodogram at 50 points
-        def lc2res(x):
-            """
-            Using x so that lc does not conflict with the namespace
-            """
-            fm  = ma.masked_array(x['fcal'],x['fmask'],fill_value=0)
-            rtd  = tdpep(x['t'],fm,PcadG,twdG)
-            return tdmarg(rtd)
-
-        res0 = lc2res(lc0)
-        lc0['cadCt'] = cadCount(cad,res0)
-        p90 = np.percentile(lc0['cadCt'],90)
-        p99 = np.percentile(lc0['cadCt'],99)
-        drop10x = p99-p90
-        maCadCnt= p90+drop10x*4        
-        print "p90 p99 outlier"
-        print "%i  %i  %i  " % (p90,p99,maCadCnt)
-        print "it nout nfmask"
-
-        # Iteratively remove cadences that are over represented in the
-        # periodogram
-        while done is False:
-            fmask0 = lc0['fmask']
-            lc0['cadCt'] = cadCount(cad,res0) # Compute new outliers
-            bout = lc0['cadCt'] > maCadCnt
-            nout = lc0['cadCt'][bout].size
-            print "%i  %i  %i" % (it,nout,fmask0[fmask0].size )
-
-            # If there are no outliers on the first 
-            # iteration, there is no reason to 
-            # Recompute the full grid. Set the top
-
-            if (nout==0 ) and (it==1):
-                done=True              
-                self['mqcal'] = self['it0']['mqcal'][:]   
-                self['RES']   = self['it0']['RES'][:]
-                return 
-            elif (nout==0 ) or (it > maxit):
-                done = True
-            else:
-                lc1   = lc0.copy()
-
-                # Update the mask
-                bout = nd.convolve(bout.astype(float),np.ones(20) ) >  0
-                lc1['fmask']  = fmask0 | bout
-                res1 = lc2res(lc1)
- 
-                # Store away the current iteration
-                gpname = 'it%i' % it
-                grp = self.create_group(gpname)
-                grp['RES']   = res1
-                grp['mqcal'] = lc1
-
-                lc0  = lc1.copy()
-                res0 = res1.copy()
-
-            it +=1
-
-        print "Reruning grid full grid search with outliers gone"
-        self['mqcal'] = lc1
-        PcadG = np.arange(self.P1,self.P2)
-        self['RES']   = lc2res(lc1)
+    print "Reruning grid full grid search with outliers gone"
+    h5['mqcal'] = lc1
+    PcadG = np.arange(P1,P2)
+    h5['RES']   = lc2res(lc1)
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
     """

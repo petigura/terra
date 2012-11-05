@@ -306,7 +306,7 @@ def rqmask(r0):
         r[k] = b > 0
 
     # fmask is the union of all the individually masked elements    
-    fm = ma.masked_invalid(r.SAP_FLUX)
+    fm = ma.masked_invalid(r['f'])
     fm.mask = \
         fm.mask | r['isBadReg'] | r['isOutlier'] | r['isStep'] | \
         r['isDis'] | r['desat'] | r['atTwk']
