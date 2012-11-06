@@ -16,6 +16,7 @@ from matplotlib import mlab
 import h5plus
 import copy
 
+deltaPcad = 10
 
 def terra(pardict):
     """
@@ -27,58 +28,86 @@ def terra(pardict):
     out     : Dictionary of scalars. Must contain id key.
     
     """
-    if pardict['type']=='mcS':
-        assert pardict.has_key('gridfile'),'must point to full res file'
-
-    pardict = addPaths(pardict)
-    name = "".join(np.random.random_integers(0,9,size=10).astype(str))    
+    pardict = dictSetup(pardict)
     with h5py.File( pardict['rawfile'],'r+' ) as h5raw, \
-         prepro.Lightcurve(name+'.h5',driver='core',backing_store=False) as h5out:
+         prepro.Lightcurve('temp.h5',driver='core',backing_store=False) as h5out:
+        out = terraInner(h5raw,h5out,pardict)
 
-        # Raw photometry
-        h5out.copy(h5raw['raw'],'raw')
-        if pardict['type'].find('mc') != -1:
-            inj(h5out,pardict)
-
-        # Perform detrending and calibration.
-        h5out.mask()
-        h5out.dt()
-        h5out.attrs['svd_folder'] = pardict['svd_folder']
-        h5out.cal()
-        h5out.sQ()
-
-        # Grid Search and iterative outlier rejection
-        h5out.attrs['P1'] = int(config.P1 / config.lc)
-        h5out.attrs['P2'] = int(config.P2 / config.lc)
-        if pardict.has_key('P1'):
-            h5out.attrs['P1'] = pardict['P1']
-            h5out.attrs['P2'] = pardict['P2']
-
-        if pardict['type'] == 'mcS':
-            gridShort(h5out,pardict)
-        else:
-            tfind.grid(h5out) 
-
-        tfind.itOutRej(h5out)
-        # DV
-        DV(h5out,pardict)
-
-        if pardict.has_key('pngGrid'):
-            import matplotlib
-            matplotlib.use('Agg')
-            import kplot
-            from matplotlib.pylab import plt
-            kplot.plot_diag(h5out)
-            plt.gcf().savefig(pardict['pngGrid'])
-
-        if pardict.has_key('storeGrid'):
-            with h5plus.File(pardict['storeGrid'],mode='c') as h5store:
-                h5store.copy(h5out,h5store,name='store')
-
-        out = tval.flatten(h5out,h5out.noDBRE)
-        out['id'] = pardict['id']
+    out['id'] = pardict['id']
     return out
 
+def dictSetup(pardict0):
+    """
+    Check Set necessary fields in pardict
+    """
+    pardict = copy.copy(pardict0)
+    pardict = addPaths(pardict)
+
+    # P1,P2 define the range of candences we sample the outlier
+    # spectrum at.
+    if pardict.has_key('P1') == False:
+        pardict['P1'] = int(config.P1 / config.lc)
+        pardict['P2'] = int(config.P2 / config.lc)    
+
+    # P1_FFA,P2_FFA define range over which we compute the FFA 
+    if ~pardict.has_key('P1_FFA'):
+        if pardict['type']=='mcS':
+            P1 = int(pardict['inj_P']/config.lc - deltaPcad)
+            pardict['P1_FFA'] = max(P1, int(config.P1 / config.lc))
+
+            P2 = int(pardict['inj_P']/config.lc + deltaPcad)
+            pardict['P2_FFA'] = min(P2, int(config.P2 / config.lc))
+        else:
+            pardict['P1_FFA'] = pardict['P1']
+            pardict['P2_FFA'] = pardict['P2']
+
+    assert pardict.has_key('gridfile'),'must point to full res file'
+    return pardict
+
+def terraInner(h5raw,h5out,pardict):
+    h5out.attrs['P1']      = pardict['P1']
+    h5out.attrs['P2']      = pardict['P2']
+    h5out.attrs['P1_FFA']  = pardict['P1_FFA']
+    h5out.attrs['P2_FFA']  = pardict['P2_FFA']
+
+    print dict(h5out.attrs)
+    # Raw photometry
+    h5out.copy(h5raw['raw'],'raw')
+    if pardict['type'].find('mc') != -1:
+        inj(h5out,pardict)
+
+    # Perform detrending and calibration.
+    h5out.mask()
+    h5out.dt()
+    h5out.attrs['svd_folder'] = pardict['svd_folder']
+    h5out.cal()
+    h5out.sQ()
+
+    # Grid search and outlier rejection
+    if pardict['type'] == 'mcS':
+        gridShort(h5out,pardict)
+    else:
+        tfind.grid(h5out) 
+
+    tfind.itOutRej(h5out)
+
+    # DV
+    DV(h5out,pardict)
+
+    if pardict.has_key('pngGrid'):
+        import matplotlib
+        matplotlib.use('Agg')
+        import kplot
+        from matplotlib.pylab import plt
+        kplot.plot_diag(h5out)
+        plt.gcf().savefig(pardict['pngGrid'])
+
+    if pardict.has_key('storeGrid'):
+        with h5plus.File(pardict['storeGrid'],mode='c') as h5store:
+            h5store.copy(h5out,h5store,name='store')
+
+    out = tval.flatten(h5out,h5out.noDBRE)
+    return out
 def get_reslc(h5):
     """
     Get res array.
@@ -88,18 +117,21 @@ def get_reslc(h5):
     - No peak, no outliers. it0/mqcal
     - No peak, outliers itN/fmask
     """
-    
+
+    lc  = h5['mqcal'][:]
     if h5.attrs['itStatus'] < 3:
         RES = h5['it0']['RES'][:]
-        lc  = h5['mqcal'][:]
     else:
-        # Find maximum iteration 
-        itL = [i[0] for i in h5.items() if i[0].find('it')!=-1]
-        itMax = sort(itL)[-1]        
-        lc  = h5['mqcal'][:]
+        itMax = findItMax(h5)
         lc['fmask'] = h5[itMax]['fmask']
+        RES = h5[itMax]['RES'][:]
     return RES,lc
 
+def findItMax(h5):
+    # Find maximum iteration 
+    itL = [i[0] for i in h5.items() if i[0].find('it')!=-1]
+    itMax = np.sort(itL)[-1]        
+    return itMax
 
 def PP(h5,pardict):
     """
@@ -188,15 +220,13 @@ def gridShort(h5,pardict):
     """
 
     """
+
     with h5py.File(pardict['gridfile'],'r+') as grid0:
     # Only compute the grid over a narrow region in period
         res0 = grid0['RES'][:]
-        
-    deltaPcad = 10
-    P1=int(pardict['inj_P']/config.lc - deltaPcad)
-    P2=int(pardict['inj_P']/config.lc + deltaPcad)
-    h5.attrs['P1'] = max(P1 , res0['Pcad'][0] )
-    h5.attrs['P2'] = min(P2 , res0['Pcad'][-1] )
+
+    h5.attrs['P1_FFA'] = pardict['P1_FFA']
+    h5.attrs['P2_FFA'] = pardict['P2_FFA']
 
     tfind.grid(h5)
 
@@ -211,3 +241,4 @@ def gridShort(h5,pardict):
     res0[start:stop+1] = res
     del h5['it0']['RES']
     h5['it0']['RES'] = res0
+    

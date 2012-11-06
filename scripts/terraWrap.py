@@ -12,7 +12,7 @@ class WritableObject:
         self.content.append(string)
 
 def injRecW(pardict):
-    prefix = pardict['prefix']+': '
+    prefix = pardict['sid']+': '
     foo = WritableObject()                   # a writable object
     sys.stdout = foo                         # redirection
     out = {}

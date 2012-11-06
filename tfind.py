@@ -51,9 +51,10 @@ def grid(h5):
     h5 : an h5plus instance
          P1,P2 must be attributes
     """
-    P1 = h5.attrs['P1']
-    P2 = h5.attrs['P2']
+    P1 = h5.attrs['P1_FFA']
+    P2 = h5.attrs['P2_FFA']
 
+    print P1,P2
 
     print "itOutRej first run. Creating it0"
     it0 = h5.create_group('it0')
@@ -77,13 +78,23 @@ def itOutRej(h5):
     ----------
     h5 : an h5plus instance
          P1,P2 must be attributes
+
+    Notes
+    -----
+    itOutRej can exit with 3 status:
+    1. Large peak in uncorrected light curve; do not preform iterative
+       outlier rejection
+    2. No large peak, but no significant outliers; do not preform
+       iterative outlier rejection
+    3. No large peak; significant outliers; iterate
+
     """
     P1 = h5.attrs['P1']
     P2 = h5.attrs['P2']
 
     it           = 1
     done         = False
-    pk_grass_fac = 2 
+    pk_grass_fac = 4 
     maxit        = 5
     h5.attrs['itOutRej'] = True
 
@@ -155,16 +166,17 @@ def itOutRej(h5):
             cadCt = cadCount(cad,res) 
 
             # Store away the current iteration
-            curit = h5.create_group('it%i' % it)
-            curit['RES']   = res
-            curit['fmask'] = fm.mask
+            curIt = h5.create_group('it%i' % it)
+            curIt['RES']   = res
+            curIt['fmask'] = fm.mask
 
         it +=1
 
     if it>1:
         print "Reruning grid full grid search with outliers gone"
-        PcadG = np.arange(P1,P2)
-        h5['RES'] = tdmarg(tdpep(t,fm,PcadG,twdG))
+        PcadG = np.arange(h5.attrs['P1_FFA'],h5.attrs['P2_FFA'])
+        del curIt['RES']
+        curIt['RES'] = tdmarg(tdpep(t,fm,PcadG,twdG))
 
 
 
