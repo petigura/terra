@@ -14,6 +14,8 @@ import keptoy
 import config
 from matplotlib import mlab
 import h5plus
+import copy
+
 
 def terra(pardict):
     """
@@ -28,7 +30,7 @@ def terra(pardict):
     if pardict['type']=='mcS':
         assert pardict.has_key('gridfile'),'must point to full res file'
 
-    addPaths(pardict)
+    pardict = addPaths(pardict)
     name = "".join(np.random.random_integers(0,9,size=10).astype(str))    
     with h5py.File( pardict['rawfile'],'r+' ) as h5raw, \
          prepro.Lightcurve(name+'.h5',driver='core',backing_store=False) as h5out:
@@ -58,7 +60,6 @@ def terra(pardict):
             tfind.grid(h5out) 
 
         tfind.itOutRej(h5out)
-
         # DV
         DV(h5out,pardict)
 
@@ -77,6 +78,28 @@ def terra(pardict):
         out = tval.flatten(h5out,h5out.noDBRE)
         out['id'] = pardict['id']
     return out
+
+def get_reslc(h5):
+    """
+    Get res array.
+
+    3 Cases
+    - Peak.  it0/RES, mqcal
+    - No peak, no outliers. it0/mqcal
+    - No peak, outliers itN/fmask
+    """
+    
+    if h5.attrs['itStatus'] < 3:
+        RES = h5['it0']['RES'][:]
+        lc  = h5['mqcal'][:]
+    else:
+        # Find maximum iteration 
+        itL = [i[0] for i in h5.items() if i[0].find('it')!=-1]
+        itMax = sort(itL)[-1]        
+        lc  = h5['mqcal'][:]
+        lc['fmask'] = h5[itMax]['fmask']
+    return RES,lc
+
 
 def PP(h5,pardict):
     """
@@ -107,6 +130,9 @@ def DV(h5,pardict):
     h5.noPrintRE = '.*?file|climb|skic|.*?folder'
     h5.noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
     h5.noDBRE    = 'climb'
+
+    # Attach attributes
+    h5.RES,h5.lc = get_reslc(h5)
 
     tval.findPeak(h5)
     tval.conv(h5)
@@ -147,13 +173,15 @@ def inj(h5,pardict):
         del raw[q]
         raw[q] = r
         
-def addPaths(df):
+def addPaths(d0):
     """
     Paths are referenced with respect to a base directory, which can
     changed from machine to machine.
     """
-    for column in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
-        df[column] = df['wkdir'] + df[column]
+    d = copy.copy(d0)
+    for k in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
+        d[k] = d['wkdir'] + d[k]
+    return d
 
 
 def gridShort(h5,pardict):
@@ -173,7 +201,7 @@ def gridShort(h5,pardict):
     tfind.grid(h5)
 
     # Add that narrow region to the already computed grid.
-    res  = h5['RES'][:]
+    res  = h5['it0']['RES'][:]
     start = np.where(res0['Pcad']==res['Pcad'][0])[0]
     stop  = np.where(res0['Pcad']==res['Pcad'][-1])[0]
     if len(start) > 1:
@@ -181,5 +209,5 @@ def gridShort(h5,pardict):
     if len(stop) > 1:
         stop = stop[0]
     res0[start:stop+1] = res
-    del h5['RES']
-    h5['RES'] = res0
+    del h5['it0']['RES']
+    h5['it0']['RES'] = res0

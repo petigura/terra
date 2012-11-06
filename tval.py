@@ -323,7 +323,7 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
 
 def findPeak(h5):
     # Pull the peak information
-    res = h5['RES'][:]
+    res = h5.RES
     id  = np.argmax(res['s2n'])        
     for k in ['t0','Pcad','twd','mean','s2n','noise']:
         h5.attrs[k] =  res[k][id]
@@ -336,8 +336,7 @@ def conv(h5):
     """
 
     h5.tdurcad  = int (h5.attrs['tdur'] / config.lc)
-    lc = h5['mqcal'][:]
-
+    lc = h5.lc
     h5.fm =  ma.masked_array(lc['fcal'],lc['fmask'])
     h5.dM = tfind.mtd(lc['t'],h5.fm,h5.tdurcad)
     h5.t  = lc['t']

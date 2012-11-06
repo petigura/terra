@@ -41,3 +41,4 @@ dL = map(injRecW,[dict(simPar.ix[i]) for i in simPar.index ] )
 dL = pandas.DataFrame(dL)
 simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))
 simPar.to_csv(args.outfile)
+

@@ -40,8 +40,6 @@ def plot_diag(pk):
     axSeason   = fig.add_subplot(gs[2,-1])
     axAutoCorr = fig.add_subplot(gs[3,-1])
 
-    print pk.items()
-
     plt.sca(axGrid)
     plotGrid(pk)
     at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
@@ -81,7 +79,7 @@ def plot_diag(pk):
     plt.ylabel('SES (ppm)')
 
     plt.sca(axScar)
-    sketch.scar(pk['RES'])
+    sketch.scar(pk.RES)
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
@@ -140,14 +138,14 @@ def plotSES(pk):
     plt.autoscale(tight=True)
 
 def plotGrid(pk):
-    x = pk['RES']['Pcad']*config.lc
-    plt.plot(x,pk['RES']['s2n'])
+    x = pk.RES['Pcad']*config.lc
+    plt.plot(x,pk.RES['s2n'])
     id = np.argsort( np.abs(x - pk.attrs['P']) )[0]
-    plt.plot(x[id],pk['RES']['s2n'][id],'ro')
+    plt.plot(x[id],pk.RES['s2n'][id],'ro')
     plt.autoscale(tight=True)
 
 def plotMed(pk):
-    lc = pk['mqcal'][:]
+    lc = pk.lc
     t = lc['t']
     fmed = ma.masked_array(pk['fmed'][:],lc['fmask'])
     P = pk.attrs['P']
