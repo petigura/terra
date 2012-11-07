@@ -15,6 +15,7 @@ import config
 from matplotlib import mlab
 import h5plus
 import copy
+import os
 
 deltaPcad = 10
 
@@ -60,17 +61,32 @@ def dictSetup(pardict0):
         else:
             pardict['P1_FFA'] = pardict['P1']
             pardict['P2_FFA'] = pardict['P2']
-
-    assert pardict.has_key('gridfile'),'must point to full res file'
+    if pardict['type'] =='mcS':
+        assert pardict.has_key('gridfile'),'must point to full res file'
     return pardict
 
 def terraInner(h5raw,h5out,pardict):
+    print "Run type:  %(type)s" % pardict
+    print "\ninput files:"
+    print "-"*50
+    print pardict['rawfile']
+    print pardict['svd_folder']
+    if pardict.has_key('gridfile'):
+        print pardict['gridfile']
+
+    print "\noutput files:"
+    print "-"*50
+    if pardict.has_key('storeGrid'):
+        print pardict['storeGrid']
+    if pardict.has_key('pngStore'):
+        print pardict['pngStore']
+    print ""
+
     h5out.attrs['P1']      = pardict['P1']
     h5out.attrs['P2']      = pardict['P2']
     h5out.attrs['P1_FFA']  = pardict['P1_FFA']
     h5out.attrs['P2_FFA']  = pardict['P2_FFA']
 
-    print dict(h5out.attrs)
     # Raw photometry
     h5out.copy(h5raw['raw'],'raw')
     if pardict['type'].find('mc') != -1:
@@ -91,6 +107,13 @@ def terraInner(h5raw,h5out,pardict):
 
     tfind.itOutRej(h5out)
 
+    if pardict.has_key('storeGrid'):
+        with h5plus.File(pardict['storeGrid'],mode='c') as h5store:            
+            groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
+            groups += ['mqcal'] 
+            for g in groups:
+                h5store.copy(h5out[g],g)
+
     # DV
     DV(h5out,pardict)
 
@@ -102,12 +125,11 @@ def terraInner(h5raw,h5out,pardict):
         kplot.plot_diag(h5out)
         plt.gcf().savefig(pardict['pngGrid'])
 
-    if pardict.has_key('storeGrid'):
-        with h5plus.File(pardict['storeGrid'],mode='c') as h5store:
-            h5store.copy(h5out,h5store,name='store')
+
 
     out = tval.flatten(h5out,h5out.noDBRE)
     return out
+
 def get_reslc(h5):
     """
     Get res array.
@@ -154,10 +176,12 @@ def DV(h5,pardict):
     h5 : h5plus object
 
     """
-    
-    climb = np.array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
-    h5.attrs['climb'] = climb
-    h5.attrs['skic']  = pardict['skic']
+    if dict(h5.attrs).has_key('climb') == False:
+        climb = np.array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
+        h5.attrs['climb'] = climb
+
+    if dict(h5.attrs).has_key('skic') == False:
+        h5.attrs['skic']  = pardict['skic']
 
     h5.noPrintRE = '.*?file|climb|skic|.*?folder'
     h5.noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
@@ -211,8 +235,11 @@ def addPaths(d0):
     changed from machine to machine.
     """
     d = copy.copy(d0)
+    assert os.environ.has_key('KEPSCRATCH'),'KEPSCRATCH must be defined'
+    wkdir = os.environ['KEPSCRATCH']
     for k in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
-        d[k] = d['wkdir'] + d[k]
+        if d.has_key(k):
+            d[k] = wrkdir + d[k]
     return d
 
 
@@ -220,10 +247,9 @@ def gridShort(h5,pardict):
     """
 
     """
-
     with h5py.File(pardict['gridfile'],'r+') as grid0:
     # Only compute the grid over a narrow region in period
-        res0 = grid0['RES'][:]
+        res0 = grid0['it0']['RES'][:]
 
     h5.attrs['P1_FFA'] = pardict['P1_FFA']
     h5.attrs['P2_FFA'] = pardict['P2_FFA']

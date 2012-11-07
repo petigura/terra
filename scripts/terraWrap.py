@@ -4,6 +4,7 @@ import sim
 import pandas
 import os
 import terra
+import matplotlib
 
 class WritableObject:
     def __init__(self):
@@ -29,13 +30,15 @@ def injRecW(pardict):
     print ostr
     return out
 
-
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('parfile',type=str,help='file with the transit parameters')
 parser.add_argument('outfile',type=str,help='output data here')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['skic'] = ['%09d' %s for s in simPar['skic'] ]
+if matplotlib.cbook.is_numlike(simPar['sid']):
+    # Assume we're mean the skic
+    simPar['sid'] = simPar['skic']
 
 dL = map(injRecW,[dict(simPar.ix[i]) for i in simPar.index ] )
 dL = pandas.DataFrame(dL)
