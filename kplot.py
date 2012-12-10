@@ -14,6 +14,7 @@ from matplotlib.pylab import plt
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
+import terra
 import tval
 import sketch
 import config
@@ -138,10 +139,13 @@ def plotSES(pk):
     plt.autoscale(tight=True)
 
 def plotGrid(pk):
-    x = pk.RES['Pcad']*config.lc
-    plt.plot(x,pk.RES['s2n'])
+    res,lc = terra.get_reslc(pk)
+    x = res['Pcad']*config.lc
+    y = res['s2n']
+    
+    plt.plot(x,y)
     id = np.argsort( np.abs(x - pk.attrs['P']) )[0]
-    plt.plot(x[id],pk.RES['s2n'][id],'ro')
+    plt.plot(x[id],y[id],'ro')
     plt.autoscale(tight=True)
 
 def plotMed(pk):

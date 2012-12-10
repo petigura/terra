@@ -12,13 +12,13 @@ class WritableObject:
     def write(self, string):
         self.content.append(string)
 
-def injRecW(pardict):
+def injRecW(pardict,**kwargs):
     prefix = pardict['sid']+': '
     foo = WritableObject()                   # a writable object
     sys.stdout = foo                         # redirection
     out = {}
     try:
-        out = terra.terra(pardict)
+        out = terra.terra(pardict,**kwargs)
     except:
         import traceback    
         print  traceback.format_exc()
@@ -33,6 +33,7 @@ def injRecW(pardict):
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('parfile',type=str,help='file with the transit parameters')
 parser.add_argument('outfile',type=str,help='output data here')
+parser.add_argument('--DV',action='store_true')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['skic'] = ['%09d' %s for s in simPar['skic'] ]
@@ -40,7 +41,10 @@ if matplotlib.cbook.is_numlike(simPar['sid']):
     # Assume we're mean the skic
     simPar['sid'] = simPar['skic']
 
-dL = map(injRecW,[dict(simPar.ix[i]) for i in simPar.index ] )
+dL = []
+for i in simPar.index:
+    dL.append( injRecW( dict(simPar.ix[i]),startDV=args.DV) )
+
 dL = pandas.DataFrame(dL)
 simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))
 simPar.to_csv(args.outfile)

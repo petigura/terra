@@ -162,6 +162,7 @@ def rec2tab(rec):
     """
     Convert a record array into an atpy table.
     """
+    import atpy
     t = atpy.Table()
     keys = rec.dtype.names
     for k in keys:

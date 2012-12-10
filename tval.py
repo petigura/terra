@@ -501,6 +501,7 @@ def at_SES(h5):
     rses = np.array(zip(ses,tnum,season),dtype=dtype )
 
     h5['SES'] = rses
+    h5['tRegLbl'] = tRegLbl
     ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
     h5.attrs['SES_even'] = np.median(ses_e) 
     h5.attrs['SES_odd']  = np.median(ses_o) 
@@ -779,7 +780,10 @@ def addCuts(df):
     Mstar = df.Mstar * Msun # Mstar [g]
     P = df.P_out*sec_in_day # P [s]
 
-    tauMa =  Rstar* (P /(G*Mstar*2*np.pi))**(1/3.)  # Kepler's 3rd
+    a = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
+    df['a/R*'] = a/Rstar
+    P = df.P_out*sec_in_day # P [s]
+    tauMa =  Rstar*P/2/np.pi/a
     df['tauMa'] = tauMa / sec_in_day # Maximum tau assuming circular orbit
     df['taur']  = df.tau0 / df.tauMa
 
@@ -787,7 +791,7 @@ def addCuts(df):
     df['med_on_mean']   = df.medSNR / df.s2n
     df['Rp']            = np.sqrt(df.df0)*df.Rstar*109.04
     df['phase_out']     = np.mod(df.t0/df.P_out,1)
-    df['phase_inp']     = df['phase']
+#    df['phase_inp']     = df['phase']
     
     return df
 

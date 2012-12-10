@@ -26,7 +26,7 @@ nessflds = {
 }
 
 
-def terra(pardict):
+def terra(pardict,startDV=False):
     """
     
     Parameters
@@ -37,9 +37,15 @@ def terra(pardict):
     
     """
     pardict = dictSetup(pardict)
-    with h5py.File( pardict['rawfile'],'r+' ) as h5raw, \
-         prepro.Lightcurve('temp.h5',driver='core',backing_store=False) as h5out:
-        out = terraInner(h5raw,h5out,pardict)
+    rawfile = pardict['rawfile']
+    if startDV==True:
+        h5outfile = pardict['storeGrid']
+    else:
+        h5outfile = 'temp.h5'
+
+    with h5py.File( rawfile,'r+' ) as h5raw,\
+            prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:
+        out = terraInner(h5raw,h5out,pardict,startDV=startDV)
 
     out['id'] = pardict['id']
     return out
@@ -72,7 +78,10 @@ def dictSetup(pardict0):
         assert pardict.has_key('gridfile'),'must point to full res file'
     return pardict
 
-def terraInner(h5raw,h5out,pardict):
+def terraInner(h5raw,h5out,pardict,startDV=False):
+    """
+    DV - start from DV
+    """
     print "Run type:  %(type)s" % pardict
     print "\ninput files:"
     print "-"*50
@@ -94,32 +103,35 @@ def terraInner(h5raw,h5out,pardict):
     h5out.attrs['P1_FFA']  = pardict['P1_FFA']
     h5out.attrs['P2_FFA']  = pardict['P2_FFA']
 
-    # Raw photometry
-    h5out.copy(h5raw['raw'],'raw')
-    if pardict['type'].find('mc') != -1:
-        inj(h5out,pardict)
 
-    # Perform detrending and calibration.
-    h5out.mask()
-    h5out.dt()
-    h5out.attrs['svd_folder'] = pardict['svd_folder']
-    h5out.cal()
-    h5out.sQ()
+    if startDV!=True: 
+        # Raw photometry
+        h5out.copy(h5raw['raw'],'raw')
+        if pardict['type'].find('mc') != -1:
+            inj(h5out,pardict)
 
-    # Grid search and outlier rejection
-    if pardict['type'] == 'mcS':
-        gridShort(h5out,pardict)
-    else:
-        tfind.grid(h5out) 
+        # Perform detrending and calibration.
+        h5out.mask()
+        h5out.dt()
+        h5out.attrs['svd_folder'] = pardict['svd_folder']
+        h5out.cal()
+        h5out.sQ()
 
-    tfind.itOutRej(h5out)
+        # Grid search and outlier rejection
+        if pardict['type'] == 'mcS':
+            gridShort(h5out,pardict)
+        else:
+            tfind.grid(h5out) 
 
-    if pardict.has_key('storeGrid'):
-        with h5plus.File(pardict['storeGrid'],mode='c') as h5store:            
-            groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
-            for g in groups:
-                h5store.copy(h5out[g],g)
-            h5store['mqcal'] = h5out['mqcal'][:]
+        tfind.itOutRej(h5out)
+
+        if pardict.has_key('storeGrid'):
+            with h5plus.File(pardict['storeGrid'],mode='c') as h5store: 
+                groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
+                for g in groups:
+                    h5store.copy(h5out[g],g)
+                h5store['mqcal'] = h5out['mqcal'][:]
+
 
     # DV
     DV(h5out,pardict)
@@ -131,8 +143,6 @@ def terraInner(h5raw,h5out,pardict):
         from matplotlib.pylab import plt
         kplot.plot_diag(h5out)
         plt.gcf().savefig(pardict['pngGrid'])
-
-
 
     out = tval.flatten(h5out,h5out.noDBRE)
     return out
@@ -146,14 +156,15 @@ def get_reslc(h5):
     - No peak, no outliers. it0/mqcal
     - No peak, outliers itN/fmask
     """
-
-    lc  = h5['mqcal'][:]
-    if h5.attrs['itStatus'] < 3:
-        RES = h5['it0']['RES'][:]
-    else:
+    try:
+        lc  = h5['mqcal'][:]
         itMax = findItMax(h5)
         lc['fmask'] = h5[itMax]['fmask']
         RES = h5[itMax]['RES'][:]
+    except KeyError:
+        lc  = h5['mqcal'][:]
+        RES = h5[itMax]['RES'][:]
+        
     return RES,lc
 
 def findItMax(h5):
