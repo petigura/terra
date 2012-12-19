@@ -158,42 +158,57 @@ def plotMed(pk):
     sketch.stack(t,fmed*1e6,P,t0,step=5*df)
     plt.autoscale(tight=True)
 
+import scipy.ndimage as nd
+
 def morton(pk):
     """
     Print a 1-page diagnostic plot of a given pk.
     """
+    P  = pk.attrs['P']
+    t0 = pk.attrs['t0']
+    df = pk.attrs['df']
+
 
     fig = plt.figure(figsize=(20,12))
     gs = GridSpec(4,4)
 
-    axPF       = fig.add_subplot(gs[0,0:2])
-    axPF180    = fig.add_subplot(gs[0,2:],sharex=axPF,sharey=axPF)
+    axPF0      = fig.add_subplot(gs[0,0:2])
+    axPF180    = fig.add_subplot(gs[0,2:],sharex=axPF0,sharey=axPF0)
     axStack    = fig.add_subplot(gs[1:,:])
 
-    plt.sca(axPF180)
-    plotPF(pk,180)
+    for ax,ph in zip([axPF0,axPF180],[0,180]):
+        plt.sca(ax)
+        
+        PF  = pk['lcPF%i'%ph]
+        bPF = pk['blc30PF%i' % ph ]
+        plt.plot(PF['tPF'],PF['f'],',',color='k')
+        plt.plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
+
     cax = plt.gca()
     cax.xaxis.set_visible(False)
     cax.yaxis.set_visible(False)
     at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
 
-    plt.sca(axPF)
-    plotPF(pk,0)
+    plt.sca(axPF0)
+
     cax = plt.gca()
     at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
     plt.xlabel('t - t0 (days)')
     plt.ylabel('flux')
-    df = pk.attrs['df']*1e-6
-    plt.ylim(-5*df,3*df)
+    plt.ylim(-3*df*1e-6,2*df*1e-6)
 
     plt.sca(axStack)
-    plotMed(pk)
+    f = pk['mqcal']['f']
+    t = pk['mqcal']['t']
+    fmed = f -  nd.median_filter(f,size=150)
+    fmed = ma.masked_array(fmed,pk['mqcal']['fmask'])
+
+    sketch.stack(t,fmed*1e6,P,t0,step=2*df)
+
     plt.xlabel('phase')
     plt.ylabel('flux (ppm)')
 
-    #plt.gcf().text( 0.85, 0.05, pk.diag_leg() , size=10, name='monospace',
-    #                bbox=dict(visible=True,fc='white'))
-    #plt.tight_layout()
+    plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)

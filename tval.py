@@ -293,28 +293,27 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     tPF  : Phase folded time.  0 corresponds to mid transit.
     fPF  : Phase folded flux.
     """
-
     rec = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
-    tLbl,cLbl = rec['tRegLbl'],rec['cRegLbl']
-    fldt     = LDT(t,fm,cLbl,tLbl)
+    tLbl = rec['tRegLbl']
+    cLbl = rec['cRegLbl']
+    fldt = LDT(t,fm,cLbl,tLbl) # full size array
 
     tm = ma.masked_array(t,fldt.mask,copy=True)
     dt = t0shft(t,P,t0)
     tm += dt
 
-    tPF = np.mod(tm[~tm.mask]+P/2,P)-P/2
-    fPF = fldt[~fldt.mask] 
-    sid = np.argsort(tPF)
+    dtype = zip(['tPF','f','t'],[float]*3)
+    cut   = ~tm.mask
+    lcPF  = np.array( zip(tm[cut],fldt[cut],t[cut]) ,  dtype=dtype )
 
-    tPF = tPF[sid]
-    fPF = fPF[sid]
-    
-    bg  = ~np.isnan(tPF) & ~np.isnan(fPF)
-    tPF = tPF[bg]
-    fPF = fPF[bg]
-    return tPF,fPF
+    lcPF['tPF'] = np.mod(lcPF['tPF']+P/2,P)-P/2
+    lcPF = lcPF[np.argsort(lcPF['tPF'])]
 
+    bg  = ~np.isnan(lcPF['tPF']) & ~np.isnan(lcPF['f'])
+    lcPF = lcPF[bg]    
+    lcPF['tPF'] += config.lc
 
+    return lcPF
 
 # Must add the following attributes
 # 't0','Pcad','twd','mean','s2n','noise'
@@ -355,30 +354,83 @@ def checkHarmh5(h5):
         h5.attrs['P']    *= harm
         h5.attrs['Pcad'] *= harm
 
-def at_phaseFold(h5):
-    """ Add locally detrended light curve"""
+def at_phaseFold(h5,ph):
+    """ 
+    Add locally detrended light curve
+
+    Parameters
+    ----------
+
+    h5 - h5 file with the following columns
+         mqcal
+    """
     attrs = h5.attrs
     lc = h5['mqcal'][:]
     t  = lc['t']
     fm = ma.masked_array(lc['f'],lc['fmask'])
 
-    for ph in [0,180]:
-        P,tdur = attrs['P'],attrs['tdur']
-        t0     = attrs['t0'] + ph / 360. * P 
-        tPF,fPF = PF(t,fm,P,t0,tdur)
-        tPF += config.lc
-        lcPF = np.array(zip(tPF,fPF),dtype=[('tPF',float),('fPF',float)] )
-        h5['lcPF%i' % ph] = lcPF
-        lcPF = h5['lcPF%i' % ph]
-        x,y = lcPF['tPF'],lcPF['fPF']
+    P,tdur = attrs['P'],attrs['tdur']
+    t0     = attrs['t0'] + ph / 360. * P 
+    h5['lcPF%i' % ph] = PF(t,fm,P,t0,tdur)
 
-        for nbpt in [1,5]: # Number of Bins Per Transit
-            bins = get_bins(h5,x,nbpt)
-            y = ma.masked_invalid(y)
-            bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
-            h5['bx%i_%i'% (ph,nbpt)] = bx
-            h5['by%i_%i'% (ph,nbpt)] = by
+def at_binPhaseFold(h5,ph,bwmin):
+    """
+    Add the binned quantities to the LC
 
+    h5 - h5 file with the following columns
+         lcPF0
+         lcPF180         
+    ph - phase to fold at.
+    bwmin - targe bin width (minutes)
+    """
+    lcPF = h5['lcPF%i' % ph][:]
+    tPF  = lcPF['tPF']
+    f    = lcPF['f']
+
+    xmi,xma = tPF.min(),tPF.max() 
+    bw       = bwmin / 60./24. # converting minutes to days
+    nbins    = xma-xmi
+
+    nbins = int( np.round( (xma-xmi)/bw ) )
+    # Add a tiny bit to xma to get the last element
+    bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+    tb    = 0.5*(bins[1:]+bins[:-1])
+
+    blcPF =  np.array([tb],dtype=[('tb',float)])
+    dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
+    for k in dfuncs.keys():
+        func  = dfuncs[k]
+        yapply = bapply(tPF,f,bins,func)
+        blcPF = mlab.rec_append_fields(blcPF,k,yapply)
+
+    blcPF = blcPF.flatten()
+    h5[ 'blc%iPF%i' % (bwmin,ph) ] = blcPF
+
+def bapply(x,y,bins,func):
+    """
+    Apply an accumulating function on a bin by bin basis.
+    
+    Parameters
+    ----------
+    x    : independent var
+    y    : dependent var
+    bins : passed to digitize
+    func : must take an array as input and return a single value
+    """
+    
+    assert bins[0]  <= min(x),'range'
+    assert bins[-1] >  max(x),'range'
+
+    bid = np.digitize(x,bins)    
+    nbins   = bins.size-1
+    yapply  = np.zeros(nbins)
+
+    for id in range(1,nbins):
+        yb = y[bid==id]
+        yapply[id-1] = func(yb)
+
+    return yapply
+        
 def at_med_filt(h5):
     """Add median detrended lc"""
     lc = h5['mqcal']
