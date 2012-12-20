@@ -3,6 +3,7 @@ from numpy import pi,sqrt,where,std,ma,array
 from numpy import ma,tanh,sin,cos,pi
 from numpy.polynomial import Legendre
 import copy
+import occultsmall
 
 from config import *
 
@@ -261,7 +262,7 @@ def genSynLC(darr):
 
 
 
-def occultsmall(p,c1,c2,c3,c4,z):
+def occultsmall_py(p,c1,c2,c3,c4,z):
     """
     Mandel Agol light curve (small planet approx).
 
@@ -319,9 +320,16 @@ def iofr(c1,c2,c3,c4,r,p):
     return res
 
 
-def occultsmallt(t,p,c1,c2,c3,c4,tau,b):
+def occultsmallt_py(t,p,c1,c2,c3,c4,tau,b):
     z =  np.sqrt( (t/tau)**2 + b**2 )
-    return occultsmall(p,c1,c2,c3,c4,z)
+    mu =  occultsmall_py(p,c1,c2,c3,c4,z)
+    return mu
+
+def occultsmallt_fort(t,p,c1,c2,c3,c4,tau,b):
+    z  =  np.sqrt( (t/tau)**2 + b**2 )
+    mu =  np.empty(z.shape)
+    occultsmall.occultsmall(p,c1,c2,c3,c4,z,mu)
+    return mu
 
 def genMALC(d):
     # Covert P, R* to tau.
@@ -329,7 +337,7 @@ def genMALC(d):
     a = (G*Mstar*P / (4*pi**2))**(1/3.)
     n = 2*pi / P
 
-def MA(pL,climb,t,usamp=11):
+def MA(pL,climb,t,usamp=11,occultsmallt=occultsmallt_py):
     """
     Mandel Agol Model
 
@@ -348,26 +356,30 @@ def MA(pL,climb,t,usamp=11):
            pL[2] - b   - impact parameter.  Ranges from 0 to 1.
     climb : 4 component limb darkening model
     t     : time t0 = 0 
+    occultsmallt : Which version of occultsmallt to call. Python or fortran.
+    
 
     Returns
     -------
+    fmod : Mandel Agol model convolved with the Kepler observing cadence.
 
     """
     p   = pL[0]
     tau = pL[1]
     b   = pL[2]
 
+    c1,c2,c3,c4 = climb
     if usamp is 0:
-        fmod = occultsmallt(t,p,climb[0],climb[1],climb[2],climb[3],tau,b)
+        fmod = occultsmallt(t,p,c1,c2,c3,c4,tau,b)
     else:
-        dt = np.linspace( -lc/2 , lc/2 , usamp)
-        dt = np.vstack(dt)
-        tblock = ma.vstack([t]*usamp)+np.hstack([dt]*t.size)
-        fblock = occultsmallt(tblock.flatten(),p,climb[0],climb[1],climb[2],climb[3],tau,b)  # super resolution model of transit
-        fblock = fblock.reshape(tblock.shape)
-        fmod   = fblock.mean(axis=0)
-    return fmod - 1
+        dt     = np.linspace( -lc/2 , lc/2 , usamp)
+        tblock = t[:,np.newaxis] + dt
 
+        # super resolution model of transit
+        fblock = occultsmallt(tblock.flatten(),p,c1,c2,c3,c4,tau,b)  
+        fblock = fblock.reshape(tblock.shape)
+        fmod   = fblock.mean(axis=1)
+    return fmod - 1
 
 def MAfast(pL,climb,t,**kwargs):
     """
