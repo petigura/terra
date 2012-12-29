@@ -11,6 +11,7 @@ import re
 
 import numpy as np
 from numpy import ma
+import numpy.random as rand 
 from scipy import optimize
 from scipy import ndimage as nd
 from scipy.stats import ks_2samp
@@ -24,6 +25,8 @@ import os
 from matplotlib.cbook import is_string_like,is_numlike
 import keplerio
 import config
+import emcee
+
 def gridPk(rg,width=1000):
     """
     Grid Peak
@@ -119,8 +122,6 @@ def pkInfo(lc,res,rpk,climb):
     -----
     phase folded time seemed to be too low by 1 cadence.  Track why
     this is.  For now, I've just compensated by tPF+=config.lc
-
-
     """
 
 def t0shft(t,P,t0):
@@ -404,33 +405,94 @@ def at_binPhaseFold(h5,ph,bwmin):
         blcPF = mlab.rec_append_fields(blcPF,k,yapply)
 
     blcPF = blcPF.flatten()
-    h5[ 'blc%iPF%i' % (bwmin,ph) ] = blcPF
-
-def bapply(x,y,bins,func):
-    """
-    Apply an accumulating function on a bin by bin basis.
     
+    d = dict(ph=ph,bwmin=bwmin)
+    name  = 'blc%(bwmin)iPF%(ph)i' % d
+    
+    h5[ name ] = blcPF
+    for k in d.keys():
+        h5[ name ].attrs[k] = d[k]
+    
+def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
+    """
+    Fit MA model binned phase folded light curves.
+
+    xdata : tb  - time at the center of the bin
+    ydata : med - binned median
+    err   : std / sqrt(count). Note this should probably be higher for
+            median, but it just introduces a scalar
+            
     Parameters
     ----------
-    x    : independent var
-    y    : dependent var
-    bins : passed to digitize
-    func : must take an array as input and return a single value
+
+    h5     : h5 file handel
+    bPF    : binned lightcurve dataset 
+    fitgrp : empty group to store fitted parameters
     """
-    
-    assert bins[0]  <= min(x),'range'
-    assert bins[-1] >  max(x),'range'
 
-    bid = np.digitize(x,bins)    
-    nbins   = bins.size-1
-    yapply  = np.zeros(nbins)
+    attrs    = dict(h5.attrs)
+    ph       = bPF.attrs['ph']
+    bPFattrs = dict(bPF.attrs) 
 
-    for id in range(1,nbins):
-        yb = y[bid==id]
-        yapply[id-1] = func(yb)
+    try:
+        p0 = np.sqrt(1e-6*attrs['df'])
+    except:
+        p0 = np.sqrt(attrs['mean'])
 
-    return yapply
+    pL0 = [ p0, attrs['tdur']/2. ,.3  ]
+
+
+
+    t   = bPF['tb']
+    y   = bPF['med']
+    err = bPF['std'] / np.sqrt( bPF['count'] )
+
+    b1  = bPF['count'] ==1 # for 1 value std ==0 which is bad
+    err[b1] = ma.median(ma.masked_invalid(bPF['std']))
+
+    # Find global best fit value
+    trans = TransitModel(t,y,err,attrs['climb'],pL0,fixb=fixb,dt=0)
+    trans.register()
+    pL1 = trans.fit()
+    np.set_printoptions(precision=3)
+    fitgrp['fit'] = trans.MA(pL1,trans.t)
+    fitgrp.attrs['pL%i'  % ph] = pL1
+    fitgrp.attrs['X2_%i' % ph] = trans.chi2(pL1)
+
+    print pL1
+
+    if runmcmc:        
+        print "running MCMC"
+
+        # Burn in
+        nwalkers = 10; ndims = 3
+        p0      = np.vstack([pL1]*nwalkers)
+        p0[:,0] += 1e-4*rand.randn(nwalkers)
+        p0[:,1] += 1e-2*pL1[1]*rand.random(nwalkers)
+        p0[:,2] = 0.8*rand.random(nwalkers) + .1
+
+        sampler = emcee.EnsembleSampler(nwalkers,ndims,trans)
+        nburn = 100
+        pos, prob, state = sampler.run_mcmc(p0, nburn)
+
+        # Real run
+        sampler.reset()
+        niter=500
+        foo = sampler.run_mcmc(pos, niter, rstate0=state)
         
+        uncert = np.percentile(sampler.flatchain,[15,50,85],axis=0)
+        fitgrp.attrs['upL%i' % ph]  = uncert
+        fitgrp['chain'] = sampler.flatchain 
+
+        nsamp = 200
+        ntrial = sampler.flatchain.shape[0]
+        id = np.random.random_integers(0,ntrial-1,nsamp)
+        yL = [ trans.MA(sampler.flatchain[i],trans.t) for i in id ] 
+        yL = np.vstack(yL) 
+        fitgrp['fits'] = yL
+
+
+
 def at_med_filt(h5):
     """Add median detrended lc"""
     lc = h5['mqcal']
@@ -449,7 +511,6 @@ def at_med_filt(h5):
     tf = t + dt
     phase = np.mod(tf+P/4,P)/P-1./4
     x = phase * P
-
     h5['tPF'] = x
 
     # bin up the points
@@ -465,32 +526,6 @@ def get_bins(h5,x,nbpt):
     nbins = np.round( x.ptp()/h5.attrs['tdur']*nbpt ) 
     return np.linspace(x.min(),x.max(),nbins+1)
 
-
-def at_fit(h5):
-    """
-    Fit MA model to PF light curves
-
-    Noise attribute is equivalent to a noise per transit.  
-    noise per point is ~ np.sqrt(twd) * noise
-    """
-    attrs = h5.attrs
-
-    tdur = h5.attrs['mean']
-    mean = h5.attrs['tdur']
-    pL0 = [np.sqrt(attrs['mean']),attrs['tdur']/2.,.3,0]
-    for ph in [0,180]:
-        PF = h5['lcPF%i' % ph][:]
-        def model(pL):
-            return keptoy.MAfast(pL[:3],attrs['climb'],PF['tPF']-pL[-1],usamp=11)
-        def obj(pL):
-            res = (PF['fPF']-model(pL))/(attrs['noise']*attrs['twd'])
-            return (res**2).sum()/PF.size
-        pL1,fopt,iter,warnflag,funcalls  \
-            = optimize.fmin(obj,pL0,full_output=True,disp=False) 
-        fit = model(pL1)
-        h5['lcPF%i' % ph] = mlab.rec_append_fields(PF,'fit',fit)
-        h5.attrs['pL%i' % ph]  = pL1
-        h5.attrs['X2_%i' % ph] = fopt
 
 def at_s2ncut(h5):
     """
@@ -687,6 +722,31 @@ def get_db(h5):
     t = tuple(d.values())
     return np.array([t,],dtype=dtype)
 
+def bapply(x,y,bins,func):
+    """
+    Apply an accumulating function on a bin by bin basis.
+    
+    Parameters
+    ----------
+    x    : independent var
+    y    : dependent var
+    bins : passed to digitize
+    func : must take an array as input and return a single value
+    """
+    
+    assert bins[0]  <= min(x),'range'
+    assert bins[-1] >  max(x),'range'
+
+    bid = np.digitize(x,bins)    
+    nbins   = bins.size-1
+    yapply  = np.zeros(nbins)
+
+    for id in range(1,nbins):
+        yb = y[bid==id]
+        yapply[id-1] = func(yb)
+
+    return yapply
+
 
 def hbinavg(x,y,bins):
     """
@@ -806,6 +866,89 @@ def nT(t,mask,p):
 
     return tbool
 
+
+class TransitModel:
+    """
+    Simple class for fitting transit    
+    """
+    def __init__(self,t,y,err,climb,pL0,fixb=None,dt=0):
+        """
+        t : time array
+        y : flux array
+        err : errors
+        climb : size 4 array with non-linear limb-darkening components
+        pL0 :  [ Rp/Rstar, tau, b]. If fixb is true, the value of b is ignored
+        """
+        self.t     = t
+        self.y     = y
+        self.err   = err
+        self.climb = climb
+        self.pL0   = pL0
+
+        b         = np.vstack( map(np.isnan, [t,y,err]) ) 
+        b         = b.astype(int).sum(axis=0) == 0 
+        self.tm   = t[b]
+        self.ym   = y[b]
+        self.errm = err[b]
+
+        self.dt   = dt
+        self.fixb = fixb
+
+    def register(self):
+        """
+        Starting with pL0, find the optimum displacement
+        """
+        tau0  = self.pL0[1]
+        dt_per_lc = 3
+
+        dtarr = np.linspace(-2*tau0,2*tau0,4*tau0/keptoy.lc*dt_per_lc)
+        def f(dt):
+            self.dt = dt
+            res = optimize.fmin(self.chi2,self.pL0,disp=False,full_output=True) 
+            return res[1]
+
+        X2L = np.array( map(f,dtarr) )
+        self.dt = dtarr[np.argmin(X2L)]
+        print "dt is now",self.dt
+
+    def fit(self):
+        if self.fixb != None:
+            pL0 = self.pL0[:2]
+        else:
+            pL0 = self.pL0
+
+        pL1 = optimize.fmin(self.chi2,pL0,disp=False)
+
+        if self.fixb != None:
+            pL1 = np.hstack( [ pL1[:2], self.fixb ] ) 
+
+        return pL1
+
+    def __call__(self,pL):
+        """Used for emcee MCMC routine"""
+        return -self.chi2(pL)
+
+    def chi2(self,pL):
+        y_model = self.MA(pL,self.tm)
+        resid   = (self.ym - y_model)/self.errm
+        X2 = (resid**2).sum()
+        return X2
+    
+    def MA(self,pL,t):
+        """
+        Mandel Agol Model.
+
+        pL can either have
+           3 parameters : p,tau,b
+           2 parameters : p,tau (b is taken from self.fixb)
+        """
+        if self.fixb != None:
+            pL = np.hstack( [pL, self.fixb] )
+            
+        res = keptoy.MA(pL, self.climb, t-self.dt, usamp=5)
+        if pL[2] > 1:
+            res+=1
+        return res
 
 
 

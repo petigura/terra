@@ -337,7 +337,7 @@ def genMALC(d):
     a = (G*Mstar*P / (4*pi**2))**(1/3.)
     n = 2*pi / P
 
-def MA(pL,climb,t,usamp=11,occultsmallt=occultsmallt_py):
+def MA(pL,climb,t,usamp=11,occultsmallt=occultsmallt_fort):
     """
     Mandel Agol Model
 
