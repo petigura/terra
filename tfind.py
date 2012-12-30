@@ -13,7 +13,7 @@ import numpy as np
 from numpy import ma
 from matplotlib import mlab
 
-from keptoy import *
+#from keptoy import *
 import keptoy
 import keplerio
 import FFA_cy as FFA

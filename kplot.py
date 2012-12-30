@@ -71,8 +71,8 @@ def plot_diag(pk):
     cax.yaxis.set_visible(False)
     at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
-    df = pk.attrs['pL0'][0]**2
-    plt.ylim(-5*df,3*df)
+    #df = pk.attrs['pL0'][0]**2
+    #plt.ylim(-5*df,3*df)
 
     plt.sca(axStack)
     plotSES(pk)
@@ -134,8 +134,8 @@ def plotPF(pk,ph):
         pass
 
 def plotSES(pk):
-    df = pk.attrs['pL0'][0]**2
-    sketch.stack(pk.t,pk.dM*1e6,pk.attrs['P'],pk.attrs['t0'],step=3*df*1e6)
+    #df = pk.attrs['pL0'][0]**2
+    #sketch.stack(pk.t,pk.dM*1e6,pk.attrs['P'],pk.attrs['t0'],step=3*df*1e6)
     plt.autoscale(tight=True)
 
 def plotGrid(pk):

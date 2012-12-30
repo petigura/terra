@@ -211,8 +211,13 @@ def DV(h5,pardict):
     tval.findPeak(h5)
     tval.conv(h5)
     tval.checkHarmh5(h5)
-    tval.at_phaseFold(h5)
-    tval.at_fit(h5)
+    tval.at_phaseFold(h5,0)
+    tval.at_phaseFold(h5,180)
+
+    tval.at_binPhaseFold(h5,0,10)
+    fitgrp = h5.create_group('fit')
+    tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
+
     tval.at_med_filt(h5)
     tval.at_s2ncut(h5)
     tval.at_SES(h5)
