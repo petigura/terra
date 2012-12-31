@@ -38,7 +38,7 @@ args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['skic'] = ['%09d' %s for s in simPar['skic'] ]
 if matplotlib.cbook.is_numlike(simPar['sid']):
-    # Assume we're mean the skic
+    # Assume we mean skic
     simPar['sid'] = simPar['skic']
 
 dL = []

@@ -28,24 +28,40 @@ nessflds = {
 
 def terra(pardict,startDV=False):
     """
-    
+    TERRA
+
+    Wrapper for entire pipeline.
+
     Parameters
-    ----------
-    
+    ----------    
     pardict : All the attributes are controlled through this dictionary.
+    startDV : Stars from .grid.h5 file
+
+    Returns
+    -------
     out     : Dictionary of scalars. Must contain id key.
     
     """
     pardict = dictSetup(pardict)
+    pardict_print(pardict)
+
     rawfile = pardict['rawfile']
-    if startDV==True:
-        h5outfile = pardict['storeGrid']
-    else:
+    if startDV!=True:
         h5outfile = 'temp.h5'
 
-    with h5py.File( rawfile,'r+' ) as h5raw,\
-            prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:
-        out = terraInner(h5raw,h5out,pardict,startDV=startDV)
+        with h5py.File( rawfile,'r+' ) as h5raw,\
+                prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:            
+            ppgrid(h5raw,h5out,pardict)
+            out = DVout(h5out,pardict)            
+            if pardict.has_key('pngGrid'):
+                plot(h5out,pardict)
+
+    else:
+        h5outfile = pardict['storeGrid']
+        with h5py.File(h5outfile,driver='core',backing_store=False) as h5out:
+            out = DVout(h5out,pardict)
+            if pardict.has_key('pngGrid'):
+                plot(h5out,pardict)
 
     out['id'] = pardict['id']
     return out
@@ -78,10 +94,9 @@ def dictSetup(pardict0):
         assert pardict.has_key('gridfile'),'must point to full res file'
     return pardict
 
-def terraInner(h5raw,h5out,pardict,startDV=False):
-    """
-    DV - start from DV
-    """
+def pardict_print(pardict):
+    """Print nicely formatted summary of input/output files"""
+
     print "Run type:  %(type)s" % pardict
     print "\ninput files:"
     print "-"*50
@@ -98,53 +113,59 @@ def terraInner(h5raw,h5out,pardict,startDV=False):
         print pardict['pngStore']
     print ""
 
-    h5out.attrs['P1']      = pardict['P1']
-    h5out.attrs['P2']      = pardict['P2']
-    h5out.attrs['P1_FFA']  = pardict['P1_FFA']
-    h5out.attrs['P2_FFA']  = pardict['P2_FFA']
 
+def ppgrid(h5raw,h5out,pardict):
+    """
+    Prepro and Grid
 
-    if startDV!=True: 
-        # Raw photometry
-        h5out.copy(h5raw['raw'],'raw')
-        if pardict['type'].find('mc') != -1:
-            inj(h5out,pardict)
+    """
 
-        # Perform detrending and calibration.
-        h5out.mask()
-        h5out.dt()
-        h5out.attrs['svd_folder'] = pardict['svd_folder']
-        h5out.cal()
-        h5out.sQ()
+    for k in 'P1,P2,P1_FFA,P2_FFA'.split(','):
+        h5out.attrs[k] = pardict[k]
 
-        # Grid search and outlier rejection
-        if pardict['type'] == 'mcS':
-            gridShort(h5out,pardict)
-        else:
-            tfind.grid(h5out) 
+    # Raw photometry
+    h5out.copy(h5raw['raw'],'raw')
+    if pardict['type'].find('mc') != -1:
+        inj(h5out,pardict)
 
-        tfind.itOutRej(h5out)
+    # Perform detrending and calibration.
+    h5out.mask()
+    h5out.dt()
+    h5out.attrs['svd_folder'] = pardict['svd_folder']
+    h5out.cal()
+    h5out.sQ()
 
-        if pardict.has_key('storeGrid'):
-            with h5plus.File(pardict['storeGrid'],mode='c') as h5store: 
-                groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
-                for g in groups:
-                    h5store.copy(h5out[g],g)
-                h5store['mqcal'] = h5out['mqcal'][:]
+    # Grid search and outlier rejection
+    if pardict['type'] == 'mcS':
+        gridShort(h5out,pardict)
+    else:
+        tfind.grid(h5out) 
 
+    tfind.itOutRej(h5out)
 
+    if pardict.has_key('storeGrid'):
+        with h5plus.File(pardict['storeGrid'],mode='c') as h5store: 
+            groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
+            for g in groups:
+                h5store.copy(h5out[g],g)
+            h5store['mqcal'] = h5out['mqcal'][:]
+
+def plot(h5out,pardict):
+    import matplotlib
+    matplotlib.use('Agg')
+    import kplot
+    from matplotlib.pylab import plt
+    kplot.plot_diag(h5out)
+    plt.gcf().savefig(pardict['pngGrid'])
+
+def DVout(h5out,pardict):
     # DV
     DV(h5out,pardict)
-
-    if pardict.has_key('pngGrid'):
-        import matplotlib
-        matplotlib.use('Agg')
-        import kplot
-        from matplotlib.pylab import plt
-        kplot.plot_diag(h5out)
-        plt.gcf().savefig(pardict['pngGrid'])
-
     out = tval.flatten(h5out,h5out.noDBRE)
+    pL  = h5out['fit'].attrs['upL0'][1]
+    out['p0']   = pL[0]
+    out['tau0'] = pL[1]
+    out['b0']   = pL[2]
     return out
 
 def get_reslc(h5):
@@ -172,18 +193,6 @@ def findItMax(h5):
     itL = [i[0] for i in h5.items() if i[0].find('it')!=-1]
     itMax = np.sort(itL)[-1]        
     return itMax
-
-def PP(h5,pardict):
-    """
-    Preprocessing
-
-    Parameters
-    ----------
-    h5 : h5plus object
-
-
-    """
-
 
 def DV(h5,pardict):
     """
