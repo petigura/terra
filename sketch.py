@@ -65,6 +65,55 @@ def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50,**kwargs):
     axvline(0,alpha=.3)
     axvline(.5,alpha=.3)
 
+
+def stack2(xL,yL,wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
+    """
+    Transform list of data (must be roughly equally sized in absisca
+    and ordiate) nto a plotable grid.
+
+    xL     : list of X values
+    yL     : list of Y values
+    wAx    : Width of each column in axis units
+    wData  : Width of each column in data units (used to transform data to axis)
+    hAx    : Height of each row in axis units
+    hData  : Corresponding height in data units
+    hStepData : Spacing of traces in data units
+    
+    """
+
+    t2ax = wAx / wData
+    f2ax = hAx / hData
+
+    nCols = int(1 / wAx)
+
+    nRows = int((1 - f2ax*hData) / (f2ax*hStepData))
+    wPad   = (1 - nCols * wAx)/(nCols+1.)
+
+    nPlots = nRows * nCols
+    i = 0 
+    xLout = []
+    yLout = []
+    while (i < nPlots) & (i < len(xL)):
+        x = xL[i]
+        y = yL[i]
+
+        col = i / nRows
+        row = i - col*nRows
+
+        x0 = col*wAx + wPad*(col+1)
+        y0 = 1 - hStepData * f2ax * row
+
+        ax_x = t2ax * x + x0
+        ax_y = f2ax * y + y0
+
+        xLout.append(ax_x)
+        yLout.append(ax_y)
+
+        i+=1
+    return xLout,yLout
+
+
+
 def PF(t,y,P,t0,tdur):
     """
     Plot Phase-folded light curve
