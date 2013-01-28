@@ -364,8 +364,14 @@ def qStartStop():
     rL.sort()
     return rL
 
-
-
-
+def t2q(t):
+    """
+    Take a list of times and assign them to specific quarters
+    """
+    rQ = qStartStop()
+    qarr  = np.zeros(t.size)-1
+    for r in rQ:
+        qarr[ (t > r['tstart']) & (t < r['tstop']) ] = r['q']
+    return qarr
 
 

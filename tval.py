@@ -169,25 +169,36 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
     tdur  : transit duration
     cfrac : continuum defined as points between tdur * (0.5 + cpad)
             and tdur * (0.5 + cpad + cfrac) of transit midpoint cpad
+    cpad  : how far away from the transit do we start the continuum
+            region in units of tdur.
+
 
     Returns
     -------
-    tLbl     : index of the candence closest to the transit.
-    tRegLbl  : numerical labels for transit region starting at 0
-    cRegLbl  : numerical labels for continuum region starting at 0
+
+    A record array the same length has the input. Most of the indecies
+    are set to -1 as uninteresting regions. If a region is interesting
+    (transit or continuum) I label it with the number of the transit
+    (starting at 0).
+
+    - tLbl      : Index closest to the center of the transit
+    - tRegLbl   : Transit region
+    - cRegLbl   : Continuum region
+    - totRegLbl : Continuum region and everything inside
 
     Notes
     -----
     tLbl might not be the best way to find the mid transit index.  In
     many cases, dM[rec['tLbl']] will decrease with time, meaning there
     is a cumulative error that's building up.
+
     """
 
     t = t.copy()
     t += t0shft(t,P,t0)
 
-    names = ['tRegLbl','cRegLbl','tLbl']
-    rec  = np.zeros(t.size,dtype=zip(names,[int]*3) )
+    names = ['totRegLbl','tRegLbl','cRegLbl','tLbl']
+    rec  = np.zeros(t.size,dtype=zip(names,[int]*len(names)) )
     for n in rec.dtype.names:
         rec[n] -= 1
     
@@ -199,17 +210,19 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
         it   = t0dt.argmin()
         bt   = t0dt < 0.5
         bc   = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
+        btot = t0dt < 0.5 + cpad + cfrac
         
         rec['tRegLbl'][bt] = iTrans
         rec['cRegLbl'][bc] = iTrans
         rec['tLbl'][it]    = iTrans
+        rec['totRegLbl'][btot] = iTrans
 
         iTrans += 1 
         tmdTrans = iTrans * P
 
     return rec
 
-def LDT(t,fm,cLbl,tLbl,verbose=False):
+def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
     """
     Local Detrending
 
@@ -220,51 +233,55 @@ def LDT(t,fm,cLbl,tLbl,verbose=False):
 
     Parameters
     ----------
-    t    : time
-    fm   : masked flux array
-    cLbl : Labels for continuum regions.  Computed using `transLabel`
-    cLbl : Labels for transit regions.  Computed using `transLabel`
+    t      : time
+    fm     : masked flux array
+    recLbl : record array with following labels
+             - cRegLbl   : Region to fit the continuum
+             - totRegLbl : Entire region to detrend.
+             - tLbl   : Middle of transit
 
-    verbose
-         : list bad transit.
+    nCont  : Number of continuum points before and after transit in
+             order to use the transit
 
     Returns
     -------
     fldt : local detrended flux
     """
-
     fldt    = ma.masked_array( np.zeros(t.size) , True ) 
     assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
-
+    cLbl = recLbl['cRegLbl']
+#   import pdb;pdb.set_trace()
     for i in range(cLbl.max() + 1):
         # Points corresponding to continuum region.
         bc = (cLbl == i ) 
-        fc = fm[bc]       
+
+        fc = fm[bc]  # masked array
         tc = t[bc]
 
         # Identifying the detrending region.
-        bldt = (t > tc[0]) & (t < tc[-1])
+        bldt = (recLbl['totRegLbl']==i)
         tldt = t[bldt]
 
         # Times of transit
-        bt = (tLbl == i)  
+        bt = (recLbl['tLbl'] == i )
         tt = t[bt]
 
         # There must be a critical number of valid points before and
         # after the transit.
-        ncBefore = fc[ tc < tt[0] ].count()  
-        ncAfter  = fc[ tc < tt[-1] ].count()  
+        ncBefore = fc[ tc < tt ].count()  
+        ncAfter  = fc[ tc > tt ].count()  
 
-        if (ncBefore > 2) & (ncAfter > 2) :        
-            shft = - np.mean(tc)
-            tc   -= shft 
-            tldt -= shft
+        if (ncBefore >= nCont) & (ncAfter >= nCont) :        
+            tc   -= tt
+            tldt -= tt
 
             tc = tc[~fc.mask]
             fc = fc[~fc.mask]
 
-            pfit = np.polyfit(tc,fc,1)
-            fldt[bldt] = fm[bldt] - np.polyval(pfit,tldt)
+            pfit = np.polyfit(tc,fc,deg)
+            fcontfit = np.polyval(pfit,tldt)
+
+            fldt[bldt] = fm[bldt] - fcontfit
             fldt.mask[bldt] = fm.mask[bldt]
         elif verbose==True:
             print "no data for trans # %i" % (i)
@@ -273,7 +290,7 @@ def LDT(t,fm,cLbl,tLbl,verbose=False):
         
     return fldt
 
-def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
+def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
     """
     Phase Fold
     
@@ -287,18 +304,20 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     fm   : masked flux array
     P    : Period (days)
     t0   : epoch (days)
-    tudr : transit width (days)
+    tdur : transit width (days)
+
+
+    cfrac, cpad : passed to transLabel
+    deg         : passed to LDT
+    deg  : degree of the polynomial fitter
 
     Returns
     -------
     tPF  : Phase folded time.  0 corresponds to mid transit.
     fPF  : Phase folded flux.
     """
-    rec = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
-    tLbl = rec['tRegLbl']
-    cLbl = rec['cRegLbl']
-    fldt = LDT(t,fm,cLbl,tLbl) # full size array
-
+    recLbl = transLabel(t,P,t0,tdur,cfrac=cfrac,cpad=cpad)
+    fldt = LDT(t,fm,recLbl,deg=LDT_deg,nCont=nCont) # full size array
     tm = ma.masked_array(t,fldt.mask,copy=True)
     dt = t0shft(t,P,t0)
     tm += dt
@@ -313,7 +332,6 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1):
     bg  = ~np.isnan(lcPF['tPF']) & ~np.isnan(lcPF['f'])
     lcPF = lcPF[bg]    
     lcPF['tPF'] += config.lc
-
     return lcPF
 
 # Must add the following attributes
@@ -366,13 +384,19 @@ def at_phaseFold(h5,ph):
          mqcal
     """
     attrs = h5.attrs
+
     lc = h5['mqcal'][:]
     t  = lc['t']
     fm = ma.masked_array(lc['f'],lc['fmask'])
 
+    keys  = ['LDT_deg','cfrac','cpad','nCont']
+    kw    = {}
+    for k in keys:
+        kw[k] = attrs[k]
+
     P,tdur = attrs['P'],attrs['tdur']
     t0     = attrs['t0'] + ph / 360. * P 
-    h5['lcPF%i' % ph] = PF(t,fm,P,t0,tdur)
+    h5['lcPF%i' % ph] = PF(t,fm,P,t0,tdur,**kw)
 
 def at_binPhaseFold(h5,ph,bwmin):
     """

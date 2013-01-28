@@ -20,9 +20,11 @@ if args.fields==None:
 else:
     fields=args.fields
 
+lc.attrs['svd_folder'] = args.svd_folder
+
 for cmd in args.cmds:
     if cmd=='cal':
-        eval_str = "lc.%s('%s')" % (cmd,args.svd_folder)
+        eval_str = "lc.%s()" % (cmd)
     elif cmd=='raw':
         eval_str = "lc.%s(args.fits,fields=fields)" % (cmd)
     else:

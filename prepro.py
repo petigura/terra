@@ -152,25 +152,34 @@ class Lightcurve(h5plus.File):
 
         Look at all of the groups. Zip all of the column together and
         stich the quarters together.
+
+        Adds the mqcal dataset to the h5 directory.
         """
         groups = [ i[1] for i in self.items() ]
-        groups = [g for g in groups if g.name!='/mqcal']
-
+        groups = [ g for g in groups if g.name!='/mqcal' ]
         quarters = [i[0] for i in groups[0].items()]
-        
+
         rL = []
         for q in quarters:
             dsL = rec_zip([ g[q] for g in groups ])
-            rL.append(dsL)
-
-        rLC = keplerio.rsQ(rL)
+            rL.append(dsL)            
+        
+        if len(quarters)==1:
+            print "sQ: Only 1 quarter"
+            rLC = rL[0]
+        else:
+            rLC = keplerio.rsQ(rL)
 
         binlen = [3,6,12]
-        for b in binlen:
-            bcad = 2*b
-            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
-            dM = tfind.mtd(rLC['t'],fcal,bcad)
-            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+        try:
+            list(rLC.dtype.names).index('fcal')
+            for b in binlen:
+                bcad = 2*b
+                fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
+                dM = tfind.mtd(rLC['t'],fcal,bcad)
+                rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+        except ValueError:
+            pass
         self['mqcal'] = rLC
 
 def rdt(r0):

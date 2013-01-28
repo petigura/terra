@@ -35,6 +35,13 @@ class File(h5py.File):
          group = h5py.File.create_group(self,name)
       return group
 
+def add_attrs(h5,d):
+   """
+   Add elements of a dictionary as attributes to h5 file.
+   """
+   for k in d.keys():
+      h5.attrs[k] = d[k]
+
 def compChunks(elsize,ncolmax):
    """
    Compute Chunck Size

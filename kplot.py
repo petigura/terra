@@ -16,6 +16,7 @@ from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 import terra
 import tval
+import keplerio
 import sketch
 import config
 import numpy as np
@@ -168,24 +169,27 @@ def morton(pk):
     t0 = pk.attrs['t0']
     df = pk.attrs['df']
 
-
     fig = plt.figure(figsize=(20,12))
-    gs = GridSpec(4,4)
+    gs = GridSpec(4,3)
 
-    axPF0      = fig.add_subplot(gs[0,0:2])
-    axPF180    = fig.add_subplot(gs[0,2:],sharex=axPF0,sharey=axPF0)
+    axPF0   = fig.add_subplot(gs[0,0])
+    axPF180 = fig.add_subplot(gs[0,1],sharey=axPF0)
+    axPFSea = fig.add_subplot(gs[0,2],sharey=axPF0)
+
     axStack    = fig.add_subplot(gs[1:,:])
 
     for ax,ph in zip([axPF0,axPF180],[0,180]):
-        plt.sca(ax)
-        
+        plt.sca(ax)        
+
         PF  = pk['lcPF%i'%ph]
         bPF = pk['blc30PF%i' % ph ]
+
         plt.plot(PF['tPF'],PF['f'],',',color='k')
         plt.plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
+        xl = max(np.abs(PF['tPF']))
+        plt.xlim(np.array([-1,1])*xl )
 
     cax = plt.gca()
-    cax.xaxis.set_visible(False)
     cax.yaxis.set_visible(False)
     at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
@@ -199,6 +203,38 @@ def morton(pk):
     plt.ylabel('flux')
     plt.ylim(-3*df*1e-6,2*df*1e-6)
 
+
+
+    plt.sca(axPFSea)
+    PF = pk['lcPF0'][:]
+    qarr = keplerio.t2q( PF['t'] ) 
+
+
+    colors = ['k','Tomato','c','m']
+    for season in range(4):
+        try:
+            bSeason = (qarr>=0) & (qarr % 4 == season)
+            x = PF['tPF'][bSeason]
+            y = PF['f'][bSeason]
+
+            bw = 10. / 60. /24.
+            xmi,xma = x.min(),x.max()
+            nbins    = xma-xmi
+            nbins = int( np.round( (xma-xmi)/bw ) )
+            bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+            tb    = 0.5*(bins[1:]+bins[:-1])
+            yb = tval.bapply(x,y,bins,np.median)
+            plt.plot(tb,yb,color=colors[season],label='%i' % season)
+        except:
+            print "problem with season plot"
+            pass
+
+    at = AnchoredText('Transit by Season',prop=tprop,frameon=True,loc=2)
+    cax = plt.gca()
+    cax.legend(loc='lower right')
+    cax.yaxis.set_visible(False)
+    cax.add_artist(at)
+
     plt.sca(axStack)
     f = pk['mqcal']['f']
     t = pk['mqcal']['t']
@@ -210,5 +246,7 @@ def morton(pk):
     plt.xlabel('phase')
     plt.ylabel('flux (ppm)')
 
-    plt.tight_layout()
+
+#    plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
+
