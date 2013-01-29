@@ -16,7 +16,7 @@ from matplotlib import mlab
 #from keptoy import *
 import keptoy
 import keplerio
-import FFA_cy as FFA
+import FFA_cext as FFA
 
 from config import *
 

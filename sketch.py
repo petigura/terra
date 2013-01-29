@@ -66,7 +66,26 @@ def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50,**kwargs):
     axvline(.5,alpha=.3)
 
 
-def stack2(xL,yL,wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
+def gridTraceSetup(wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
+    """
+
+    """
+    out = {}
+    out['t2ax']   = wAx / wData
+    f2ax          = hAx / hData
+    nCols         = int(1 / wAx)
+    nRows         = int((1 - f2ax*hData) / (f2ax*hStepData))
+    out['wPad']   = (1 - nCols * wAx)/(nCols+1.)
+    out['nPlots'] = nRows * nCols
+
+    out['f2ax']  = f2ax
+    out['nCols'] = nCols
+    out['nRows'] = nRows
+    out['wAx']   = wAx
+    out['hStepData']  = hStepData
+    return out
+
+def gridTrace(xL,yL,**kw):
     """
     Transform list of data (must be roughly equally sized in absisca
     and ordiate) nto a plotable grid.
@@ -78,18 +97,14 @@ def stack2(xL,yL,wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
     hAx    : Height of each row in axis units
     hData  : Corresponding height in data units
     hStepData : Spacing of traces in data units
-    
     """
-
-    t2ax = wAx / wData
-    f2ax = hAx / hData
-
-    nCols = int(1 / wAx)
-
-    nRows = int((1 - f2ax*hData) / (f2ax*hStepData))
-    wPad   = (1 - nCols * wAx)/(nCols+1.)
-
-    nPlots = nRows * nCols
+    t2ax   = kw['t2ax']
+    f2ax   = kw['f2ax']
+    nRows  = kw['nRows']
+    wPad   = kw['wPad']
+    nPlots = kw['nPlots']
+    wAx    = kw['wAx']
+    hStepData = kw['hStepData']
     i = 0 
     xLout = []
     yLout = []
@@ -110,6 +125,7 @@ def stack2(xL,yL,wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
         yLout.append(ax_y)
 
         i+=1
+
     return xLout,yLout
 
 

@@ -396,7 +396,38 @@ def at_phaseFold(h5,ph):
 
     P,tdur = attrs['P'],attrs['tdur']
     t0     = attrs['t0'] + ph / 360. * P 
-    h5['lcPF%i' % ph] = PF(t,fm,P,t0,tdur,**kw)
+
+    PF   = PF(t,fm,P,t0,tdur,**kw)
+    qarr = keplerio.t2q( PF['t'] ).astype(int)
+    PF   = mlab.rec_append_fields(PF,'qarr',qarr)
+    h5['lcPF%i' % ph] = PF
+
+def at_Season(h5):
+    """
+    Phase-Folded and binned plot on a season by season basis
+    """
+    PF = h5['lcPF0'][:]
+    qarr = PF['qarr']
+
+    for season in range(4):
+        try:
+            bSeason = (qarr>=0) & (qarr % 4 == season)
+            x = PF['tPF'][bSeason]
+            y = PF['f'][bSeason]
+            bw = 30. / 60. /24.
+            xmi,xma = x.min(),x.max()
+            nbins    = xma-xmi
+            nbins = int( np.round( (xma-xmi)/bw ) )
+            bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+            tb    = 0.5*(bins[1:]+bins[:-1])
+            yb = tval.bapply(x,y,bins,np.median)
+            dtype = [('t',float),('fmed',int)]
+            r    = np.array(zip(tb,yb),dtype=dtype )
+            h5['PF_Season%i' % season] = r
+
+        except:
+            print "problem with season %i " % season
+            pass
 
 def at_binPhaseFold(h5,ph,bwmin):
     """
@@ -660,6 +691,15 @@ def at_autocorr(h5):
     h5['lag'] = lag
     h5['corr'] = corr
     h5.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
+
+
+
+
+
+
+
+
+
 
 ######
 # IO #
