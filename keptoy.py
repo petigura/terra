@@ -7,7 +7,7 @@ import occultsmall
 
 from config import *
 
-def a2tdur(a0):
+def a2tdur(a0,Rstar=1.,Mstar=1.):
     """
     Calculate the duration of transit assuming:
     
@@ -21,13 +21,15 @@ def a2tdur(a0):
     a = a0.copy()
     a *= 1.50e13 # cm
     
-    P = sqrt(4*pi**2*a**3/G/M_sun) # seconds    
-    P /= 3600*24 # period in days
-    
-    tdur = R_sun * P / pi /a  # days
+    M = Mstar*M_sun
+    R = Rstar*R_sun
+
+    P = sqrt(4*pi**2*a**3/G/M) # seconds    
+    P /= 3600*24. # period in days    
+    tdur = R * P / pi /a  # days
     return tdur
 
-def P2a(P0):
+def P2a(P0,Mstar=1):
     """
     Given the period of planet (days) what is its semimajor axis assuming:
 
@@ -36,9 +38,10 @@ def P2a(P0):
     P0 = array(P0)
     P = P0.copy()
     P *= 3600*24 # seconds
-    a = (G*M_sun / (4*pi**2) * P**2)**(1/3.) # cm
-    a /= 1.50e13 # AU
-    
+
+    M = Mstar*M_sun
+    a = (G*M / (4*pi**2) * P**2)**(1/3.) # cm
+    a /= 1.50e13 # AU    
     return a
 
 def ntpts(P,tdur,tbase,cad):

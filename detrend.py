@@ -250,5 +250,16 @@ def objCBV(p,f,ferr,bv):
 
 def modelCBV(p,bv):
    return np.dot(p,bv)
-   
+
+
+def mmedian_filter(F,W,s):
+    """
+    Run a median filter on a array with masked values. 
+    I'll interpolate between with missing values, not quite a true median filter
+    """
+    x  = np.arange(F.size)
+    xp = x[W > 0]
+    fp = F[W > 0]
+    Fi = np.interp(x,xp,fp)
+    return nd.median_filter(Fi,size=s)   
 

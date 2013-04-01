@@ -17,6 +17,7 @@ from matplotlib import mlab
 import keptoy
 import keplerio
 import FFA_cext as FFA
+import FBLS
 
 from config import *
 
@@ -419,6 +420,7 @@ def fold(dM,Pcad0):
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
 
+
 def epmarg(t0cad,Pcad,meanF,countF):
     """
     Epoch Marginalize
@@ -470,3 +472,191 @@ def cadCount(cad,res):
     cadLL = np.hstack(cadLL)
     c,b = np.histogram(cadLL,bins=np.linspace(cadmi,cadma+1,cad.size+1))
     return c
+
+import FBLS_cext as FBLS
+def tdpep2(t,fm,Pcad0,twdG,noiseG):
+    """
+
+    The cubes are 3D datasets with 
+    sCube[i,j,k] 
+    - i Specifies twdG
+    - j Specifies period
+    - k specifies epoch
+
+    """
+    assert fm.fill_value ==0
+
+    # Determine the grid of periods that corresponds to integer
+    # multiples of cadence values
+
+    ntwd  = len(twdG)
+    fmW = FFA.XWrap2(fm,Pcad0,pow2=True)
+    mask = (~fmW.mask).astype(float)
+    fmW.fill_value=0
+
+
+    # Period grid
+    M   = fmW.shape[0]  # number of rows
+    idRow = np.arange(M,dtype=int)       # id of each row
+    Pcad  = Pcad0 + idRow.astype(float) / (M - 1)
+
+    # epoch grid
+    idCol = np.arange(Pcad0,dtype=int)   # id of each column    
+
+    XsumP  = FFA.FFA(fmW.filled()).astype(float)
+    XcntP  = FFA.FFA(mask).astype(float)
+
+#    resL = []
+    return FBLS.cmaxDelTt0(XsumP,XcntP,Pcad0,twdG,noiseG,twdG.size)
+#        resL.append(res)
+        
+#    names = 's2nMa,iMa,kMa'.split(',')
+#    types = [float,int,int]
+#    res = np.array(resL,dtype=zip(names,types)  )
+
+#    return res
+
+
+def noise(t,fm,twdG):
+    # Constant estimation fof the noise for deltaT
+    noiseG = []
+    for twd in twdG:
+        dM     = mtd(t,fm,twd)
+        noiseG.append( ma.median( ma.abs(dM) )  )
+    noiseG = np.array(noiseG)
+    return noiseG
+
+import config
+import keptoy
+from keptoy import P2a,a2tdur
+
+def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
+    """
+    Periodogram Parameters
+
+    P1  - Minimum period
+    P2  - Maximum period
+    Rstar - Guess of stellar radius 
+    Mstar - Guess of stellar mass (used with Rstar to comput expected duration
+    ftdur - Fraction of expected maximum tranit duration to search over.
+    """
+
+    fLastOff = 0.25 # Choose period resolution such that the transits
+                    # line up to better than fLastOff * tdur
+
+    Plim  = np.array([P1,P2])
+
+    alim = P2a(Plim,Mstar=Mstar )
+    tdurlim = a2tdur( alim , Mstar=Mstar,Rstar=Rstar ) * ftdur
+
+    qlim = tdurlim / Plim
+    qmi,qma =  min(qlim)*min(ftdur) , max(qlim)*max(ftdur)
+    fmi = 1 / P2
+    df = fmi * fLastOff * min(tdurlim)  / tbase 
+    nf = int((1/P1 - 1/P2) / df)
+    farr = fmi + np.arange(nf)*df        
+    delTlim = np.round(tdurlim / config.lc).astype(int)
+    Pc = np.sqrt(P1*P2) # central period.
+    nb = int(Pc / config.lc)
+
+    Pcad1 = int(P1/config.lc)
+    Pcad2 = int(P2/config.lc)
+    d = dict( qmi=qmi, qma=qma, fmi=fmi, nf=nf, df=df, farr=farr,nb=nb ,
+              delT1=delTlim[0], delT2=delTlim[1], Pcad1=Pcad1, Pcad2=Pcad2 )
+    return d
+
+def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
+    # Split the periods into logrithmically spaced segments
+    PlimArr = logspace( log10(P1) , log10(P2),nseg+1  )
+    dL = []
+    for i in range(nseg):
+        P1 = PlimArr[i]
+        P2 = PlimArr[i+1]
+        print P1,P2,tbase
+        d = pgramPars(P1,P2,tbase,Rstar=Rstar,Mstar=Rstar,ftdur=ftdur)
+        d['P1'] = P1
+        d['P2'] = P2
+        dL.append(d)
+    return dL
+
+import FBLS_cy
+import time
+import pandas
+
+filtWid = np.array([5,10,20]) # lists at which to compute filters
+def tryalgs(FdtL,W,alg,d):
+    starttime=time.time()
+    ver = True
+    Wmi = filtWid[filtWid-d['delT1'] >= 0][0]
+    Wma = filtWid[filtWid-d['delT2'] >= 0][0]
+    delTarr = filtWid[(filtWid >= Wmi) & (filtWid <= Wma)]
+    ndelT = len(delTarr)
+    # run the search over different time scales.
+
+    FOM = []
+    for i in range(ndelT):
+        if i==0:
+            delT1 = d['delT1']
+        else:
+            delT1 = delTarr[i-1]
+        delT2 = delTarr[i]
+        # Load in the appropriate flux time series
+
+        Fdt = FdtL['%i' % delT2]
+
+        Pcad,out = FBLS(Fdt,W,alg,d['Pcad1'],d['Pcad2'],delT1,delT2)
+        df = pandas.DataFrame(out)
+        FOM.append(np.array(df[0]))
+
+    Parr = Pcad*config.lc
+    FOM = np.max(np.vstack(FOM),axis=0)
+
+    stoptime = time.time()
+
+
+    if ver:
+        print "total execution time %.2f " % (stoptime-starttime)
+
+    return Parr,FOM
+
+
+def FBLS(F,W,alg,d):
+
+    """
+    algs can be FBLS_SNR, FBLS_SRCC, FBLS_SRpos
+    
+    """
+    outL = []
+    Pcad = np.array([])
+    for Pcad0 in range(d['Pcad1'],d['Pcad2']+1):
+        s0W = FFA.XWrap2(W,Pcad0,pow2=True)
+        s0W.fill_value=0
+        s1W = FFA.XWrap2(F,Pcad0,pow2=True)
+        s1W.fill_value=0
+
+        ss0 = FFA.FFA(s0W.filled()).astype(float)
+        ss1 = FFA.FFA(s1W.filled()).astype(float)
+
+        if alg=='FBLS_SNR':
+            s2W = FFA.XWrap2(F**2,Pcad0,pow2=True)
+            s2W.fill_value=0
+            ss2 = FFA.FFA(s2W.filled()).astype(float)
+
+        ss0 = FFA.FFA(s0W.filled()).astype(float)
+        ss1 = FFA.FFA(s1W.filled()).astype(float)
+        M     = s0W.shape[0]  # number of rows
+        idRow = np.arange(M,dtype=int)       # id of each row
+        Pcad  = np.append(Pcad, Pcad0 + idRow.astype(float) / (M - 1))
+        for i in range(ss0.shape[0]):
+            if alg=='FBLS_SRCC':
+                out = FBLS_cy.FBLS_SRCC(ss1[i],ss0[i],
+                                        d['qmi'],d['qma'],ss0[i].size)
+            elif alg=='FBLS_SRpos':
+                out = FBLS_cy.FBLS_SRpos(ss1[i],ss0[i],
+                                         d['delT1'],d['delT2'],ss0[i].size)
+            elif alg=='FBLS_SNR':
+                out = FBLS_cy.FBLS_SNR(ss1[i],ss0[i],ss2[i],
+                                       d['delT1'],d['delT2'],ss0[i].size)
+            outL.append(out)
+
+    return Pcad,outL
