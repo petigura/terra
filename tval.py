@@ -383,8 +383,9 @@ def at_phaseFold(h5,ph):
     h5 - h5 file with the following columns
          mqcal
     """
-    attrs = h5.attrs
 
+    attrs = h5.attrs
+    
     lc = h5['mqcal'][:]
     t  = lc['t']
     fm = ma.masked_array(lc['f'],lc['fmask'])
@@ -397,10 +398,10 @@ def at_phaseFold(h5,ph):
     P,tdur = attrs['P'],attrs['tdur']
     t0     = attrs['t0'] + ph / 360. * P 
 
-    PF   = PF(t,fm,P,t0,tdur,**kw)
-    qarr = keplerio.t2q( PF['t'] ).astype(int)
-    PF   = mlab.rec_append_fields(PF,'qarr',qarr)
-    h5['lcPF%i' % ph] = PF
+    rPF   = PF(t,fm,P,t0,tdur,**kw)
+    qarr = keplerio.t2q( rPF['t'] ).astype(int)
+    rPF   = mlab.rec_append_fields(rPF,'qarr',qarr)
+    h5['lcPF%i' % ph] = rPF
 
 def at_Season(h5):
     """
@@ -408,7 +409,6 @@ def at_Season(h5):
     """
     PF = h5['lcPF0'][:]
     qarr = PF['qarr']
-
     for season in range(4):
         try:
             bSeason = (qarr>=0) & (qarr % 4 == season)
@@ -420,8 +420,8 @@ def at_Season(h5):
             nbins = int( np.round( (xma-xmi)/bw ) )
             bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
             tb    = 0.5*(bins[1:]+bins[:-1])
-            yb = tval.bapply(x,y,bins,np.median)
-            dtype = [('t',float),('fmed',int)]
+            yb = bapply(x,y,bins,np.median)
+            dtype = [('t',float),('fmed',float)]
             r    = np.array(zip(tb,yb),dtype=dtype )
             h5['PF_Season%i' % season] = r
 

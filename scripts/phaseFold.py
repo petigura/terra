@@ -1,4 +1,3 @@
-#!/usr/common/usg/python/2.7.1-20110310/bin/python
 from argparse import ArgumentParser
 import pandas
 import h5py
@@ -32,6 +31,7 @@ else:
 
 morton.phaseFoldKOI(row)
 print "created: %(pkname)s" % row
+
 
 with h5py.File(row['pkname']) as pk:
     kplot.morton(pk)

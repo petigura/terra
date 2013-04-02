@@ -147,3 +147,5 @@ tdur - %(tdur).2f
         tval.at_phaseFold(pk,ph)
         tval.at_binPhaseFold(pk,ph,10)
         tval.at_binPhaseFold(pk,ph,30)    
+
+    tval.at_Season(pk)

@@ -203,33 +203,13 @@ def morton(pk):
     plt.ylim(-3*df*1e-6,2*df*1e-6)
 
     plt.sca(axPFSea)
-    PF = pk['lcPF0'][:]
-    qarr = keplerio.t2q( PF['t'] ).astype(int)
+#    import pdb;pdb.set_trace()
 
-
-    try:
-        PF = mlab.rec_append_fields(PF,'qarr',qarr)
-    except:
-        PF['qarr'] = qarr
-    del pk['lcPF0']
-    pk['lcPF0'] = PF
-    colors = ['k','Tomato','c','m']
     for season in range(4):
         try:
-            bSeason = (qarr>=0) & (qarr % 4 == season)
-            x = PF['tPF'][bSeason]
-            y = PF['f'][bSeason]
-
-            bw = 30. / 60. /24.
-            xmi,xma = x.min(),x.max()
-            nbins    = xma-xmi
-            nbins = int( np.round( (xma-xmi)/bw ) )
-            bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
-            tb    = 0.5*(bins[1:]+bins[:-1])
-            yb = tval.bapply(x,y,bins,np.median)
-            plt.plot(tb,yb,color=seasonColors[season],label='%i' % season)
+            PF = pk['PF_Season%i' % season ][:]
+            plt.plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
         except:
-            print "problem with season plot"
             pass
 
     at = AnchoredText('Transit by Season',prop=tprop,frameon=True,loc=2)
@@ -266,20 +246,22 @@ def plotManyTrans(pk):
     kw['hStepData'] = hStepData
     kw['hAx'] = 0.04
     kw['wAx'] = 0.1
-    xLout,yLout,nCols,nRows = sketch.stack2(xL,yL,**kw)
-    nTransMax = nCols*nRows
+
+    kw1 = sketch.gridTraceSetup(**kw)
+    xLout,yLout = sketch.gridTrace(xL,yL,**kw1)
+
+    nTransMax = kw1['nCols']*kw1['nRows']
     if nTransMax < nTrans:
         print "Too many transits, rebin"
         bfac = int(nTrans / nTransMax) + 1
         xL2,yL2 = rebin(xL,yL,bfac)
-        xLout,yLout,nCols,nRows = sketch.stack2(xL2,yL2,**kw)
+        xLout,yLout = sketch.gridTrace(xL2,yL2,**kw1)
 
     if nTransMax > 2 * nTrans:
         print "Extra space"
         kw['hStepData'] *= 1.0*nTransMax / nTrans
-
-    kw = sketch.gridTraceSetup(**kw)
-    xLout,yLout = sketch.gridTrace(xL,yL,**kw)
+        kw1 = sketch.gridTraceSetup(**kw)
+        xLout,yLout = sketch.gridTrace(xL,yL,**kw1)
 
     for i in range(len(xLout)):
         q = int(min(qL[i]))
@@ -301,7 +283,7 @@ def plotManyTrans(pk):
     plt.xlim(xl[0]-3*pad,xl[1]+pad)
     plt.ylim(yl[0]-pad,yl[1]+pad)
 
-    add_scalebar(plt.gca(),loc=3,matchx=False,matchy=False,sizex=1*kw['t2ax'],sizey=1e-3*kw['f2ax'],labelx='1 Day',labely='1000 ppm')    
+    add_scalebar(plt.gca(),loc=3,matchx=False,matchy=False,sizex=1*kw1['t2ax'],sizey=1e-3*kw1['f2ax'],labelx='1 Day',labely='1000 ppm')    
 
 def rebin(xL,yL,bfac):
     iStart = 0 
