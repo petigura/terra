@@ -52,8 +52,14 @@ def grid(h5):
     h5 : an h5plus instance
          P1,P2 must be attributes
     """
+
+    lc  = h5['mqcal'][:]
+
+
     P1 = h5.attrs['P1_FFA']
     P2 = h5.attrs['P2_FFA']
+    f     = lc[ h5.attrs['fluxField'] ]
+    fmask = lc[ h5.attrs['fluxMask'] ] 
 
     print P1,P2
 
@@ -61,15 +67,12 @@ def grid(h5):
     it0 = h5.create_group('it0')
     it0 = h5['it0']
 
-    lc  = h5['mqcal'][:]
 
-    fm  = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0,copy=True)
+    fm  = ma.masked_array(f, fmask, fill_value=0, copy=True)
     PcadG = np.arange(P1,P2)
     rtd = tdpep(lc['t'],fm,PcadG,config.twdG)
     r   = tdmarg(rtd)
-
     it0['RES']   = r
-
 
 def itOutRej(h5):
     """
