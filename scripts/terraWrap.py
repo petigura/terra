@@ -33,7 +33,6 @@ def injRecW(pardict,**kwargs):
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('parfile',type=str,help='file with the transit parameters')
 parser.add_argument('outfile',type=str,help='output data here')
-parser.add_argument('--DV',action='store_true')
 args = parser.parse_args()
 simPar = pandas.read_csv(args.parfile,index_col=0)
 simPar['skic'] = ['%09d' %s for s in simPar['skic'] ]
@@ -43,7 +42,7 @@ if matplotlib.cbook.is_numlike(simPar['sid']):
 
 dL = []
 for i in simPar.index:
-    dL.append( injRecW( dict(simPar.ix[i]),startDV=args.DV) )
+    dL.append( injRecW( dict(simPar.ix[i])) )
 
 dL = pandas.DataFrame(dL)
 simPar = pandas.merge(simPar,dL,how='left',on='id',suffixes=('_inp','_out'))

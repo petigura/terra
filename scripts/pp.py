@@ -20,7 +20,7 @@ if args.fields==None:
 else:
     fields=args.fields
 
-lc.attrs['svd_folder'] = args.svd_folder
+#lc.attrs['svd_folder'] = args.svd_folder
 
 for cmd in args.cmds:
     if cmd=='cal':

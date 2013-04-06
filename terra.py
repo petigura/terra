@@ -26,7 +26,7 @@ nessflds = {
 }
 
 
-def terra(pardict,startDV=False):
+def terra(pardict):
     """
     TERRA
 
@@ -34,24 +34,35 @@ def terra(pardict,startDV=False):
 
     Parameters
     ----------    
-    pardict : All the attributes are controlled through this dictionary.
+    pardict : This dictionary contains all the parameters.
     startDV : Stars from .grid.h5 file
 
     Returns
     -------
     out     : Dictionary of scalars. Must contain id key.
-    
+
+    Notes
+    -----
+    For interactive debugging:
+        1. create a parfile 
+        2. read it in with df = pandas.read_csv()
+        3. terra.terra(dict(df.ix[0]))
     """
     pardict = dictSetup(pardict)
     pardict_print(pardict)
-
     rawfile = pardict['rawfile']
-    if startDV!=True:
-        h5outfile = 'temp.h5'
+    keys = 'cpad,cfrac,LDT_deg,nCont'.split(',')
+    
 
+    if not pardict['startDV']:
+        h5outfile = 'temp.h5'
         with h5py.File( rawfile,'r+' ) as h5raw,\
                 prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:            
             ppgrid(h5raw,h5out,pardict)
+            
+            for k in keys:
+                h5out.attrs[k] = pardict[k]
+
             out = DVout(h5out,pardict)            
             if pardict.has_key('pngGrid'):
                 plot(h5out,pardict)
@@ -59,6 +70,9 @@ def terra(pardict,startDV=False):
     else:
         h5outfile = pardict['storeGrid']
         with h5py.File(h5outfile,driver='core',backing_store=False) as h5out:
+            for k in keys:
+                h5out.attrs[k] = pardict[k]
+
             out = DVout(h5out,pardict)
             if pardict.has_key('pngGrid'):
                 plot(h5out,pardict)
@@ -71,7 +85,8 @@ def dictSetup(pardict0):
     Check Set necessary fields in pardict
     """
     pardict = copy.copy(pardict0)
-    pardict = addPaths(pardict)
+    if pardict['rel'] == False:
+        pardict = addPaths(pardict)
 
     # P1,P2 define the range of candences we sample the outlier
     # spectrum at.
@@ -132,6 +147,8 @@ def ppgrid(h5raw,h5out,pardict):
     h5out.mask()
     h5out.dt()
     h5out.attrs['svd_folder'] = pardict['svd_folder']
+    h5out.attrs['fluxField'] = pardict['fluxField']
+    h5out.attrs['fluxMask'] = pardict['fluxMask']
     h5out.cal()
     h5out.sQ()
 
