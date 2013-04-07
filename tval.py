@@ -496,8 +496,6 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
 
     pL0 = [ p0, attrs['tdur']/2. ,.3  ]
 
-
-
     t   = bPF['tb']
     y   = bPF['med']
     err = bPF['std'] / np.sqrt( bPF['count'] )
@@ -513,6 +511,7 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
     fitgrp['fit'] = trans.MA(pL1,trans.t)
     fitgrp.attrs['pL%i'  % ph] = pL1
     fitgrp.attrs['X2_%i' % ph] = trans.chi2(pL1)
+    fitgrp.attrs['dt_%i' % ph] = trans.dt
 
     print pL1
 
@@ -1035,6 +1034,8 @@ def addCuts(df):
     """
     Add the following DV statistics (ratios of other DV statistics)
     """
+    scols0 = set(df.columns) # initial list of columns
+
     Rstar = df.Rstar * Rsun # Rstar [cm]
     Mstar = df.Mstar * Msun # Mstar [g]
     P = df.P_out*sec_in_day # P [s]
@@ -1045,13 +1046,18 @@ def addCuts(df):
     tauMa =  Rstar*P/2/np.pi/a
     df['tauMa'] = tauMa / sec_in_day # Maximum tau assuming circular orbit
     df['taur']  = df.tau0 / df.tauMa
-
     df['s2n_out_on_in'] = df.s2ncut / df.s2n
     df['med_on_mean']   = df.medSNR / df.s2n
     df['Rp']            = np.sqrt(df.df0)*df.Rstar*109.04
     df['phase_out']     = np.mod(df.t0/df.P_out,1)
-#    df['phase_inp']     = df['phase']
+    scols1 = set(df.columns) # final list of columns
+    scols12 = scols0 ^ scols1 # 
     
+    print "addCuts: Added the following columns"
+    print "-"*80
+    for c in scols12:
+        print c
+
     return df
 
 def applyCuts(df,cuts):
@@ -1062,11 +1068,14 @@ def applyCuts(df,cuts):
     bDV is true if star passed all cuts
     """
 
-    cutkeys = []
+    cutkeys  = []
+    nPass    = []
+    nPassS2N = []
+
     for name in cuts['name']:
         cut = cuts.ix[np.where(cuts.name==name)[0]]
-        hi = cut['upper']
-        lo = cut['lower']
+        hi = float(cut['upper'])
+        lo = float(cut['lower'])
         if np.isnan(hi):
             hi=np.inf
         if np.isnan(lo):
@@ -1076,12 +1085,23 @@ def applyCuts(df,cuts):
         cutkeys.append(cutk)
         df[cutk]=(df[name] > lo) & (df[name] < hi) 
 
+        nPass.append( len(df[df[cutk]]) ) 
+        nPassS2N.append( len(df[df[cutk] & df['bs2n'] ]) ) 
+
     df['bDV'] = df[cutkeys].T.sum()==len(cutkeys)
+    summary = cuts.copy()
+    summary['nPass'] = nPass
+    summary['nPassS2N'] = nPassS2N
+
+    print "applyCuts: summary"
+    print "-"*80
+    print summary.to_string(index=False)
+    print "%i stars passed all cuts" % len(df[df.bDV])
     return df
 
 def found(df):
     """
-    Did we find the transit
+    Did we find the transit?
     
     Test that the period and phase peak is the same as the input
     
