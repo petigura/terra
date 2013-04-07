@@ -92,8 +92,8 @@ def itOutRej(h5):
     3. No large peak; significant outliers; iterate
 
     """
-    P1 = h5.attrs['P1']
-    P2 = h5.attrs['P2']
+    P1 = h5.attrs['P1_FFA']
+    P2 = h5.attrs['P2_FFA']
 
     it           = 1
     done         = False

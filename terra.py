@@ -5,6 +5,9 @@ The top level controller.  This function encapsulates the complete pipeline.
 """
 
 import h5py
+from h5py import File as h5F 
+from prepro import Lightcurve as ppLC
+
 import numpy as np
 
 import prepro
@@ -26,7 +29,7 @@ nessflds = {
 }
 
 
-def terra(pardict):
+def terra(pardictL):
     """
     TERRA
 
@@ -34,8 +37,11 @@ def terra(pardict):
 
     Parameters
     ----------    
-    pardict : This dictionary contains all the parameters.
-    startDV : Stars from .grid.h5 file
+
+    pardictL : list of parameter dictionaries. Each dictionary must
+               contain the func key, which says the function to
+               run. The other keys are parameters passed to each of
+               the worker functions.
 
     Returns
     -------
@@ -45,40 +51,45 @@ def terra(pardict):
     -----
     For interactive debugging:
         1. create a parfile 
-        2. read it in with df = pandas.read_csv()
-        3. terra.terra(dict(df.ix[0]))
+        2. read it in with df = pandas.read_csv( <parfile> )
+        3. terra.terra( dict( df.ix[0] ) ) 
+
     """
-    pardict = dictSetup(pardict)
-    pardict_print(pardict)
-    rawfile = pardict['rawfile']
-    keys = 'cpad,cfrac,LDT_deg,nCont'.split(',')
-    
+#    pardict = dictSetup(pardict)
+#    pardict_print(pardict)
+#    keys = 'cpad,cfrac,LDT_deg,nCont'.split(',')
 
-    if not pardict['startDV']:
-        h5outfile = 'temp.h5'
-        with h5py.File( rawfile,'r+' ) as h5raw,\
-                prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:            
-            ppgrid(h5raw,h5out,pardict)
-            
-            for k in keys:
-                h5out.attrs[k] = pardict[k]
+#    import pdb;pdb.set_trace()
+    if type(pardictL) == dict:
+        pardict = pardictL
+        if pardict['func'] == 'pp':
+            pp(pardict)
 
-            out = DVout(h5out,pardict)            
-            if pardict.has_key('pngGrid'):
-                plot(h5out,pardict)
-
-    else:
-        h5outfile = pardict['storeGrid']
-        with h5py.File(h5outfile,driver='core',backing_store=False) as h5out:
-            for k in keys:
-                h5out.attrs[k] = pardict[k]
-
-            out = DVout(h5out,pardict)
-            if pardict.has_key('pngGrid'):
-                plot(h5out,pardict)
-
-    out['id'] = pardict['id']
-    return out
+#    if not pardict['startDV']:
+#        h5outfile = 'temp.h5'
+#        with h5py.File( rawfile,'r+' ) as h5raw,\
+#                prepro.Lightcurve(h5outfile,driver='core',backing_store=False) as h5out:            
+#            ppgrid(h5raw,h5out,pardict)
+#            
+#            for k in keys:
+#                h5out.attrs[k] = pardict[k]
+#
+#            out = DVout(h5out,pardict)            
+#            if pardict.has_key('pngGrid'):
+#                plot(h5out,pardict)
+#
+#    else:
+#        h5outfile = pardict['storeGrid']
+#        with h5py.File(h5outfile,driver='core',backing_store=False) as h5out:
+#            for k in keys:
+#                h5out.attrs[k] = pardict[k]
+#
+#            out = DVout(h5out,pardict)
+#            if pardict.has_key('pngGrid'):
+#                plot(h5out,pardict)
+#
+#    out['id'] = pardict['id']
+#    return out
 
 def dictSetup(pardict0):
     """
@@ -129,44 +140,129 @@ def pardict_print(pardict):
     print ""
 
 
-def ppgrid(h5raw,h5out,pardict):
+
+def pp(par):
     """
-    Prepro and Grid
+    Preprocess
+
+    Parameters
+    ----------
+    par : dictionary with the following keys
+          - rawfile 
+          - outfile
+          - type = mc/tps
+          
+          - inj_P,inj_phase,inj_p,inj_tau,inj_b      <-- only for mc
+          - a1,a2,a3,a4 limb darkening coefficients  <-- inj/rec runs
+
+    Example
+    -------
+
+    >>> import terra
+    >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
+    'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132, 
+    'inj_phase': 0.583,'inj_tau': 0.178,
+    'outfile': 'temp.grid.h5','rawfile': 'lc/007831530.h5',
+    'skic': 7831530, 'svd_folder': '../terra5-50/svd/', 'type': 'mc'}
+    >>> terra.pp(d)
+    
+    """
+
+    with h5F(par['rawfile']) as h5raw, ppLC(par['outfile']) as h5:
+
+        h5.copy(h5raw['raw'],'raw')
+        if par['type'].find('mc') != -1:
+            inj(h5,par)
+
+        # Perform detrending and calibration.
+        h5.mask()
+        h5.dt()
+        h5.attrs['svd_folder'] = par['svd_folder']
+        h5.cal()
+        h5.sQ()
+
+def grid(par):
+    """
+    Grid Search
+
+    Parameters
+    ----------
+    par : dictionary with the following keys
+    
+    Example
+    -------
+
+    >>> dgrid = {'P1_FFA': 2000,'P2_FFA': 2200,
+    'fluxField': 'fcal','fluxMask': 'fmask',
+    'outfile' : 'temp.grid.h5'}
+    
 
     """
 
-    for k in 'P1,P2,P1_FFA,P2_FFA'.split(','):
-        h5out.attrs[k] = pardict[k]
+    with h5F(par['outfile']) as h5:     
+        h5.attrs['fluxField']  = par['fluxField']
+        h5.attrs['fluxMask']   = par['fluxMask']
 
-    # Raw photometry
-    h5out.copy(h5raw['raw'],'raw')
-    if pardict['type'].find('mc') != -1:
-        inj(h5out,pardict)
+        for k in 'P1_FFA,P2_FFA'.split(','):
+            h5.attrs[k] = par[k]
 
-    # Perform detrending and calibration.
-    h5out.mask()
-    h5out.dt()
-    h5out.attrs['svd_folder'] = pardict['svd_folder']
-    h5out.attrs['fluxField'] = pardict['fluxField']
-    h5out.attrs['fluxMask'] = pardict['fluxMask']
-    h5out.cal()
-    h5out.sQ()
+        tfind.grid(h5) 
+        tfind.itOutRej(h5)
 
-    # Grid search and outlier rejection
-    if pardict['type'] == 'mcS':
-        gridShort(h5out,pardict)
-    else:
-        tfind.grid(h5out) 
+def dv(par):
+    """
+    Data Validation
+    
+    Parameters
+    ----------
+    par : dictionary with the following keys
 
-    tfind.itOutRej(h5out)
+    Example
+    -------
 
-    if pardict.has_key('storeGrid'):
-        with h5plus.File(pardict['storeGrid'],mode='c') as h5store: 
-            groups = [i[0] for i in h5out.items() if i[0].find('it')==0]
-            for g in groups:
-                h5store.copy(h5out[g],g)
-            h5store['mqcal'] = h5out['mqcal'][:]
+    >>> ddv {'LDT_deg': 3,'cfrac': 3, 'cpad': 0.5, 'nCont': 4,
+    'a1': 0.773,'a2': -0.679,'a3': 1.140, 'a4': -0.416,
+    'outfile': 'temp.grid.h5','skic': 7831530}    
+    """
 
+    
+    with h5F(par['outfile']) as h5:
+
+        if dict(h5.attrs).has_key('climb') == False:
+            climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
+            h5.attrs['climb'] = climb
+
+        keys = ['LDT_deg', 'cfrac', 'cpad', 'nCont']
+        for k in keys:
+            h5.attrs[k] = par[k]
+
+        if dict(h5.attrs).has_key('skic') == False:
+            h5.attrs['skic']  = par['skic']
+
+        h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+        h5.noDiagRE  = \
+            '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+        h5.noDBRE    = 'climb'
+
+        # Attach attributes
+        h5.RES,h5.lc = get_reslc(h5)
+
+        tval.findPeak(h5)
+        tval.conv(h5)
+        tval.checkHarmh5(h5)
+        tval.at_phaseFold(h5,0)
+        tval.at_phaseFold(h5,180)
+
+        tval.at_binPhaseFold(h5,0,10)
+        fitgrp = h5.create_group('fit')
+
+        tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
+        tval.at_med_filt(h5)
+        tval.at_s2ncut(h5)
+        tval.at_SES(h5)
+        tval.at_rSNR(h5)
+        tval.at_autocorr(h5)
+            
 def plot(h5out,pardict):
     import matplotlib
     matplotlib.use('Agg')
@@ -211,44 +307,7 @@ def findItMax(h5):
     itMax = np.sort(itL)[-1]        
     return itMax
 
-def DV(h5,pardict):
-    """
-    Perforn Data Validation
 
-    Parameters
-    ----------
-    h5 : h5plus object
-
-    """
-    if dict(h5.attrs).has_key('climb') == False:
-        climb = np.array( [ pardict['a%i' % i] for i in range(1,5) ]  ) 
-        h5.attrs['climb'] = climb
-
-    if dict(h5.attrs).has_key('skic') == False:
-        h5.attrs['skic']  = pardict['skic']
-
-    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
-    h5.noDiagRE  = '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-    h5.noDBRE    = 'climb'
-
-    # Attach attributes
-    h5.RES,h5.lc = get_reslc(h5)
-
-    tval.findPeak(h5)
-    tval.conv(h5)
-    tval.checkHarmh5(h5)
-    tval.at_phaseFold(h5,0)
-    tval.at_phaseFold(h5,180)
-
-    tval.at_binPhaseFold(h5,0,10)
-    fitgrp = h5.create_group('fit')
-    tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
-
-    tval.at_med_filt(h5)
-    tval.at_s2ncut(h5)
-    tval.at_SES(h5)
-    tval.at_rSNR(h5)
-    tval.at_autocorr(h5)
 
 def inj(h5,pardict):
     """
