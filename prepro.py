@@ -42,145 +42,149 @@ def rec_zip(rL):
         ro = mlab.rec_append_fields(ro,fields,vals)
     return ro
 
-class Lightcurve(h5plus.File):
-    def raw(self,files,fields=[]):
-        """
-        Take list of .fits files and store them in the raw group
 
-        fields - list of fields to keep. Use a subset for smaller file size.
-        """
-        raw  = self.create_group('/raw')
-        hduL = []
-        kicL = []
-        qL   = []
-        for f in files:
-            h = pyfits.open(f)
-            hduL += [h]
-            kicL += [h[0].header['KEPLERID'] ]
-            qL   += [h[0].header['QUARTER'] ]
+def raw(h5,files,fields=[]):
+    """
+    Take list of .fits files and store them in the raw group
 
-        assert np.unique(kicL).size == 1,'KEPLERID not the same'
-        assert np.unique(qL).size == len(qL),'duplicate quarters'
+    fields - list of fields to keep. Use a subset for smaller file size.
+    """
+    raw  = h5.create_group('/raw')
+    hduL = []
+    kicL = []
+    qL   = []
+    for f in files:
+        h = pyfits.open(f)
+        hduL += [h]
+        kicL += [h[0].header['KEPLERID'] ]
+        qL   += [h[0].header['QUARTER'] ]
 
-        self.attrs['KEPLERID'] = kicL[0] 
-        for h,q in zip(hduL,qL):
-            r = np.array(h[1].data)
-            r = modcols(r)
-            raw['Q%i'  % q] = r
-            if fields!=[]:
-                r = mlab.rec_keep_fields(r,fields)
+    assert np.unique(kicL).size == 1,'KEPLERID not the same'
+    assert np.unique(qL).size == len(qL),'duplicate quarters'
 
-    def mapgroup(self,f,inpG,outG,**kwd):
-        """
-        Map function over groups
+    h5.attrs['KEPLERID'] = kicL[0] 
+    for h,q in zip(hduL,qL):
+        r = np.array(h[1].data)
+        r = modcols(r)
+        raw['Q%i'  % q] = r
+        if fields!=[]:
+            r = mlab.rec_keep_fields(r,fields)
 
-        Parameters
-        ----------
-        f   :  function.  must have the following signature
-               rout = f(*args)
-               where rout is an array and
-               args is a list of arrays
+def mapgroup(h5,f,inpG,outG,**kwd):
+    """
+    Map function over groups
 
-        inpG : Input group name (or sequence of names)
-        outG : Output group name.
-        kwd  : dictionary of keyword dictionaries. Method by which
-               we pass non-record array arguments to `f`
+    Parameters
+    ----------
+    f   :  function.  must have the following signature
+           rout = f(*args)
+           where rout is an array and
+           args is a list of arrays
 
-        """
-        
-        if inpG==outG:
-            same=True
-        else:
-            same=False
-        if type(inpG)==str:
-            inpG = [inpG]
-            
-        qL = [i[0] for i in self[inpG[0]].items() ]
+    inpG : Input group name (or sequence of names)
+    outG : Output group name.
+    kwd  : dictionary of keyword dictionaries. Method by which
+           we pass non-record array arguments to `f`
 
-        for q in qL:
-            rinpL = [self[i][q][:] for i in inpG]
+    """
 
-            kwargs={}
-            if kwd!={}:
-                kwargs  = kwd[q]
+    if inpG==outG:
+        same=True
+    else:
+        same=False
+    if type(inpG)==str:
+        inpG = [inpG]
 
-            rout    = f(*rinpL,**kwargs)
+    qL = [i[0] for i in h5[inpG[0]].items() ]
 
-            if same:
-                del self[outG][q]
-            self[outG][q] = rout
+    for q in qL:
+        rinpL = [h5[i][q][:] for i in inpG]
+
+        kwargs={}
+        if kwd!={}:
+            kwargs  = kwd[q]
+
+        rout    = f(*rinpL,**kwargs)
+
+        if same:
+            del h5[outG][q]
+        h5[outG][q] = rout
 
 
-    def mask(self):
-        self.mapgroup(rqmask,'raw','raw')
+def mask(h5):
+    mapgroup(h5,rqmask,'raw','raw')
 
-    def dt(self):
-        """
-        Iterates over the quarters stored in raw
-        
-        Applies the detrending
-        """
-        raw = self['/raw']
-        dt  = self.create_group('/dt')
-        self.mapgroup(qdt,'raw','dt')
+def dt(h5):
+    """
+    Iterates over the quarters stored in raw
 
-    def cal(self):
-        """
-        Wrap over the calibration step
+    Applies the detrending
+    """
+    raw = h5['/raw']
+    dt  = h5.create_group('/dt')
+    mapgroup(h5,qdt,'raw','dt')
 
-        Parameters
-        ----------
+def cal(h5,svd_folder):
+    """
+    Wrap over the calibration step
 
-        svd_folder : Where to find the SVD matricies.  They must be
-                     named in the following fashion Q1.svd.h5,
-                     Q2.svd.h5 ...
-        """
-        raw = self['/raw']
-        dt  = self['/dt']
-        cal = self.create_group('/cal')
+    Parameters
+    ----------
 
-        kwd = {}
-        for i in raw.items():
-            q = i[0]
-            svdpath = os.path.join(self.attrs['svd_folder'],'%s.svd.h5' % q)
-            kwd[q] = dict(svdpath=svdpath)
-        self.mapgroup(qcal,['raw','dt'],'cal',**kwd)
+    par : dictionary, must contain follo
+    svd_folder : Where to find the SVD matricies.  They must be
+                 named in the following fashion Q1.svd.h5,
+                 Q2.svd.h5 ...
+    """
+    raw = h5['/raw']
+    dt  = h5['/dt']
+    cal = h5.create_group('/cal')
 
-    def sQ(self):
-        """
-        Stitch Quarters
+    kwd = {}
+    for i in raw.items():
+        q = i[0]
+        svdpath = os.path.join(svd_folder,'%s.svd.h5' % q)
+        kwd[q] = dict(svdpath=svdpath)
+    mapgroup(h5,qcal,['raw','dt'],'cal',**kwd)
 
-        Look at all of the groups. Zip all of the column together and
-        stich the quarters together.
 
-        Adds the mqcal dataset to the h5 directory.
-        """
-        groups = [ i[1] for i in self.items() ]
-        groups = [ g for g in groups if g.name!='/mqcal' ]
-        quarters = [i[0] for i in groups[0].items()]
+def sQ(h5):
+    """
+    Stitch Quarters
 
-        rL = []
-        for q in quarters:
-            dsL = rec_zip([ g[q] for g in groups ])
-            rL.append(dsL)            
-        
-        if len(quarters)==1:
-            print "sQ: Only 1 quarter"
-            rLC = rL[0]
-        else:
-            rLC = keplerio.rsQ(rL)
+    Look at all of the groups. Zip all of the column together and
+    stich the quarters together.
 
-        binlen = [3,6,12]
-        try:
-            list(rLC.dtype.names).index('fcal')
-            for b in binlen:
-                bcad = 2*b
-                fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
-                dM = tfind.mtd(rLC['t'],fcal,bcad)
-                rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
-        except ValueError:
-            pass
-        self['mqcal'] = rLC
+    Adds the mqcal dataset to the h5 directory.
+    """
+    groups = [ i[1] for i in h5.items() ]
+    groups = [ g for g in groups if g.name!='/mqcal' ]
+    quarters = [i[0] for i in groups[0].items()]
+
+    rL = []
+    for q in quarters:
+        dsL = rec_zip([ g[q] for g in groups ])
+        rL.append(dsL)            
+
+    if len(quarters)==1:
+        print "sQ: Only 1 quarter"
+        rLC = rL[0]
+    else:
+        rLC = keplerio.rsQ(rL)
+
+    binlen = [3,6,12]
+    try:
+        list(rLC.dtype.names).index('fcal')
+        for b in binlen:
+            bcad = 2*b
+            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
+            dM = tfind.mtd(rLC['t'],fcal,bcad)
+            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
+    except ValueError:
+        pass
+    h5['mqcal'] = rLC          
+
+
 
 def rdt(r0):
     """

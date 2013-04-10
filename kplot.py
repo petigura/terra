@@ -22,13 +22,14 @@ import config
 import numpy as np
 from numpy import ma
 from matplotlib import mlab
+import sys
+
 seasonColors = ['r','c','m','g']
 tprop = dict(size=10,name='monospace')
 
-
-def plot_diag(pk):
+def plot_diag(h5):
     """
-    Print a 1-page diagnostic plot of a given pk.
+    Print a 1-page diagnostic plot of a given h5.
     """
     fig = plt.figure(figsize=(20,12))
     gs = GridSpec(8,10)
@@ -43,7 +44,11 @@ def plot_diag(pk):
     axAutoCorr = fig.add_subplot(gs[3,-1])
 
     plt.sca(axGrid)
-    plotGrid(pk)
+    plt.semilogx()
+    plt.minorticks_off()
+    xt = [5 , 8.9, 16, 28, 50. , 89, 158, 281, 500.]
+    plt.xticks(xt,xt)
+    plotGrid(h5)
     at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
     axGrid.add_artist(at)
     axGrid.xaxis.set_ticks_position('top')
@@ -51,14 +56,19 @@ def plot_diag(pk):
     plt.ylabel('MES')
 
     plt.sca(axPFAll)
-    plt.plot(pk['tPF'],pk['fmed'],',',alpha=.5)
-    plt.plot(pk['bx1'],pk['by1'],'o',mew=0)
-    plt.plot(pk['bx5'],pk['by5'],'.',mew=0)
-    y = pk['fmed']
-    axPFAll.set_ylim( (np.percentile(y,5),np.percentile(y,95) ) )
+    plt.plot(h5['tPF'],h5['fmed'],',',alpha=.5)
+    plt.plot(h5['bx1'],h5['by1'],'o',mew=0)
+    plt.plot(h5['bx5'],h5['by5'],'.',mew=0)
+    y = h5['fmed']
+    yl = np.percentile(y,[5,95])
+    yl[0] *= 1.2
+    yl[1] *= 1.2
+
+    axPFAll.set_ylim(*yl) 
+    plt.autoscale(axis='x',tight=True)    
 
     plt.sca(axPF180)
-    plotPF(pk,180)
+    plotPF(h5,180)
     cax = plt.gca()
     cax.xaxis.set_visible(False)
     cax.yaxis.set_visible(False)
@@ -66,46 +76,61 @@ def plot_diag(pk):
     cax.add_artist(at)
 
     plt.sca(axPF)
-    plotPF(pk,0)
+    plotPF(h5,0)
     cax = plt.gca()
     cax.xaxis.set_visible(False)
     cax.yaxis.set_visible(False)
     at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
-    #df = pk.attrs['pL0'][0]**2
+    #df = h5.attrs['pL0'][0]**2
     #plt.ylim(-5*df,3*df)
 
     plt.sca(axStack)
-    plotSES(pk)
+    plotSES(h5)
     plt.xlabel('Phase')
     plt.ylabel('SES (ppm)')
 
     plt.sca(axScar)
-    sketch.scar(pk.RES)
+    res,lc = terra.get_reslc(h5)
+    sketch.scar(res)
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-    axSeason.set_xlim(-1,4)
-    rses = pk['SES']
-    axSES.plot(rses['tnum'],rses['ses']*1e6,'.')
+    plt.sca(axSES)
+    rses = h5['SES']
+    plt.plot(rses['tnum'],rses['ses']*1e6,'.')
     axSES.xaxis.set_visible(False)
-    at = AnchoredText('Transit SES',prop=tprop, frameon=True,loc=2)
+    at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
     axSES.add_artist(at)
+    xl = plt.xlim()
+    plt.xlim(xl[0]-1,xl[-1]+1)
 
+    plt.sca(axSeason)
     axSeason.plot(rses['season'],rses['ses']*1e6,'.')
     axSeason.xaxis.set_visible(False)
-    at = AnchoredText('Season SES',prop=tprop, frameon=True,loc=2)
+    at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
     axSeason.add_artist(at)
+    plt.xlim(-1,4)
 
     plt.sca(axAutoCorr)
-    #!pk.plotAutoCorr()
+    plotAutoCorr(h5)
+
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-    plt.gcf().text( 0.75, 0.05, tval.diag_leg(pk) , size=10, name='monospace',
+    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+    h5.noDiagRE  = \
+        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+    h5.noDBRE    = 'climb'
+
+    plt.gcf().text( 0.85, 0.05, tval.diag_leg(h5) , size=10, name='monospace',
                     bbox=dict(visible=True,fc='white'))
-    #plt.tight_layout()
+    plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
+
+#    axAutoCorr.text( 1, 0, tval.diag_leg(h5) , size=10, name='monospace',
+#                    va='top',bbox=dict(visible=True,fc='white'),transform=axAutoCorr.transAxes)
+
 
 ###########################
 # Helper fuctions to plot #
@@ -114,29 +139,32 @@ def plotAutoCorr(pk):
     plt.xlabel('Displacement')
     plt.plot(pk['lag'],pk['corr'])
 
-def plotPF(pk,ph):
-    PF      = pk['lcPF%i' % ph]
-    x = PF['tPF']
+def plotPF(h5,ph):
+    PF = h5['lcPF%i' % ph]
+    x  = PF['tPF']
+    try:
+        plt.plot(x,PF['f'],',',color='k')
+    except:
+        print sys.exc_info()[1]
+
 
     try:
-        plt.plot(x,PF['fPF'],',',color='k')
-    except:
-        pass
+#        import pdb;pdb.set_trace()
+        bPF = h5['blc10PF%i' % ph][:]
+        xb  = bPF['tb']
+        yb  = bPF['med']
 
-    try:
-        plt.plot(x,PF['fit'],lw=3,color='c')
+        plt.plot(xb,yb,'+',mew=2,color='RoyalBlue')
+        ybfit  = h5['fit']['fit'][:]
+        plt.plot(xb,ybfit,lw=3,color='Tomato')
     except:
-        pass
+        print sys.exc_info()[1]
 
-    try:
-        x,y = pk['bx%i_%i'% (ph,5)],pk['by%i_%i'% (ph,5)]
-        plt.plot(x,y,'o',mew=0,color='red')
-    except:
-        pass
-
-def plotSES(pk):
-    #df = pk.attrs['pL0'][0]**2
-    #sketch.stack(pk.t,pk.dM*1e6,pk.attrs['P'],pk.attrs['t0'],step=3*df*1e6)
+def plotSES(h5):
+    d = dict(h5.attrs)
+    df = h5['fit'].attrs['pL0'][0]**2
+    res,lc = terra.get_reslc(h5)
+    sketch.stack(lc['t'],lc['dM6']*1e6,d['P'],d['t0'],step=3*df*1e6)
     plt.autoscale(tight=True)
 
 def plotGrid(pk):
@@ -147,7 +175,7 @@ def plotGrid(pk):
     plt.plot(x,y)
     id = np.argsort( np.abs(x - pk.attrs['P']) )[0]
     plt.plot(x[id],y[id],'ro')
-    plt.autoscale(tight=True)
+    plt.autoscale(axis='x',tight=True)
 
 def plotMed(pk):
     lc = pk.lc
@@ -158,8 +186,6 @@ def plotMed(pk):
     df = pk.attrs['df']
     sketch.stack(t,fmed*1e6,P,t0,step=5*df)
     plt.autoscale(tight=True)
-
-import scipy.ndimage as nd
 
 def morton(pk):
     """
@@ -308,6 +334,8 @@ def rebin(xL,yL,bfac):
         iStart+=bfac
     return xL2,yL2
 
+
+#############################################################################
 
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
