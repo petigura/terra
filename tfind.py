@@ -17,7 +17,9 @@ from matplotlib import mlab
 import keptoy
 import keplerio
 import FFA_cext as FFA
-import FBLS
+# import FBLS
+# import FBLS_cext as FBLS
+# import FBLS_cy
 
 from config import *
 
@@ -482,7 +484,7 @@ def cadCount(cad,res):
     c,b = np.histogram(cadLL,bins=np.linspace(cadmi,cadma+1,cad.size+1))
     return c
 
-import FBLS_cext as FBLS
+
 def tdpep2(t,fm,Pcad0,twdG,noiseG):
     """
 
@@ -588,7 +590,6 @@ def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
         dL.append(d)
     return dL
 
-import FBLS_cy
 import time
 import pandas
 

@@ -758,10 +758,14 @@ def dict2str(h5,dprint):
     keys.sort()
     for k in keys:
         v = dprint[k]
-        if v<1e-3:
-            vstr = '%.4g [ppm] \n' % (v*1e6)
-        else: 
-            vstr = '%.4g \n' % v
+        if is_numlike(v):
+            if v<1e-3:
+                vstr = '%.4g [ppm] \n' % (v*1e6)
+            else:
+                vstr = '%.4g \n' % v
+        elif is_string_like(v):
+            vstr = v+'\n'
+
         strout += k.ljust(12) + vstr
 
     return strout
