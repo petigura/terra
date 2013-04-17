@@ -19,6 +19,7 @@ import tval
 import keplerio
 import sketch
 import config
+from scipy import ndimage as nd
 import numpy as np
 from numpy import ma
 from matplotlib import mlab
@@ -42,6 +43,7 @@ def plot_diag(h5):
     axSES      = fig.add_subplot(gs[1,-1])
     axSeason   = fig.add_subplot(gs[2,-1])
     axAutoCorr = fig.add_subplot(gs[3,-1])
+    axCDF      = fig.add_subplot(gs[0,-2])
 
     plt.sca(axGrid)
     plt.semilogx()
@@ -117,6 +119,18 @@ def plot_diag(h5):
 
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
+
+    plt.sca(axCDF)
+    lc = h5['mqcal'][:]
+    sig = nd.median_filter(np.abs(lc['dM3']),200)
+    plt.plot(np.sort(sig))
+    sig = nd.median_filter(np.abs(lc['dM6']),200)
+    plt.plot(np.sort(sig))
+    sig = nd.median_filter(np.abs(lc['dM12']),200)
+    plt.plot(np.sort(sig))
+    plt.gca().xaxis.set_visible(False)
+    plt.gca().yaxis.set_visible(False)
+
 
     h5.noPrintRE = '.*?file|climb|skic|.*?folder'
     h5.noDiagRE  = \
