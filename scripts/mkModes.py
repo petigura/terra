@@ -14,26 +14,35 @@ import os
 
 parser = ArgumentParser(description='Perform Robust SVD')
 parser.add_argument('out', type=str,help='file storing Pricip Comp.')
+parser.add_argument('q', type=int,help='file storing Pricip Comp.')
 parser.add_argument('inp', nargs='+',type=str ,help='input dt files')
 
 args  = parser.parse_args()
 out   = args.out
 inp   = args.inp
+q = args.q
 
 print "Loading %i ensemble files" % len(inp)
 fdtL = []
 kicL = []
+
+
+i = 0
 for f in inp:
     try:
-        h = h5py.File(f,'r+')
-        lc = h['LIGHTCURVE'][:]
-        fdt = ma.masked_array(lc['fdt'],lc['fmask'])
-        fdtL.append( fdt )
-        kicL.append( os.path.basename(f).split('.')[0] )
-        h.close()
+        with h5py.File(f) as h5:
+            qstr = 'Q%i' % q
+            fdt  = h5['dt'][qstr]['fdt'][:]
+            mask = h5['raw'][qstr]['fmask'][:]
+            fdt = ma.masked_array(fdt,mask)
+            fdtL.append(fdt)
+            kic = int(f.split('/')[-1].split('.')[0])
+            kicL.append(kic)
     except:
         print sys.exc_info()[1]
-        pass
+    i+=1
+    if i % 100 ==0:
+        print i
 
 fdt = ma.vstack(fdtL)
 kic = np.hstack(kicL)

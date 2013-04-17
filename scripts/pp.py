@@ -1,6 +1,8 @@
 import argparse
 import os
+import h5py
 import prepro
+
 
 desc = """
 Wrapper around prepro
@@ -14,21 +16,18 @@ parser.add_argument('--fits',nargs='+',type=str,help='list of input fits files')
 parser.add_argument('--fields',nargs='+',type=str,help='keep fields')
 args = parser.parse_args()
 
-lc = prepro.Lightcurve(args.lc)
-if args.fields==None:
-    fields=[]
-else:
-    fields=args.fields
-
-#lc.attrs['svd_folder'] = args.svd_folder
-
-for cmd in args.cmds:
-    if cmd=='cal':
-        eval_str = "lc.%s()" % (cmd)
-    elif cmd=='raw':
-        eval_str = "lc.%s(args.fits,fields=fields)" % (cmd)
+with h5py.File(args.lc) as h5:
+    if args.fields==None:
+        fields=[]
     else:
-        eval_str = "lc.%s()" % cmd
+        fields=args.fields
 
-    eval(eval_str)
-    print "%s: %s" % (lc,eval_str)
+
+    for cmd in args.cmds:
+        if cmd=='cal':
+            prepro.cal(h5,args.svd_folder)
+        elif cmd=='raw':
+            prepro.raw(h5,args.fits,fields=fields)
+
+
+        print "%s: %s" % (h5,cmd)

@@ -31,7 +31,6 @@ nModes = 4
 
 parser = ArgumentParser(description='Diagnose Modes')
 parser.add_argument('svd',type=str,help='Mode file')
-parser.add_argument('q',  type=int,help='quarter')
 parser.add_argument('out',nargs='?',type=str,help='output basename.  If none is given, just knock off the .svd.h5')
 
 args = parser.parse_args()
@@ -40,7 +39,6 @@ if out is None:
     out = args.svd.replace('.svd.h5','')
 
 hsvd = h5py.File(args.svd)
-q    = args.q
 
 V   = hsvd['V'][:]
 kic = hsvd['KIC'][:]
@@ -56,26 +54,19 @@ A    =  A[sid]
 skic = str(tuple(gkic))
 
 # Pull the RA and Dec information from the sqlite3 database.
-conn = sqlite3.connect(qdbpath)
+conn = sqlite3.connect(kicdbpath)
 cur = conn.cursor()
-query = """
-ATTACH  '%(kicdbpath)s' as kicdb;
-""" % {'q':q,'skic':skic,'kicdbpath':kicdbpath}
-cur.execute(query)
+
 query = """
 SELECT 
-skic,b.kic_ra,b.kic_dec 
-FROM q%(q)i 
-JOIN kicdb.kic b
-USING (kic)
-WHERE skic in %(skic)s;
-""" % {'q':q,'skic':skic,'kicdbpath':kicdbpath} 
+kic,kic_ra,kic_dec FROM kic WHERE kic in %(skic)s;
+""" % {'skic':skic} 
 cur.execute(query)
 res = cur.fetchall()
 conn.close()
 
 # Verify that the SQL KIC IDs match the ones we searched for.
-tkic = array(res,dtype=zip(['skic','ra','dec'],['|S9',float,float]))
+tkic = array(res,dtype=zip(['skic','ra','dec'],[int,float,float]))
 assert (tkic['skic'] == gkic).all(),'h5 KIC does not match SQL KIC'
 
 # Plot distribtion of mode weights across the FOV.

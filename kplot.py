@@ -164,7 +164,10 @@ def plotSES(h5):
     d = dict(h5.attrs)
     df = h5['fit'].attrs['pL0'][0]**2
     res,lc = terra.get_reslc(h5)
-    sketch.stack(lc['t'],lc['dM6']*1e6,d['P'],d['t0'],step=3*df*1e6)
+    x = lc['t']
+    y = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
+    sketch.stack(lc['t'],y,d['P'],d['t0'],step=3*df*1e6)
+    sketch.stack(lc['t'],y.data,d['P'],d['t0'],step=3*df*1e6,alpha=0.2)
     plt.autoscale(tight=True)
 
 def plotGrid(pk):

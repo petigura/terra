@@ -21,12 +21,6 @@ import os
 
 deltaPcad = 10
 
-nessflds = {
-'tps':'skic,id,sid,a1,a2,a3,a4',
-'mcL':'skic,id,sid,a1,a2,a3,a4,inj_P,inj_tau,inj_p,inj_phase,inj_b',
-'mcS':'skic,id,sid,a1,a2,a3,a4,inj_P,inj_tau,inj_p,inj_phase,inj_b,gridfile',
-}
-
 
 #######################
 # Top Level Functions #
@@ -60,7 +54,6 @@ def pp(par):
     """
 
     with h5F(par['rawfile']) as h5raw, h5F(par['outfile']) as h5:
-
         h5.copy(h5raw['raw'],'raw')
         if par['type'].find('mc') != -1:
             inj(h5,par)
@@ -70,6 +63,7 @@ def pp(par):
         prepro.dt(h5)        
         prepro.cal(h5,par['svd_folder'])
         prepro.sQ(h5)
+        
 
 def grid(par):
     """
@@ -319,46 +313,3 @@ def gridShort(h5,pardict):
     del h5['it0']['RES']
     h5['it0']['RES'] = res0
     
-def makescripts(df):
-    df['rawfile']    = 'eb10k_slim/lc/'+df.skic+'.h5'
-    df['svd_folder'] = 'eb10k/svd/'
-
-    type = raw_input("run type [tps/mcL/mcS] : ")
-    df['type'] = type
-
-    if type !='tps':
-        labels = ['tau','p','b','phase','P']
-        for k in labels:
-            df['inj_'+k] = df[k]
-        df = df.drop(labels,axis=1)
-
-    for f in nessflds[type].split(','):
-        assert dict(df.ix[0]).has_key(f)
-
-    basedir = raw_input("%s " % os.environ['KEPSCRATCH'])
-
-    for case in ['test','full']:
-        casedir=basedir+case+'/'
-        print casedir
-        os.makedirs(casedir)
-
-        dirs = {}
-        for s in ['pngs','h5','csv','csvout']:
-            dirs[s] = casedir+s+'/'
-            os.makedirs(dirs[s])
-
-        df['pngGrid']  = dirs['pngs']+df.sid+'.png'
-        df['storeGrid']= dirs['h5']+df.sid+'.grid.h5'
-
-        if case=='test':
-            dfS  = df.ix[:15]
-            dfS['P1']        = 2180
-            dfS['P2']        = 2200
-            dfL = np.array_split(dfS,16)
-        elif case=='full':
-            nfiles = 1000 
-            dfL = np.array_split(df,nfiles)
-
-        for i in range(len(dfL)):
-            dfL[i].to_csv(dirs['csv']+'test-%04d.csv' % i)
-    return df
