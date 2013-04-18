@@ -59,6 +59,7 @@ def pp(par):
             inj(h5,par)
 
         # Perform detrending and calibration.
+        h5.create_group('/pp')
         prepro.mask(h5)
         prepro.dt(h5)        
         prepro.cal(h5,par['svd_folder'])
@@ -92,7 +93,6 @@ def grid(par):
             h5.attrs[k] = par[k]
 
         tfind.grid(h5) 
-        tfind.itOutRej(h5)
 
 def dv(par):
     """

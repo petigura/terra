@@ -121,8 +121,8 @@ def dt(h5):
     Applies the detrending
     """
     raw = h5['/raw']
-    dt  = h5.create_group('/dt')
-    mapgroup(h5,qdt,'raw','dt')
+    h5.create_group('/pp/dt')
+    mapgroup(h5,qdt,'raw','/pp/dt')
 
 def cal(h5,svd_folder):
     """
@@ -137,15 +137,17 @@ def cal(h5,svd_folder):
                  Q2.svd.h5 ...
     """
     raw = h5['/raw']
-    dt  = h5['/dt']
-    cal = h5.create_group('/cal')
+    pp  = h5['/pp']
+
+    dt  = h5['/pp/dt']
+    cal = h5.create_group('/pp/cal')
 
     kwd = {}
     for i in raw.items():
         q = i[0]
         svdpath = os.path.join(svd_folder,'%s.svd.h5' % q)
         kwd[q] = dict(svdpath=svdpath)
-    mapgroup(h5,qcal,['raw','dt'],'cal',**kwd)
+    mapgroup(h5,qcal,['raw','/pp/dt'],'/pp/cal',**kwd)
 
 
 def sQ(h5):
@@ -157,8 +159,10 @@ def sQ(h5):
 
     Adds the mqcal dataset to the h5 directory.
     """
-    groups = [ i[1] for i in h5.items() ]
+    
+    groups = [ h5[k] for k in '/raw,/pp/dt,/pp/cal'.split(',') ]
     groups = [ g for g in groups if g.name!='/mqcal' ]
+
     quarters = [i[0] for i in groups[0].items()]
 
     rL = []
@@ -182,9 +186,7 @@ def sQ(h5):
             rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
     except ValueError:
         pass
-    h5['mqcal'] = rLC          
-
-
+    h5['/pp/mqcal'] = rLC          
 
 def rdt(r0):
     """
@@ -200,7 +202,6 @@ def rdt(r0):
          ftnd  - the best fit trend
          fdt   - f - ftnd.
     """
-
     r = r0.copy()
     # Detrend the flux
     fm = ma.masked_array(r['f'],r['fmask'])
@@ -301,13 +302,20 @@ def rqmask(r0):
          - isBadReg
     """
     r = r0.copy()
+    
+    # first mask out the nans
+    fmask = ma.masked_invalid(r['f']).mask
+    r = rec_append_fields(r,'fmask'    ,fmask)
 
-    rqual = parseQual(r['SAP_QUALITY'])
 
     r = rec_append_fields(r,'isBadReg' ,isBadReg(r['t'])  )
     r = rec_append_fields(r,'isOutlier',isOutlier(r['f']) )
-    r = rec_append_fields(r,'isStep'   ,isStep(r['f'])    )
-    r = rec_append_fields(r,'isDis'    ,isStep(rqual['dis'])  )
+    fmask = fmask | r['isBadReg'] | r['isOutlier'] 
+
+
+    r = rec_append_fields(r,'isStep'   ,isStep(r,fmask)[1]    )
+
+    rqual = parseQual(r['SAP_QUALITY'])
     r = rec_append_fields(r,'desat'    ,rqual['desat']  )
     r = rec_append_fields(r,'atTwk'    ,rqual['atTwk']  )
 
@@ -319,12 +327,8 @@ def rqmask(r0):
         r[k] = b > 0
 
     # fmask is the union of all the individually masked elements    
-    fm = ma.masked_invalid(r['f'])
-    fm.mask = \
-        fm.mask | r['isBadReg'] | r['isOutlier'] | r['isStep'] | \
-        r['isDis'] | r['desat'] | r['atTwk']
-    
-    r = rec_append_fields(r,'fmask'    ,fm.mask)
+    fmask      = fmask | r['isStep'] | r['desat'] | r['atTwk']
+    r['fmask'] = fmask
     
     # segEnd is the union of the manually excluded regions and the
     # attitude tweaks.
@@ -403,21 +407,43 @@ def isBadReg(t):
     mask = tm.mask
     return mask
 
-def isStep(f):
+def isStep(r,fmask):
     """
-    Is Step
+    Is Step?
 
-    Identify steps in the LC
+    Identify steps in light curve. I compute the running median in
+    bins of `size` along the light curve, treating the masked values
+    and the nans gracefully. Then I look for derivatives over
+    `stepscale`. If the derivative is more than 10 MAD away from the
+    typical values, we flag it as a discont.
     """
+    size=50
+    stepscale = 20
 
-    medf = nd.median_filter(f,size=config.wd)
+    fm = ma.masked_array(r['f'],fmask)
+    fm = ma.masked_invalid(fm)
 
-    kern = np.zeros(config.wd)
-    kern[0] = 1
-    kern[-1] = -1
+    # Perform the running median. Yes, this is memory
+    # inefficient. However, this is a small portion of runtime.
 
-    diff   = nd.convolve(medf,kern)
-    return np.abs(diff) > config.stepThrsh
+    fm2D = fm[np.arange(size)[:,np.newaxis] + np.arange(fm.size-size)]
+    fmed = ma.median(fm2D,axis=0)
+    fmed.mask = fmed.mask | (~fm2D.mask).sum(axis=0) < 20
+
+    # step statistic (positive values are downward steps
+    # if step statistic is more than 10 MADs above normal, remove.
+    step = fmed[:-stepscale] - fmed[stepscale:]  
+    b    = np.abs(step) > 7*ma.median(np.abs(step)) 
+
+    isStep = np.zeros(r['t'].size).astype(bool)
+    tmask = r['t'][(size+stepscale)/2:][b.data & ~b.mask]
+    if tmask.size > 0:
+        print "identified step discont at",tmask
+        print "masking out ",tmask.size
+        for t in tmask:
+            isStep = isStep | ma.masked_inside(r['t'],t-0.5,t+2).mask
+            
+    return step,isStep
 
 def isOutlier(f):
     """

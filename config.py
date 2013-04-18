@@ -70,6 +70,6 @@ wd        = 4    # Width of the median filter used to determine step
 
 # After identifying problem cadences, we expand the region which we
 # consider bad data by the following amounts in both directions.
-cadGrow = dict(desat=1,atTwk=4,isStep=100)
+cadGrow = dict(desat=1,atTwk=4)
 
 

@@ -55,23 +55,18 @@ def grid(h5):
          P1,P2 must be attributes
     """
 
-    lc  = h5['mqcal'][:]
+    lc  = h5['/pp/mqcal'][:]
 
 
     P1 = h5.attrs['P1_FFA']
     P2 = h5.attrs['P2_FFA']
     f     = lc[ h5.attrs['fluxField'] ]
-    fmask = lc[ h5.attrs['fluxMask'] ] 
-
-    lc  = h5['mqcal'][:]
-
-    f    = lc[ h5.attrs['fluxField'] ]
-    mask = lc[ h5.attrs['fluxMask'] ]
+    mask = lc[ h5.attrs['fluxMask'] ] 
     t    = lc['t']
 
     print P1,P2
-
     print "itOutRej first run. Creating it0"
+
     it0 = h5.create_group('it0')
     it0 = h5['it0']
 
