@@ -229,15 +229,8 @@ def get_reslc(h5):
     - No peak, no outliers. it0/mqcal
     - No peak, outliers itN/fmask
     """
-    try:
-        lc  = h5['mqcal'][:]
-        itMax = findItMax(h5)
-        lc['fmask'] = h5[itMax]['fmask']
-        RES = h5[itMax]['RES'][:]
-    except KeyError:
-        lc  = h5['mqcal'][:]
-        RES = h5[itMax]['RES'][:]
-        
+    lc  = h5['/pp/mqcal'][:]
+    RES = h5['/it0/RES'][:]
     return RES,lc
 
 def findItMax(h5):

@@ -386,7 +386,7 @@ def at_phaseFold(h5,ph):
 
     attrs = h5.attrs
     
-    lc = h5['mqcal'][:]
+    lc = h5['/pp/mqcal'][:]
     t  = lc['t']
     fm = ma.masked_array(lc['f'],lc['fmask'])
 
@@ -549,7 +549,7 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
 
 def at_med_filt(h5):
     """Add median detrended lc"""
-    lc = h5['mqcal']
+    lc = h5['/pp/mqcal']
     fm = ma.masked_array(lc['fcal'],lc['fmask'])
 
     t  = lc['t']
