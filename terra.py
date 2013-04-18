@@ -92,7 +92,6 @@ def grid(par):
             h5.attrs[k] = par[k]
 
         tfind.grid(h5) 
-        tfind.itOutRej(h5)
 
 def dv(par):
     """
