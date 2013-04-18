@@ -23,7 +23,7 @@ def inspectT(t0,f0,P,ph,darr=None):
     """
 
     
-def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50,**kwargs):
+def stack(t,y,P,t0,cL=['RoyalBlue','Tomato'],step=1e-3,maxhlines=50,**kwargs):
     """
     Plot the SES    
     """
@@ -60,6 +60,10 @@ def stack(t,y,P,t0,cL=['k','r'],step=1e-3,maxhlines=50,**kwargs):
 
         color = cL[ np.mod( l , len(cL) ) ]
         ax.plot(phseg+xshift,yseg+yshift,color=color,**kwargs)
+
+        imin = np.argmin(np.abs(phseg+xshift))
+        s = str(np.round(t[blabel][imin]-dt,decimals=1))
+        ax.text(0,yshift,s)
 
     xlim(-.25,.75)
     axvline(0,alpha=.3)
