@@ -217,3 +217,143 @@ def addPoisson(panel):
     panel['fuNp1']    = np.array([r[0] for r in res]).reshape(dfshape)
     panel['fuNp2']    = np.array([r[1] for r in res]).reshape(dfshape)
     return panel
+
+
+
+#######################################################################
+
+
+# Commonly used functions for dealing with cuts
+### Mstar, 
+G = 6.672e-8 # [cm3 g^-1 s^-2]
+Rsun = 6.955e10 # cm
+Rearth = 6.3781e8 # cm
+Msun = 1.9891e33 # [g]
+AU   = 1.49597871e13 # [cm]
+sec_in_day = 86400
+
+
+def addCuts(df):
+    """
+    Add the following DV statistics (ratios of other DV statistics)
+    """
+    scols0 = set(df.columns) # initial list of columns
+
+    Rstar = df.Rstar * Rsun # Rstar [cm]
+    Mstar = df.Mstar * Msun # Mstar [g]
+    P = df.P_out*sec_in_day # P [s]
+
+    a = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
+    df['a/R*'] = a/Rstar
+    P = df.P_out*sec_in_day # P [s]
+    tauMa =  Rstar*P/2/np.pi/a
+    df['tauMa']         = tauMa / sec_in_day # Max tau given circ. orbit
+    df['taur']          = df.tau0 / df.tauMa
+    df['s2n_out_on_in'] = df.s2ncut / df.s2n
+    df['med_on_mean']   = df.medSNR / df.s2n
+    df['Rp']            = np.sqrt(df.df0)*df.Rstar*109.04
+    df['phase_out']     = np.mod(df.t0/df.P_out,1)
+    scols1 = set(df.columns) # final list of columns
+    scols12 = scols0 ^ scols1 # 
+    
+    print "addCuts: Added the following columns"
+    print "-"*80
+    for c in scols12:
+        print c
+
+    return df
+
+def applyCuts(df,cuts):
+    """
+    Apply cuts
+
+    One by one, test if star passed a particular cut
+    bDV is true if star passed all cuts
+    """
+
+    cutkeys  = []
+    nPass    = []
+    nPassS2N = []
+
+    for name in cuts['name']:
+        cut = cuts.ix[np.where(cuts.name==name)[0]]
+        hi = float(cut['upper'])
+        lo = float(cut['lower'])
+        if np.isnan(hi):
+            hi=np.inf
+        if np.isnan(lo):
+            lo=-np.inf
+
+        cutk = 'b'+name
+        cutkeys.append(cutk)
+        df[cutk]=(df[name] > lo) & (df[name] < hi) 
+
+        nPass.append( len(df[df[cutk]]) ) 
+        nPassS2N.append( len(df[df[cutk] & df['bs2n'] ]) ) 
+
+    df['bDV'] = df[cutkeys].T.sum()==len(cutkeys)
+    summary = cuts.copy()
+    summary['nPass'] = nPass
+    summary['nPassS2N'] = nPassS2N
+
+    print "applyCuts: summary"
+    print "-"*80
+    print summary.to_string(index=False)
+    print "%i stars passed all cuts" % len(df[df.bDV])
+    return df
+
+def found(df):
+    """
+    Did we find the transit?
+    
+    Test that the period and phase peak is the same as the input
+    
+    Parameters
+    ----------
+    df  : DataFrame with the following columns defined
+          - P_inp
+          - P_out
+          - phase_inp
+          - phase_out
+
+    Returns
+    -------
+    found column
+    """
+
+    dP     = np.abs( df.P_inp     - df.P_out     )
+    dphase = np.abs( df.phase_inp - df.phase_out )
+    dphase = np.min( np.vstack([ dphase, 1-dphase ]),axis=0 )
+    dt0    = dphase*df.P_out
+    df['found'] = (dP <.1) & (dt0 < .1) 
+    return df
+
+def MC(pp,res,cuts):
+    DV = pd.merge(pp,res,on='outfile',how='left')
+    print DV.columns
+
+
+    DV =  pd.merge(DV,ah_par,left_on='skic',right_on='kic')
+    DV['df0'] = DV['p0']**2
+    DV['Re']  = DV['inj_p'] * DV['Rstar'] * 109.
+    cols = 'Mstar,Rstar,P,P_inp,P_out,autor,tau0,df0,s2ncut,s2n,medSNR,t0,Re,phase_inp,outfile'
+    cols = cols.split(',')
+
+    def wrap(DV):
+        DV = DV[cols]
+        DV = tval.addCuts(DV)
+        DV = tval.applyCuts(DV,cuts)
+        DV = tval.found(DV)
+        DV['pass'] = DV.found & DV.bDV
+        return DV
+
+    DV['P_out']     = DV['P']
+    DV['phase_inp'] = DV['inj_phase']
+    #DV['phase_inp'] = DV['inj_phase']
+    DV['P_inp'] = DV['inj_P']
+    DV['P'] = DV['P_inp']
+    #DV['bname'] = DV['sid']
+
+    print cuts
+
+    DV = wrap(DV)

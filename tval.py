@@ -1033,11 +1033,6 @@ AU   = 1.49597871e13 # [cm]
 sec_in_day = 86400
 
 
-def trimDV(df):
-    """
-    
-    """
-    
 def addCuts(df):
     """
     Add the following DV statistics (ratios of other DV statistics)
