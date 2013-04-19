@@ -365,7 +365,7 @@ def plotraw(h5):
             t = qlc['t']
 
             fm = ma.masked_array(qlc['f'],qlc['isBadReg'])
-            dt = h5['/dt']['Q%i' %i ][:]
+            dt = h5['/pp/dt']['Q%i' %i ][:]
             ftnd = ma.masked_array(dt['ftnd'],qlc['fmask'])
             foutlier  = fm.copy()
             foutlier.mask = ~qlc['isOutlier']
@@ -373,8 +373,6 @@ def plotraw(h5):
 
             fspsd  = fm.copy()
             fspsd.mask = ~qlc['isStep']
-            print (~fspsd.mask).sum()
-
 
             fkw    = dict(color=colors[year % 2],lw=3)
             foutkw = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
@@ -409,16 +407,15 @@ def plotcal(h5):
         season = (i+1) % 4
         year   = (i - season)/4
         if qL.count(i)==1:
-            dt = h5['dt']['Q%i' %i][:]
+            dt = h5['/pp/dt']['Q%i' %i][:]
             raw = h5['raw']['Q%i'%i][:]
-            cal = h5['cal']['Q%i'%i][:]
+            cal = h5['/pp/cal']['Q%i'%i][:]
             t = raw['t']
 
             fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
             fit = ma.masked_array(cal['fit'],raw['fmask'])
 
             fcal = ma.masked_array(cal['fcal'],raw['fmask'])
-            h5['cal']['Q1'].dtype
 
             xs =  365.25*year
             ys =  year*0.003
