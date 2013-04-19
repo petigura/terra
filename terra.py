@@ -231,6 +231,7 @@ def get_reslc(h5):
     """
     lc  = h5['/pp/mqcal'][:]
     RES = h5['/it0/RES'][:]
+        
     return RES,lc
 
 def findItMax(h5):
