@@ -53,6 +53,10 @@ def pp(par):
     
     """
 
+    print "creating %(outfile)s" %par
+    print "Running pp on %s" % par['outfile'].split('/')[-1]
+
+
     with h5F(par['rawfile']) as h5raw, h5F(par['outfile']) as h5:
         h5.copy(h5raw['raw'],'raw')
         if par['type'].find('mc') != -1:
@@ -84,7 +88,7 @@ def grid(par):
     >>> terra.grid(dgrid)    
 
     """
-
+    print "Running grid on %s" % par['outfile'].split('/')[-1]
     with h5F(par['outfile']) as h5:     
         h5.attrs['fluxField']  = par['fluxField']
         h5.attrs['fluxMask']   = par['fluxMask']
@@ -112,6 +116,7 @@ def dv(par):
     >>> terra.dv(ddv)
 
     """
+    print "Running dv on %s" % par['outfile'].split('/')[-1]
 
     with h5F(par['outfile']) as h5:
         if dict(h5.attrs).has_key('climb') == False:

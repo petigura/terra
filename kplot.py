@@ -121,7 +121,7 @@ def plot_diag(h5):
     plt.gca().yaxis.set_visible(False)
 
     plt.sca(axCDF)
-    lc = h5['mqcal'][:]
+    lc = h5['/pp/mqcal'][:]
     sig = nd.median_filter(np.abs(lc['dM3']),200)
     plt.plot(np.sort(sig))
     sig = nd.median_filter(np.abs(lc['dM6']),200)

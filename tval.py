@@ -250,7 +250,6 @@ def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
     fldt    = ma.masked_array( np.zeros(t.size) , True ) 
     assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
     cLbl = recLbl['cRegLbl']
-#   import pdb;pdb.set_trace()
     for i in range(cLbl.max() + 1):
         # Points corresponding to continuum region.
         bc = (cLbl == i ) 
@@ -364,8 +363,7 @@ def checkHarmh5(h5):
     If one of the harmonics has higher MES, update P,epoch
     """
     P = h5.attrs['P']
-
-    harmL,MESL = checkHarm(h5.dM,P,ver=False)
+    harmL,MESL = checkHarm(h5.dM,P,h5.t.ptp(),ver=False)
     idma = np.nanargmax(MESL)
     if idma != 0:
         harm = harmL[idma]
@@ -614,7 +612,11 @@ def at_SES(h5):
     cadence corresponding to the peak of the SES timeseries in
     that region.
     """
-    t = h5.t
+    lc = h5['/pp/mqcal'][:]
+    t     = lc['t']
+    fcal  = ma.masked_array(lc['fcal'],lc['fmask'])
+    dM      = h5.dM
+
     attrs = h5.attrs
     rLbl = transLabel(t,attrs['P'],attrs['t0'],attrs['tdur']*2)
     qrec = keplerio.qStartStop()
@@ -624,12 +626,13 @@ def at_SES(h5):
         q[b] = r['q']
 
     tRegLbl = rLbl['tRegLbl']
-    dM = h5.dM
-    # Find the index of the SES peak.
-    btmid = np.zeros(tRegLbl.size,dtype=bool) # True if transit mid point.
-    for iTrans in range(0,tRegLbl.max()+1):
-        tRegSES = dM[ tRegLbl==iTrans ] 
-        if tRegSES.count() > 0:
+
+    # Search for the transit midpoint by looking for the maximum SES peak
+    btmid = np.zeros(tRegLbl.size,dtype=bool) 
+    for iTrans in np.unique(tRegLbl)[1:]:
+        tRegSES  = dM[ tRegLbl==iTrans ] 
+        tRegfcal = fcal[ tRegLbl==iTrans ] 
+        if tRegfcal.count() > 0.75 * tRegfcal.size:
             maSES = np.nanmax( tRegSES.compressed() )
             btmid[(dM==maSES) & (tRegLbl==iTrans)] = True
 
@@ -641,18 +644,24 @@ def at_SES(h5):
     dtype = [('ses',float),('tnum',int),('season',int)]
     rses = np.array(zip(ses,tnum,season),dtype=dtype )
 
-    h5['SES'] = rses
-    h5['tRegLbl'] = tRegLbl
-    ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
-    h5.attrs['SES_even'] = np.median(ses_e) 
-    h5.attrs['SES_odd']  = np.median(ses_o) 
-    h5.attrs['KS_eo']    = ks_2samp(ses_e,ses_o)[1]
+    h5.attrs['num_trans'] = 0
+    if rses.size > 0:
+        h5['SES'] = rses
+        h5.attrs['num_trans'] = rses.size
 
-    for i in range(4):
-        ses_i = ses[season % 4  == i]
-        ses_not_i = ses[season % 4  != i]
-        h5.attrs['SES_%i' %i] = np.median(ses_i)
-        h5.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
+
+        h5['tRegLbl'] = tRegLbl
+        ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
+        h5.attrs['SES_even'] = np.median(ses_e) 
+        h5.attrs['SES_odd']  = np.median(ses_o) 
+        h5.attrs['KS_eo']    = ks_2samp(ses_e,ses_o)[1]
+
+
+        for i in range(4):
+            ses_i = ses[season % 4  == i]
+            ses_not_i = ses[season % 4  != i]
+            h5.attrs['SES_%i' %i] = np.median(ses_i)
+            h5.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
 
 def at_rSNR(h5):
     """
@@ -678,6 +687,7 @@ def at_s2n_known(h5,d):
     h5.attrs['phase_close'] = tup[4]
     h5.attrs['s2n_close']   = tup[5]
 
+
 def at_autocorr(h5):
     bx5fft = np.fft.fft(h5['by5'][:].flatten() )
     corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
@@ -690,15 +700,6 @@ def at_autocorr(h5):
     h5['lag'] = lag
     h5['corr'] = corr
     h5.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
-
-
-
-
-
-
-
-
-
 
 ######
 # IO #
@@ -886,7 +887,7 @@ def s2n_known(d,t,fm):
     return phase,s2nP,twd_close,P_close,phase_close,s2n_close
 
 
-def checkHarm(dM,P,harmL=config.harmL,ver=True):
+def checkHarm(dM,P,tbase,harmL0=config.harmL,ver=True):
     """
     Evaluate S/N for (sub)/harmonics
     """
@@ -894,14 +895,17 @@ def checkHarm(dM,P,harmL=config.harmL,ver=True):
     Pcad  = P / config.lc
 
     dMW = FFA.XWrap(dM , Pcad)
-    for harm in harmL:
+    harmL = []
+    for harm in harmL0:
         # Fold dM on the harmonic
-        dMW_harm = FFA.XWrap(dM,Pcad*float(harm) )
-        sig  = dMW_harm.mean(axis=0)
-        c    = dMW_harm.count(axis=0)
-        MES = sig * np.sqrt(c) 
-        MESL.append(MES.max())
-
+        Pharm = P*float(harm)
+        if Pharm < tbase / 3.:
+            dMW_harm = FFA.XWrap(dM,Pharm / config.lc )
+            sig  = dMW_harm.mean(axis=0)
+            c    = dMW_harm.count(axis=0)
+            MES = sig * np.sqrt(c) 
+            MESL.append(MES.max())
+            harmL.append(harm)
     MESL = np.array(MESL)
     MESL /= MESL[0]
 
