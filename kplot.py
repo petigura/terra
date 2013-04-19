@@ -352,6 +352,84 @@ def rebin(xL,yL,bfac):
     return xL2,yL2
 
 
+def plotraw(h5):
+    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+    colors = ['RoyalBlue','Black']
+
+    ilabel = False
+    for i in range(1,15):
+        season = (i+1) % 4
+        year   = (i - season)/4
+        if qL.count(i)==1:
+            qlc = h5['/raw']['Q%i' %i ][:]
+            t = qlc['t']
+
+            fm = ma.masked_array(qlc['f'],qlc['isBadReg'])
+            dt = h5['/dt']['Q%i' %i ][:]
+            ftnd = ma.masked_array(dt['ftnd'],qlc['fmask'])
+            foutlier  = fm.copy()
+            foutlier.mask = ~qlc['isOutlier']
+
+
+            fkw    = dict(color=colors[year % 2],lw=3)
+            foutkw    = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
+
+            fallkw = dict(color=colors[year % 2],lw=3,alpha=0.4)
+            ftndkw = dict(color='Tomato',lw=2)
+
+            if ilabel==False:
+                fkw['label']    = 'Raw Phot'
+                fallkw['label'] = 'Removed by Hand'
+                ftndkw['label'] = 'High Pass Filt'
+                foutkw['label'] = 'Outlier'
+                ilabel=True
+
+            xs =  365.25*year
+            ys =  year*0.01
+
+            plt.plot(t - xs, fm - ys,**fkw)
+            plt.plot(t - xs, fm.data - ys,**fallkw)
+            plt.plot(t - xs, ftnd - ys,**ftndkw)
+            plt.plot(t - xs, foutlier - ys,**foutkw)
+
+    plt.legend(loc='upper left')
+
+def plotcal(h5):
+    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+    colors = ['RoyalBlue','k']
+    for i in range(1,15):
+        season = (i+1) % 4
+        year   = (i - season)/4
+        if qL.count(i)==1:
+            dt = h5['dt']['Q%i' %i][:]
+            raw = h5['raw']['Q%i'%i][:]
+            cal = h5['cal']['Q%i'%i][:]
+            t = raw['t']
+
+            fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
+            fit = ma.masked_array(cal['fit'],raw['fmask'])
+
+            fcal = ma.masked_array(cal['fcal'],raw['fmask'])
+            h5['cal']['Q1'].dtype
+
+            xs =  365.25*year
+            ys =  year*0.003
+
+            plt.plot(raw['t'] - xs,fdt - ys,color=colors[i%2])
+            plt.plot(raw['t'] - xs,fit - ys,color='Tomato')
+            plt.plot(raw['t'] - xs,fcal - ys-0.001,color=colors[i%2])
+
+def plot_lc(h5):
+    fig,axL = plt.subplots(nrows=2,figsize=(20,12),sharex=True)
+
+    plt.sca(axL[0])
+    plotraw(h5)
+
+    plt.sca(axL[1])
+    plotcal(h5)
+    plt.tight_layout()
+
+
 #############################################################################
 
 # -*- coding: utf-8 -*-
