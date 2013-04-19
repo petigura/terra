@@ -371,11 +371,17 @@ def plotraw(h5):
             foutlier.mask = ~qlc['isOutlier']
 
 
-            fkw    = dict(color=colors[year % 2],lw=3)
-            foutkw    = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
+            fspsd  = fm.copy()
+            fspsd.mask = ~qlc['isStep']
+            print (~fspsd.mask).sum()
 
+
+            fkw    = dict(color=colors[year % 2],lw=3)
+            foutkw = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
             fallkw = dict(color=colors[year % 2],lw=3,alpha=0.4)
             ftndkw = dict(color='Tomato',lw=2)
+
+            fspsdkw = dict(color='m',lw=5)
 
             if ilabel==False:
                 fkw['label']    = 'Raw Phot'
@@ -387,10 +393,12 @@ def plotraw(h5):
             xs =  365.25*year
             ys =  year*0.01
 
-            plt.plot(t - xs, fm - ys,**fkw)
-            plt.plot(t - xs, fm.data - ys,**fallkw)
-            plt.plot(t - xs, ftnd - ys,**ftndkw)
+            plt.plot(t - xs, fm - ys      ,**fkw)
+            plt.plot(t - xs, fm.data - ys ,**fallkw)
+            plt.plot(t - xs, ftnd - ys    ,**ftndkw)
             plt.plot(t - xs, foutlier - ys,**foutkw)
+            plt.plot(t - xs, fspsd - ys   ,**fspsdkw)
+
 
     plt.legend(loc='upper left')
 
