@@ -1,4 +1,4 @@
-import pandas
+import pandas as pd
 import numpy as np
 from numpy import histogram2d as h2d
 from scipy.stats import poisson
@@ -66,7 +66,7 @@ def occurrence(Pb,Rpb,df_tps,comp):
     nstars = 12e3
     items = 'fcell,fcellRaw,fcellAdd,Np,NpAug,comp,fuNp1,fuNp2'.split(',')
 
-    panel = pandas.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
+    panel = pd.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
     panel2 =  binDataFrame(Pb,Rpb)
     dfshape = panel.shape[1],panel.shape[2]
 
@@ -130,28 +130,28 @@ def compareCatalogs(me,cat):
     cat  = cat[['P_cat','kic']]
 
     # Outer join is the union of the entries in me,cat, and both
-    tcom = pandas.merge(cat,me,how='inner',on='kic')
+    tcom = pd.merge(cat,me,how='inner',on='kic')
     tcom = tcom[np.abs(tcom.P_me-tcom.P_cat) < .01] # planets in both catalogs
 
-    tcat = pandas.merge(cat,tcom,how='left',on=['kic','P_cat'])
+    tcat = pd.merge(cat,tcom,how='left',on=['kic','P_cat'])
     tcat = tcat[tcat.P_me.isnull()] # These appear only in cat
 
-    tme  = pandas.merge(me,tcom,how='left',on=['kic','P_me'])
+    tme  = pd.merge(me,tcom,how='left',on=['kic','P_me'])
     tme  = tme[tme.P_cat.isnull()] # These appear only in me
 
     # shared planets, planets in tme not in cat
-    tcom = pandas.concat( [tcom , tme, tcat] )
+    tcom = pd.concat( [tcom , tme, tcat] )
 
     # Join the remaining planets back on
-    tcom = pandas.merge(tcom,me0,how='left',on=['kic','P_me'])
-    tcom = pandas.merge(tcom,cat0,how='left',on=['kic','P_cat'])
+    tcom = pd.merge(tcom,me0,how='left',on=['kic','P_me'])
+    tcom = pd.merge(tcom,cat0,how='left',on=['kic','P_cat'])
     return tcom
 
 def binDataFrame(Pb,Rpb):
     """
     """
     items='Rp1,Rp2,Rpc,P1,P2'.split(',')
-    panel = pandas.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
+    panel = pd.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
 
     a  = np.zeros((panel.shape[1],panel.shape[2]))
     panel['Rp1'] = a + Rpb[np.newaxis,:-1]
@@ -170,7 +170,7 @@ def margP(panel):
     Marginalize over period
     """
     print "summing up occurrence from P = 5-50 days"
-    dfRp = pandas.DataFrame(index=panel.minor_axis,columns=panel.items)
+    dfRp = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
 
     # Add the following columns over bins in P
     for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
@@ -197,7 +197,7 @@ def margRp(panel0):
     RpRange = panel.major_axis[panel.major_axis >=1]
     print "using the following Rps", RpRange
     panel = panel.ix[:,RpRange]
-    df = pandas.DataFrame(index=panel.minor_axis,columns=panel.items)
+    df = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
 
     # Add the following columns over bins in Rp
     for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
@@ -328,22 +328,36 @@ def found(df):
     df['found'] = (dP <.1) & (dt0 < .1) 
     return df
 
-def MC(pp,res,cuts):
-    DV = pd.merge(pp,res,on='outfile',how='left')
-    print DV.columns
 
+import config
+
+b12k = pd.read_csv('../TERRA2/b12k.csv')
+b12k['skic'] = b12k.kic.astype('|S10').str.pad(9).str.replace(' ','0')
+b12k = b12k['kic,skic,a1,a2,a3,a4'.split(',')]
+
+store = pd.HDFStore('../files/ah_par_strip.h5')
+ah_par = store['kic']
+ah_par['kic'] = ah_par['KICID']
+
+keepcols = [c for c in ah_par.columns if (c.find('YY_')!=-1) or (c.find('kic')!=-1)]
+ah_par   = ah_par[keepcols]
+ah_par['Rstar'] = ah_par.YY_RADIUS
+ah_par['Mstar'] = ah_par.YY_MSTAR
+ah_par         = ah_par[['Mstar','Rstar','kic']]
+
+
+def MC(pp,res,cuts):
+    DV = pd.merge(pp,res,on=['outfile','skic'],how='left')
+    print DV.columns
 
     DV =  pd.merge(DV,ah_par,left_on='skic',right_on='kic')
     DV['df0'] = DV['p0']**2
     DV['Re']  = DV['inj_p'] * DV['Rstar'] * 109.
-    cols = 'Mstar,Rstar,P,P_inp,P_out,autor,tau0,df0,s2ncut,s2n,medSNR,t0,Re,phase_inp,outfile'
-    cols = cols.split(',')
 
     def wrap(DV):
-        DV = DV[cols]
-        DV = tval.addCuts(DV)
-        DV = tval.applyCuts(DV,cuts)
-        DV = tval.found(DV)
+        DV = addCuts(DV)
+        DV = applyCuts(DV,cuts)
+        DV = found(DV)
         DV['pass'] = DV.found & DV.bDV
         return DV
 
@@ -357,3 +371,4 @@ def MC(pp,res,cuts):
     print cuts
 
     DV = wrap(DV)
+    return DV
