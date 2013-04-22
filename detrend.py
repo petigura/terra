@@ -14,6 +14,58 @@ nq = 8
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 
+def GPdt(xi,x,y):
+    """
+    Gaussian Process-based detrending
+
+    Same sigature as interp(xi,x,y).
+    """
+
+    def kernel(a, b):
+        """
+        GP squared exponential kernel
+        """
+        corrlen = 5. # Assume measurements are correlated with this scale
+        sqdist  = np.sum(a**2,1).reshape(-1,1) + \
+                  np.sum(b**2,1) - \
+                  2*np.dot(a, b.T)
+
+        return np.exp( -.5 * sqdist / corrlen**2 )
+
+    X  = x[:,np.newaxis]
+    Xi = xi[:,np.newaxis]
+
+    K  = kernel(X,X)
+    s  = 0.005    # noise variance.
+    N  = len(X)   # number of training points.
+    L  = np.linalg.cholesky(K + s*np.eye(N))
+    Lk = np.linalg.solve(L, kernel(X, Xi) )
+    mu = np.dot(Lk.T, np.linalg.solve(L, y))
+    return mu
+
+def bin(lc):
+    """
+    Bin the light curve for faster computation of GP
+
+    Compute the mean of every nbin measurements (padding the end if
+    necessary). Return only the valid datapoints.
+    """
+
+    fm = ma.masked_invalid( lc['f'] )
+    nbin = 8
+    rem  = np.remainder(lc.size,nbin)
+    if rem > 0: # if points don't d
+        npad = nbin - rem
+        pad  = ma.masked_array(np.zeros(npad),True)
+        fm = ma.hstack([fm,pad])
+
+    y   = fm.reshape(-1,nbin).mean(axis=1)
+    x   = lc['t'][::nbin]
+    b   = ~y.mask
+    return x[b],y.data[b]
+
+
+
 def stitch(fl,tl,swd = 0.5):
     """
     Stitch together the boundaries of the quarters.
