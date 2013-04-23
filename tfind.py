@@ -573,7 +573,7 @@ def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
 
 def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
     # Split the periods into logrithmically spaced segments
-    PlimArr = logspace( log10(P1) , log10(P2),nseg+1  )
+    PlimArr = np.logspace( np.log10(P1) , np.log10(P2),nseg+1  )
     dL = []
     for i in range(nseg):
         P1 = PlimArr[i]
