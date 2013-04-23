@@ -45,6 +45,18 @@ def plot_diag(h5):
     axAutoCorr = fig.add_subplot(gs[3,-1])
     axCDF      = fig.add_subplot(gs[0,-2])
 
+    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+    h5.noDiagRE  = \
+        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+    h5.noDBRE    = 'climb'
+
+    plt.gcf().text( 0.85, 0.05, tval.diag_leg(h5) , size=10, name='monospace',
+                    bbox=dict(visible=True,fc='white'))
+    plt.tight_layout()
+    plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
+
+
+
     plt.sca(axGrid)
     plt.semilogx()
     plt.minorticks_off()
@@ -132,15 +144,7 @@ def plot_diag(h5):
     plt.gca().yaxis.set_visible(False)
 
 
-    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
-    h5.noDiagRE  = \
-        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-    h5.noDBRE    = 'climb'
 
-    plt.gcf().text( 0.85, 0.05, tval.diag_leg(h5) , size=10, name='monospace',
-                    bbox=dict(visible=True,fc='white'))
-    plt.tight_layout()
-    plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
 #    axAutoCorr.text( 1, 0, tval.diag_leg(h5) , size=10, name='monospace',
 #                    va='top',bbox=dict(visible=True,fc='white'),transform=axAutoCorr.transAxes)
@@ -378,7 +382,6 @@ def plotraw(h5):
             foutkw = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
             fallkw = dict(color=colors[year % 2],lw=3,alpha=0.4)
             ftndkw = dict(color='Tomato',lw=2)
-
             fspsdkw = dict(color='m',lw=5)
 
             if ilabel==False:
@@ -386,6 +389,7 @@ def plotraw(h5):
                 fallkw['label'] = 'Removed by Hand'
                 ftndkw['label'] = 'High Pass Filt'
                 foutkw['label'] = 'Outlier'
+                fspsdkw['label'] = 'SPSD'
                 ilabel=True
 
             xs =  365.25*year
@@ -396,7 +400,6 @@ def plotraw(h5):
             plt.plot(t - xs, ftnd - ys    ,**ftndkw)
             plt.plot(t - xs, foutlier - ys,**foutkw)
             plt.plot(t - xs, fspsd - ys   ,**fspsdkw)
-
 
     plt.legend(loc='upper left')
 
@@ -413,27 +416,54 @@ def plotcal(h5):
             t = raw['t']
 
             fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
-            fit = ma.masked_array(cal['fit'],raw['fmask'])
+            fit  = ma.masked_array(cal['fit'],raw['fmask'])
 
             fcal = ma.masked_array(cal['fcal'],raw['fmask'])
 
             xs =  365.25*year
             ys =  year*0.003
 
-            plt.plot(raw['t'] - xs,fdt - ys,color=colors[i%2])
             plt.plot(raw['t'] - xs,fit - ys,color='Tomato')
             plt.plot(raw['t'] - xs,fcal - ys-0.001,color=colors[i%2])
+
+
+
+def plotdt(h5):
+    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+    colors = ['RoyalBlue','k']
+    for i in range(1,15):
+        season = (i+1) % 4
+        year   = (i - season)/4
+        if qL.count(i)==1:
+            dt = h5['/pp/dt']['Q%i' %i][:]
+            raw = h5['raw']['Q%i'%i][:]
+            t = raw['t']
+
+            fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
+            xs =  365.25*year
+            ys =  year*0.003
+
+            plt.plot(raw['t'] - xs,fdt - ys,color=colors[i%2])
+
+
+
 
 def plot_lc(h5):
     fig,axL = plt.subplots(nrows=2,figsize=(20,12),sharex=True)
 
-    plt.sca(axL[0])
-    plotraw(h5)
+    try:
+        plt.sca(axL[0])
 
-    plt.sca(axL[1])
-    plotcal(h5)
+        plotraw(h5)
+        plt.sca(axL[1])
+        plotdt(h5)
+        plotcal(h5)
+    except:
+        print sys.exc_info()[1]
+
+
     plt.tight_layout()
-
+    plt.xlim(250,650)
 
 #############################################################################
 

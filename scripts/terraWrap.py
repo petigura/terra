@@ -1,6 +1,8 @@
 from argparse import ArgumentParser
 import pandas
 import terra
+import matplotlib
+matplotlib.use('Agg')
 
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('args',nargs='+',type=str,help='file[s] function keywords')

@@ -8,12 +8,15 @@ Process photometry before running the grid search.
 import os
 
 import numpy as np
+np.set_printoptions(precision=2,threshold=20)
+
 from numpy import ma
 from scipy import ndimage as nd
 from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
 import pyfits
 import h5py
+import pandas 
 
 import cotrend
 import config
@@ -30,7 +33,7 @@ sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
 sapkey     = csv2rec(sapkeypath,delimiter=' ')
 sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
 cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
-cutList    = csv2rec(cutpath)
+cutList    = pandas.read_csv(cutpath,comment='#').to_records(index=False)
 
 def rec_zip(rL):
     """
@@ -188,12 +191,28 @@ def sQ(h5):
         pass
     h5['/pp/mqcal'] = rLC          
 
+def getseg(lc):
+    seglabel = np.zeros(lc.size) - 1
+    t = lc['t']
+    tm = ma.masked_array(t)
+
+    for i in range( len(cutList)-1 ):
+        rng  = cutList[i]
+        rng1 = cutList[i+1]
+
+        tm = ma.masked_inside(tm,rng['start'],rng['stop'])
+
+        b = ( tm > rng['stop'] ) & ( tm < rng1['start'] ) 
+        seglabel[b] = i
+    return seglabel
+
 def rdt(r0):
     """
-    Detrend light curve
+    Detrend light curve with GP-based detrending.
+
     Parameters
     ----------
-    r0 : with `f`, `fmask`, `t`, `segEnd` fields
+    r0 : with `f`, `fmask`, `t` fields
 
     Returns
     -------
@@ -203,25 +222,32 @@ def rdt(r0):
          fdt   - f - ftnd.
     """
     r = r0.copy()
-    # Detrend the flux
-    fm = ma.masked_array(r['f'],r['fmask'])
-    tm = ma.masked_array(r['t'],r['fmask'])
 
-    # Assign a label to the segEnd segment
-    label = ma.masked_array( np.zeros(r.size)-1, r['segEnd'] )
+    seglabel = getseg(r)
 
+    sL = np.unique(seglabel)
+    sL = sL[sL >=0]
+
+    fm   = ma.masked_array(r['f'],r['fmask'])
     ftnd = fm.copy()
+    
+    segstr = ''
+    for s in sL:
+        b   = seglabel==s
+        r2  = r[b]
+        t   = r2['t']
+        segstr += '%.2f %.2f ' % (t[0],t[1])
 
-    sL = ma.notmasked_contiguous(label)
-    nseg = len(sL)
-    for i in range(nseg):
-        s = sL[i]
-        ftnd[s]  = detrend.spldtm(tm[s],fm[s])
-        label[s] = i
+        x,y = detrend.bin(r2)           # Compute GP using binned lc (speed)
+        yi  = detrend.GPdt(t,x,y) # evaluate at all points
+        ftnd[b] = yi 
+    print segstr
+        
+    # Assign a label to the segEnd segment
+    label = ma.masked_array( np.zeros(r.size)-1, seglabel )
+    fdt   = fm - ftnd
 
-    r   = mlab.rec_append_fields(r,'label',label.data)
-    fdt = fm-ftnd
-
+    r = mlab.rec_append_fields(r,'label',label.data)
     r = mlab.rec_append_fields(r,'ftnd',ftnd.data)
     r = mlab.rec_append_fields(r,'fdt',fdt.data)
     return r
@@ -438,7 +464,8 @@ def isStep(r,fmask):
     isStep = np.zeros(r['t'].size).astype(bool)
     tmask = r['t'][(size+stepscale)/2:][b.data & ~b.mask]
     if tmask.size > 0:
-        print "identified step discont at",tmask
+        print "identified step discont at"
+        print tmask
         print "masking out ",tmask.size
         for t in tmask:
             isStep = isStep | ma.masked_inside(r['t'],t-0.5,t+2).mask

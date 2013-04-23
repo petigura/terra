@@ -32,8 +32,8 @@ for f in inp:
     try:
         with h5py.File(f) as h5:
             qstr = 'Q%i' % q
-            fdt  = h5['dt'][qstr]['fdt'][:]
-            mask = h5['raw'][qstr]['fmask'][:]
+            fdt  = h5['/pp/dt'][qstr]['fdt'][:]
+            mask = h5['/raw'][qstr]['fmask'][:]
             fdt = ma.masked_array(fdt,mask)
             fdtL.append(fdt)
             kic = int(f.split('/')[-1].split('.')[0])
