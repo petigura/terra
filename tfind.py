@@ -538,7 +538,7 @@ from keptoy import P2a,a2tdur
 
 def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
     """
-    Periodogram Parameters
+    Periodogram Parameters.
 
     P1  - Minimum period
     P2  - Maximum period
@@ -578,11 +578,11 @@ def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
     for i in range(nseg):
         P1 = PlimArr[i]
         P2 = PlimArr[i+1]
-        print P1,P2,tbase
         d = pgramPars(P1,P2,tbase,Rstar=Rstar,Mstar=Rstar,ftdur=ftdur)
         d['P1'] = P1
         d['P2'] = P2
         dL.append(d)
+
     return dL
 
 import time
@@ -665,3 +665,82 @@ def FBLS(F,W,alg,d):
             outL.append(out)
 
     return Pcad,outL
+
+##### BLS-SNR ######
+
+
+def BLS_SNR(t,fm,P1,P2):
+    """
+    BLS based on SNR
+    """
+    df = pgramParsSeg(P1,P2,t.ptp(),nseg=5)
+
+    SNR  = []
+    Parr = []
+    for i in range(len(df)):
+        d = df[i]
+        SNR.append( multiScaleBLS(t,fm,d) )
+        Parr.append( 1. / d['farr'] )
+
+    SNR  = np.hstack(SNR)
+    Parr = np.hstack(Parr)
+    return Parr,SNR
+
+
+from scipy import ndimage as nd
+def medfilt_interp(fm,s):
+    """
+    Run a median filter on a array with masked values. 
+    I'll interpolate between with missing values, not quite a true median filter
+    """
+    x  = np.arange(fm.size)
+    xp = x[~fm.mask]
+    fp = fm.compressed()
+
+    fi   = np.interp(x,xp,fp)
+    fmed = nd.median_filter(fi,size=s)
+    return fmed
+
+
+import BLS_cy
+def multiScaleBLS(t,fm,d):
+    """
+    Multi-scale BLS
+
+    BLS searches over a range of transit durations. We filter out all
+    trends longer than tdur * fact with a median filter. For each of
+    the trial durations, we return the maximum SNR.
+
+    """
+
+    filterW = np.array([5,10,20])
+    fact    = 3 # Filter is fact times wider than maximum duration searched over
+
+    Wmi     = filterW[filterW-d['delT1'] >= 0][0]
+    Wma     = filterW[filterW-d['delT2'] >= 0][0]
+    delTarr = filterW[(filterW >= Wmi) & (filterW <= Wma)]
+
+    print "searching for transits btween %(delT1)i and %(delT2)i meas" % d
+    print "running median filter w/ following footprint ",delTarr * fact
+
+    ndelT = delTarr.size
+    SNR2D = []
+    for i in range(ndelT):
+        if i==0:
+            delT1 = d['delT1']
+        else:
+            delT1 = delTarr[i-1]
+        delT2 = delTarr[i]
+        
+        qmi = float(delT1) / d['Pcad1']
+        qma = float(delT2) / d['Pcad1']
+
+        # preserve times up to delT[i+1]
+        fmed = medfilt_interp(fm,fact*delT2)
+        fbls = (fm - fmed).compressed()
+
+        Parr = 1./d['farr']
+        SNR,delTma,t0ma = BLS_cy.BLS_SNR(t[~fm.mask],fbls,Parr,d['nb'],qmi,qma)
+        SNR2D.append(SNR)
+
+    return np.vstack(SNR2D).max(axis=0)

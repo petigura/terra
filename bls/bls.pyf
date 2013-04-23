@@ -1,0 +1,58 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+!  
+! f2py wrapper derectives to wrap the fortran bls algorithms
+!
+
+
+python module bls ! in 
+    interface  ! in :
+        subroutine bls(n,t,x,u,v,nf,fmin,df,nb,qmi,qma,p,bper,bpow,depth,qtran,in1,in2) ! in :fib2:bls.f
+            integer optional :: n=shape(t,0)
+            real*8 dimension(n) :: t
+            real*8 dimension(n) :: x
+            real*8 intent(hide),intent(cache),optional,dimension(n) :: u ! work 
+            real*8 intent(hide),intent(cache),optional,dimension(n) :: v ! work
+            integer :: nf
+            real*8 :: fmin
+            real*8 :: df
+            integer :: nb
+            real*8 :: qmi
+            real*8 :: qma
+            real*8 intent(out),dimension(nf),depend(nf) :: p
+            real*8 intent(out) :: bper
+            real*8 intent(out) :: bpow
+            real*8 intent(out) :: depth
+            real*8 intent(out) :: qtran
+            integer intent(out) :: in1
+            integer intent(out) :: in2
+        end subroutine bls
+
+
+    end interface 
+
+    interface  ! in :
+        subroutine blssnr(n,t,x,u,v,nf,fmin,df,nb,qmi,qma,p,bper,bpow,qtran,in1,in2) ! in :fib2:bls.f
+            integer optional :: n=shape(t,0)
+            real*8 dimension(n) :: t
+            real*8 dimension(n) :: x
+            real*8 intent(hide),intent(cache),optional,dimension(n) :: u ! work 
+            real*8 intent(hide),intent(cache),optional,dimension(n) :: v ! work
+            integer :: nf
+            real*8 :: fmin
+            real*8 :: df
+            integer :: nb
+            real*8 :: qmi
+            real*8 :: qma
+            real*8 intent(out),dimension(nf),depend(nf) :: p
+            real*8 intent(out) :: bper
+            real*8 intent(out) :: bpow
+            real*8 intent(out) :: qtran
+            integer intent(out) :: in1
+            integer intent(out) :: in2
+        end subroutine blssnr
+    end interface 
+end python module bls
+
+! This file was auto-generated with f2py (version:1).
+! See http://cens.ioc.ee/projects/f2py2e/
