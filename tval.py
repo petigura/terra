@@ -27,46 +27,6 @@ import keplerio
 import config
 import emcee
 
-def gridPk(rg,width=1000):
-    """
-    Grid Peak
-    
-    Find the peaks in the MES periodogram.
-
-    Parameters
-    ----------
-    rg    : record array corresponding to the grid output.
-
-    width : Width of the maximum filter used to compute the peaks.
-            The peaks must be the highest point in width Pcad.  Pcad
-            is not a uniformly sampled grid so actuall peak width (in
-            units of days) will vary.
-
-    Returns
-    -------
-    rgpk : A trimmed copy of rg corresponding to peaks.  We sort on
-           the `s2n` key
-
-    TODO
-    ----
-    Make the peak width constant in terms of days.
-
-    """
-    
-    s2nmax = nd.maximum_filter(rg['s2n'],width)
-
-    # np.unique returns the (sorted) unique values of the maximum filter.  
-    # rid give the indecies of us2nmax to reconstruct s2nmax
-    # np.allclose(us2nmax[rid],s2nmax) evaluates to True
-
-    us2nmax,rid = np.unique(s2nmax,return_inverse=True)    
-    bins = np.arange(0,rid.max()+2)
-    count,bins = np.histogram(rid,bins )
-    pks2n = us2nmax[ bins[count>=width] ]
-    pks2n = np.rec.fromarrays([pks2n],names='s2n')
-    rgpk  = mlab.rec_join('s2n',rg,pks2n) # The join cmd orders by s2n
-    return rgpk
-
 def scar(res):
     """
     Determine whether points in p,epoch plane are scarred.  That is
@@ -93,36 +53,6 @@ def scar(res):
     tree = cKDTree(D)
     d,i= tree.query(D,k=2)
     return np.percentile(d[:,1],90)
-
-def pkInfo(lc,res,rpk,climb):
-    """
-    Peak Information
-
-    Parameters
-    ----------
-    lc  : light curve record array
-    res : grid search array
-    rpk : dictionary. peak info.  P, t0, tdur, (all in days)
-
-    Returns
-    -------
-    LDT      : Locally detrended light curve at transit.
-    MA       : Mandel Agol Coeff
-    MA_X2    : Mandel Agol Coeff
-    
-    LDT180   : Locally detrened light curve 180 deg out of phase
-    MA180    : Mandel Agol Coeff
-    MA180_X2 : Mandel Agol Coeff
-
-    madSES   : MAD of SES over entire light curve
-    maSES   : value of MAD SES for the least noisy quarter
-
-
-    Notes 
-    -----
-    phase folded time seemed to be too low by 1 cadence.  Track why
-    this is.  For now, I've just compensated by tPF+=config.lc
-    """
 
 def t0shft(t,P,t0):
     """
@@ -347,13 +277,17 @@ def findPeak(h5):
     h5.attrs['tdur'] = h5.attrs['twd']*config.lc
     h5.attrs['P']    = h5.attrs['Pcad']*config.lc
 
-def conv(h5):
+def toplevel(h5):
     """
     Store variables accessed frequently at the top level.
+
+    Cuts down on the number of times we grab the h5 attrs
     """
 
+
     h5.tdurcad  = int (h5.attrs['tdur'] / config.lc)
-    lc = h5.lc
+
+    lc    = h5.lc
     h5.fm =  ma.masked_array(lc['fcal'],lc['fmask'])
     h5.dM = tfind.mtd(lc['t'],h5.fm,h5.tdurcad)
     h5.t  = lc['t']
@@ -400,32 +334,6 @@ def at_phaseFold(h5,ph):
     qarr = keplerio.t2q( rPF['t'] ).astype(int)
     rPF   = mlab.rec_append_fields(rPF,'qarr',qarr)
     h5['lcPF%i' % ph] = rPF
-
-def at_Season(h5):
-    """
-    Phase-Folded and binned plot on a season by season basis
-    """
-    PF = h5['lcPF0'][:]
-    qarr = PF['qarr']
-    for season in range(4):
-        try:
-            bSeason = (qarr>=0) & (qarr % 4 == season)
-            x = PF['tPF'][bSeason]
-            y = PF['f'][bSeason]
-            bw = 30. / 60. /24.
-            xmi,xma = x.min(),x.max()
-            nbins    = xma-xmi
-            nbins = int( np.round( (xma-xmi)/bw ) )
-            bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
-            tb    = 0.5*(bins[1:]+bins[:-1])
-            yb = bapply(x,y,bins,np.median)
-            dtype = [('t',float),('fmed',float)]
-            r    = np.array(zip(tb,yb),dtype=dtype )
-            h5['PF_Season%i' % season] = r
-
-        except:
-            print "problem with season %i " % season
-            pass
 
 def at_binPhaseFold(h5,ph,bwmin):
     """
@@ -543,8 +451,6 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
         yL = np.vstack(yL) 
         fitgrp['fits'] = yL
 
-
-
 def at_med_filt(h5):
     """Add median detrended lc"""
     lc = h5['/pp/mqcal']
@@ -603,19 +509,20 @@ def at_s2ncut(h5):
 
     h5.attrs['s2ncut'] = s2n
 
-
 def at_SES(h5):
     """
     Look at individual transits SES.
 
     Using the global overall period as a starting point, find the
-    cadence corresponding to the peak of the SES timeseries in
-    that region.
+    cadence corresponding to the peak of the SES timeseries in that
+    region. Note: I'm not sure if using the maximum is the right way
+    to go, will that screw up the intrisic dispersion I expect to see
+    in SES?
     """
-    lc = h5['/pp/mqcal'][:]
-    t     = lc['t']
-    fcal  = ma.masked_array(lc['fcal'],lc['fmask'])
-    dM      = h5.dM
+    lc   = h5['/pp/mqcal'][:]
+    t    = lc['t']
+    fcal = ma.masked_array(lc['fcal'],lc['fmask'])
+    dM   = h5.dM
 
     attrs = h5.attrs
     rLbl = transLabel(t,attrs['P'],attrs['t0'],attrs['tdur']*2)
@@ -648,14 +555,11 @@ def at_SES(h5):
     if rses.size > 0:
         h5['SES'] = rses
         h5.attrs['num_trans'] = rses.size
-
-
         h5['tRegLbl'] = tRegLbl
         ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
         h5.attrs['SES_even'] = np.median(ses_e) 
         h5.attrs['SES_odd']  = np.median(ses_o) 
         h5.attrs['KS_eo']    = ks_2samp(ses_e,ses_o)[1]
-
 
         for i in range(4):
             ses_i = ses[season % 4  == i]

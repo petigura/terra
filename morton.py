@@ -15,6 +15,8 @@ MORTONDIR    = '/global/scratch/sd/petigura/Morton/'
 #with open(MORTONDIR+'koi.txt','w') as f:
 #    f.writelines(["%s\n" % t for t in jr.koi])
 
+
+
 def getParJR(koi):
     """
     Get Parameters from Jason Rowe
@@ -148,4 +150,30 @@ tdur - %(tdur).2f
         tval.at_binPhaseFold(pk,ph,10)
         tval.at_binPhaseFold(pk,ph,30)    
 
-    tval.at_Season(pk)
+    at_Season(pk)
+
+def at_Season(h5):
+    """
+    Phase-Folded and binned plot on a season by season basis
+    """
+    PF = h5['lcPF0'][:]
+    qarr = PF['qarr']
+    for season in range(4):
+        try:
+            bSeason = (qarr>=0) & (qarr % 4 == season)
+            x = PF['tPF'][bSeason]
+            y = PF['f'][bSeason]
+            bw = 30. / 60. /24.
+            xmi,xma = x.min(),x.max()
+            nbins    = xma-xmi
+            nbins = int( np.round( (xma-xmi)/bw ) )
+            bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+            tb    = 0.5*(bins[1:]+bins[:-1])
+            yb = bapply(x,y,bins,np.median)
+            dtype = [('t',float),('fmed',float)]
+            r    = np.array(zip(tb,yb),dtype=dtype )
+            h5['PF_Season%i' % season] = r
+
+        except:
+            print "problem with season %i " % season
+            pass

@@ -20,8 +20,6 @@ import copy
 import os
 
 deltaPcad = 10
-
-
 #######################
 # Top Level Functions #
 #######################
@@ -48,14 +46,14 @@ def pp(par):
     'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132, 
     'inj_phase': 0.583,'inj_tau': 0.178,
     'outfile': 'temp.grid.h5','rawfile': 'lc/007831530.h5',
-    'skic': 7831530, 'svd_folder': '../terra5-50/svd/', 'type': 'mc'}
+    'skic': 7831530, 'svd_folder': '../terra5-50/svd/', 'type': 'mc',
+    'plot_lc':True}
     >>> terra.pp(dpp)
     
     """
 
     print "creating %(outfile)s" %par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
-
 
     with h5F(par['rawfile']) as h5raw, h5F(par['outfile']) as h5:
         h5.copy(h5raw['raw'],'raw')
@@ -68,7 +66,14 @@ def pp(par):
         prepro.dt(h5)        
         prepro.cal(h5,par['svd_folder'])
         prepro.sQ(h5)
-        
+        if par.has_key('plot_lc'):
+            if par['plot_lc']:
+                from matplotlib import pylab as plt
+                import kplot
+                kplot.plot_lc(h5)
+                figpath = par['outfile'].replace('.h5','.lc.png')
+                plt.gcf().savefig(figpath)
+                plt.close() 
 
 def grid(par):
     """
@@ -138,25 +143,40 @@ def dv(par):
         # Attach attributes
         h5.RES,h5.lc = get_reslc(h5)
 
-        tval.findPeak(h5)
-        tval.conv(h5)
+        tval.findPeak(h5) # Find the highest SNR peak
+        tval.toplevel(h5) 
         tval.checkHarmh5(h5)
-        tval.at_phaseFold(h5,0)
-        tval.at_phaseFold(h5,180)
+        tval.at_SES(h5)   # How many acceptible transits are there?
 
-        tval.at_binPhaseFold(h5,0,10)
-        fitgrp = h5.create_group('fit')
+        if h5.attrs['num_trans'] >=2:
+            tval.at_phaseFold(h5,0)
+            tval.at_phaseFold(h5,180)
+            tval.at_binPhaseFold(h5,0,10)
 
-        tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
-        tval.at_med_filt(h5)
-        tval.at_s2ncut(h5)
-        tval.at_SES(h5)
-        tval.at_rSNR(h5)
-        tval.at_autocorr(h5)
+            fitgrp = h5.create_group('fit')
+            tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
+
+            tval.at_med_filt(h5)
+            tval.at_s2ncut(h5)
+            tval.at_rSNR(h5)
+            tval.at_autocorr(h5)
+
+        plot_switch(h5,par)
+
+def plot_switch(h5,par):
+    ext = dict(plot_diag='pk',plot_lc='lc')
+    for k in ext.keys():
+        if par.has_key(k):
+            if par[k]:
+                from matplotlib import pylab as plt
+                import kplot
+                exec('kplot.%s(h5)' % k)
+                figpath = par['outfile'].replace('.h5','.%s.png' % ext[k])
+                plt.gcf().savefig(figpath)
+                plt.close() 
 
 
 ####################
-
 
 def dictSetup(pardict0):
     """
