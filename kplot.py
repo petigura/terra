@@ -400,6 +400,7 @@ def plotraw(h5):
             plt.plot(t - xs, ftnd - ys    ,**ftndkw)
             plt.plot(t - xs, foutlier - ys,**foutkw)
             plt.plot(t - xs, fspsd - ys   ,**fspsdkw)
+            plt.text(t[0] -xs,fm.compressed()[0],'Q%i' % i) 
 
     plt.legend(loc='upper left')
 
