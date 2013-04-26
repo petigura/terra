@@ -10,7 +10,7 @@ themselves can be instanated with out import matplotlib which is not
 possible on some non-interactive platforms
 """
 
-from matplotlib.pylab import plt
+from matplotlib.pylab import *
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
@@ -26,7 +26,13 @@ from matplotlib import mlab
 import sys
 
 seasonColors = ['r','c','m','g']
-tprop = dict(size=10,name='monospace')
+tprop = dict(name='monospace')
+
+bbox=dict(boxstyle="round", fc="w",alpha=.5)
+annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox)
+
+plt.rc('axes',color_cycle=['RoyalBlue','Tomato'])
+plt.rc('font',size=8)
 
 def plot_diag(h5):
     """
@@ -35,104 +41,101 @@ def plot_diag(h5):
     fig = plt.figure(figsize=(20,12))
     gs = GridSpec(8,10)
     axGrid     = fig.add_subplot(gs[0,0:8])
-    axStack    = fig.add_subplot(gs[3: ,0:8])
-    axPFAll    = fig.add_subplot(gs[1,0:8])
-    axPF       = fig.add_subplot(gs[2,0:4])
-    axPF180    = fig.add_subplot(gs[2,4:8],sharex=axPF,sharey=axPF)
-    axScar     = fig.add_subplot(gs[0,-1])
-    axSES      = fig.add_subplot(gs[1,-1])
-    axSeason   = fig.add_subplot(gs[2,-1])
-    axAutoCorr = fig.add_subplot(gs[3,-1])
-    axCDF      = fig.add_subplot(gs[0,-2])
+    axStack    = fig.add_subplot(gs[2:8 ,0:8])
+    axStackZoom = fig.add_subplot(gs[2:8 ,8:])
+    axPF       = fig.add_subplot(gs[1,0:2])
+    axPF180    = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
+
+    axScar     = fig.add_subplot(gs[1,5])
+    axSingSES  = fig.add_subplot(gs[0,-2])
+    axSeason   = fig.add_subplot(gs[0,-1])
+    axAutoCorr = fig.add_subplot(gs[1,6])
+    axCDF      = fig.add_subplot(gs[1,4])
 
     h5.noPrintRE = '.*?file|climb|skic|.*?folder'
     h5.noDiagRE  = \
         '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
     h5.noDBRE    = 'climb'
 
-    plt.gcf().text( 0.85, 0.05, tval.diag_leg(h5) , size=10, name='monospace',
-                    bbox=dict(visible=True,fc='white'))
+    axStack.text( 0.87, 0.01, tval.diag_leg(h5) , name='monospace',
+                  bbox=dict(visible=True,fc='white'),transform=axStack.transAxes)
     plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
-
-
     plt.sca(axGrid)
-    plt.semilogx()
-    plt.minorticks_off()
-    xt = [5 , 8.9, 16, 28, 50. , 89, 158, 281, 500.]
-    plt.xticks(xt,xt)
     plotGrid(h5)
-    at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
-    axGrid.add_artist(at)
-    axGrid.xaxis.set_ticks_position('top')
-    plt.title('Period (days)')
-    plt.ylabel('MES')
-
-    plt.sca(axPFAll)
-    plt.plot(h5['tPF'],h5['fmed'],',',alpha=.5)
-    plt.plot(h5['bx1'],h5['by1'],'o',mew=0)
-    plt.plot(h5['bx5'],h5['by5'],'.',mew=0)
-    y = h5['fmed']
-    yl = np.percentile(y,[5,95])
-    yl[0] *= 1.2
-    yl[1] *= 1.2
-
-    axPFAll.set_ylim(*yl) 
-    plt.autoscale(axis='x',tight=True)    
 
     plt.sca(axPF180)
-    plotPF(h5,180)
-    cax = plt.gca()
-    cax.xaxis.set_visible(False)
-    cax.yaxis.set_visible(False)
-    at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
-    cax.add_artist(at)
+    plotPF(h5,180,diag=True)
 
     plt.sca(axPF)
-    plotPF(h5,0)
-    cax = plt.gca()
-    cax.xaxis.set_visible(False)
-    cax.yaxis.set_visible(False)
-    at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
-    cax.add_artist(at)
-    #df = h5.attrs['pL0'][0]**2
-    #plt.ylim(-5*df,3*df)
+    plotPF(h5,0,diag=True)
 
     plt.sca(axStack)
     plotSES(h5)
-    plt.xlabel('Phase')
-    plt.ylabel('SES (ppm)')
 
     plt.sca(axScar)
-    res,lc = terra.get_reslc(h5)
-    sketch.scar(res)
-    plt.gca().xaxis.set_visible(False)
-    plt.gca().yaxis.set_visible(False)
+    plotScar(h5)
 
-    plt.sca(axSES)
-    rses = h5['SES']
-    plt.plot(rses['tnum'],rses['ses']*1e6,'.')
-    axSES.xaxis.set_visible(False)
-    at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
-    axSES.add_artist(at)
-    xl = plt.xlim()
-    plt.xlim(xl[0]-1,xl[-1]+1)
-
-    plt.sca(axSeason)
-    axSeason.plot(rses['season'],rses['ses']*1e6,'.')
-    axSeason.xaxis.set_visible(False)
-    at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
-    axSeason.add_artist(at)
-    plt.xlim(-1,4)
+    plt.sca(axSingSES)
+    plotSingSES(h5)
 
     plt.sca(axAutoCorr)
     plotAutoCorr(h5)
 
+    plt.sca(axCDF)
+    plotCDF(h5)
+
+    plt.sca(axStackZoom)
+    plotCalWrap(h5)
+
+    plt.sca(axSeason)
+    plotSeason(h5)
+
+    plt.sca(axSingSES)
+    plotSingSES(h5)
+    plt.tight_layout()
+
+def plotSingSES(h5):    
+    cax = plt.gca()
+    rses = h5['SES']
+    plt.plot(rses['tnum'],rses['ses']*1e6,'.')
+    cax.xaxis.set_visible(False)
+    at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
+    cax.add_artist(at)
+    xl = plt.xlim()
+    plt.xlim(xl[0]-1,xl[-1]+1)
+
+def plotSeason(h5):
+    cax = plt.gca()
+    rses = h5['SES']
+    cax.plot(rses['season'],rses['ses']*1e6,'.')
+    cax.xaxis.set_visible(False)
+    at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
+    cax.add_artist(at)
+    plt.xlim(-1,4)
+
+def plotScar(h5):
+    """
+    Plot scar plot
+
+    Parameters
+    ----------
+    r : res record array containing s2n,Pcad,t0cad, column
+    
+    """
+
+    r,lc = terra.get_reslc(h5)
+    bcut = r['s2n']> np.percentile(r['s2n'],90)
+    x = r['Pcad'][bcut]
+    x -= min(x)
+    x /= max(x)
+    y = (r['t0cad']/r['Pcad'])[bcut]
+    plot(x,y,',',mew=0)
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-    plt.sca(axCDF)
+def plotCDF(h5):
     lc = h5['/pp/mqcal'][:]
     sig = nd.median_filter(np.abs(lc['dM3']),200)
     plt.plot(np.sort(sig))
@@ -143,28 +146,20 @@ def plot_diag(h5):
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-
-
-
-#    axAutoCorr.text( 1, 0, tval.diag_leg(h5) , size=10, name='monospace',
-#                    va='top',bbox=dict(visible=True,fc='white'),transform=axAutoCorr.transAxes)
-
-
-###########################
-# Helper fuctions to plot #
-###########################
 def plotAutoCorr(pk):
     plt.xlabel('Displacement')
     plt.plot(pk['lag'],pk['corr'])
+    plt.gca().xaxis.set_visible(False)
+    plt.gca().yaxis.set_visible(False)
 
-def plotPF(h5,ph):
+
+def plotPF(h5,ph,diag=False):
     PF = h5['lcPF%i' % ph]
     x  = PF['tPF']
     try:
         plt.plot(x,PF['f'],',',color='k')
     except:
         print sys.exc_info()[1]
-
 
     try:
 #        import pdb;pdb.set_trace()
@@ -178,43 +173,93 @@ def plotPF(h5,ph):
     except:
         print sys.exc_info()[1]
 
-def plotSES(h5):
-    d = dict(h5.attrs)
+    if diag:
+        cax = plt.gca()
+        cax.xaxis.set_visible(False)
+        cax.yaxis.set_visible(False)
+        at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
+        cax.add_artist(at)
+
+    plt.xlabel('Phase')
+
+def wrapHelp(h5,x,ym,d):
     df = h5['fit'].attrs['pL0'][0]**2
-    res,lc = terra.get_reslc(h5)
-    x = lc['t']
-    y = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
-    sketch.stack(lc['t'],y,d['P'],d['t0'],step=3*df*1e6)
-    sketch.stack(lc['t'],y.data,d['P'],d['t0'],step=3*df*1e6,alpha=0.2)
+    d['step'] = 3*df*1e6
+    d['P']    = h5.attrs['P']
+    d['t0']   = h5.attrs['t0']
+
+    stack(x,ym,**d)
+    pltkw   = dict(alpha=0.2)
+    stack(x,ym.data,pltkw=pltkw,**d)    
     plt.autoscale(tight=True)
 
-def plotGrid(pk):
-    res,lc = terra.get_reslc(pk)
+def plotCalWrap(h5):
+    d = dict(time=True)
+
+    res,lc = terra.get_reslc(h5)
+    ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
+    wrapHelp(h5,lc['t'],ym,d)
+    plt.ylabel('SES (ppm)')
+    plt.xlim(-2,2)
+
+    plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
+    plt.gca().yaxis.set_visible(False)
+
+def plotSES(h5):
+    d = dict(time=False)
+
+    res,lc = terra.get_reslc(h5)
+    fm = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
+    wrapHelp(h5,lc['t'],fm,d)
+    plt.ylabel('SES (ppm)')
+    plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
+    plt.axvline(.5,alpha=.1,lw=10,color='m',zorder=1)
+
+    if lc.dtype.names.count('finj')==1:
+        finjkw = dict(color='m',mew=2,marker=7,ms=5,lw=0,mfc='none')
+        ym =  ma.masked_array(fm.data, lc['finj'] < -1e-6 ) 
+        t  =  lc['t']
+        id = [s.start for s in  ma.clump_masked(ym)]
+        stack(t[id] ,ym.data[id] + 100,pltkw=finjkw,**d)
+
+def plotGrid(h5):
+    cax = plt.gca()
+    res,lc = terra.get_reslc(h5)
     x = res['Pcad']*config.lc
     y = res['s2n']
+
+    plt.semilogx()
+    plt.minorticks_off()
+    xt = [5 , 8.9, 16, 28, 50. , 89, 158, 281, 500.]
+    plt.xticks(xt,xt)
+    at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
+    cax.add_artist(at)
+    cax.xaxis.set_ticks_position('top')
+    plt.title('Period (days)')
+    plt.ylabel('MES')
     
     plt.plot(x,y)
-    id = np.argsort( np.abs(x - pk.attrs['P']) )[0]
+    id = np.argsort( np.abs(x - h5.attrs['P']) )[0]
     plt.plot(x[id],y[id],'ro')
     plt.autoscale(axis='x',tight=True)
 
-def plotMed(pk):
-    lc = pk.lc
+def plotMed(h5):
+    lc = h5.lc
     t = lc['t']
-    fmed = ma.masked_array(pk['fmed'][:],lc['fmask'])
-    P = pk.attrs['P']
-    t0 = pk.attrs['t0']
-    df = pk.attrs['df']
-    sketch.stack(t,fmed*1e6,P,t0,step=5*df)
+    fmed = ma.masked_array(h5['fmed'][:],lc['fmask'])
+    P = h5.attrs['P']
+    t0 = h5.attrs['t0']
+    df = h5.attrs['df']
+    stack(t,fmed*1e6,P,t0,step=5*df)
     plt.autoscale(tight=True)
 
-def morton(pk):
+def morton(h5):
     """
-    Print a 1-page diagnostic plot of a given pk.
+    Print a 1-page diagnostic plot of a given h5.
     """
-    P  = pk.attrs['P']
-    t0 = pk.attrs['t0']
-    df = pk.attrs['df']
+    P  = h5.attrs['P']
+    t0 = h5.attrs['t0']
+    df = h5.attrs['df']
 
     fig = plt.figure(figsize=(20,12))
     gs = GridSpec(4,3)
@@ -227,8 +272,8 @@ def morton(pk):
     for ax,ph in zip([axPF0,axPF180],[0,180]):
         plt.sca(ax)        
 
-        PF  = pk['lcPF%i'%ph]
-        bPF = pk['blc30PF%i' % ph ]
+        PF  = h5['lcPF%i'%ph]
+        bPF = h5['blc30PF%i' % ph ]
 
         plt.plot(PF['tPF'],PF['f'],',',color='k')
         plt.plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
@@ -254,7 +299,7 @@ def morton(pk):
 
     for season in range(4):
         try:
-            PF = pk['PF_Season%i' % season ][:]
+            PF = h5['PF_Season%i' % season ][:]
             plt.plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
         except:
             pass
@@ -265,13 +310,13 @@ def morton(pk):
     cax.yaxis.set_visible(False)
     cax.add_artist(at)
     plt.sca(axStack)
-    plotManyTrans(pk)
+    plotManyTrans(h5)
  
     plt.gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
 
-def plotManyTrans(pk):
-    PF = pk['lcPF0'][:]
-    numTrans = (PF['t'] / pk.attrs['P']).astype(int) # number of the transit
+def plotManyTrans(h5):
+    PF = h5['lcPF0'][:]
+    numTrans = (PF['t'] / h5.attrs['P']).astype(int) # number of the transit
     iTrans   = np.digitize(numTrans,np.unique(numTrans))
     xL,yL,qL = [],[],[]
 
@@ -283,7 +328,7 @@ def plotManyTrans(pk):
     nTrans = len(xL)
     kw = {}
     kw['wData'] = np.nanmax([x.ptp() for x in xL]) * 1.1
-    kw['hData'] = pk.attrs['df'] * 1e-6
+    kw['hData'] = h5.attrs['df'] * 1e-6
 
     mad = np.median(np.abs(np.hstack(yL)))
     hStepData = 6 * mad
@@ -355,113 +400,153 @@ def rebin(xL,yL,bfac):
         iStart+=bfac
     return xL2,yL2
 
+def qstackplot(h5,func):
+    """
 
-def plotraw(h5):
+    """
     qL = [int(i[0][1:]) for i in h5['/raw'].items()]
-    colors = ['RoyalBlue','Black']
 
-    ilabel = False
-    for i in range(1,15):
-        season = (i+1) % 4
-        year   = (i - season)/4
+    qmi,qma = min(qL),max(qL)
+    for i in range(qmi,qma+1):
+        if i==qmi : 
+            label = True
+        else:
+            label = False
+
         if qL.count(i)==1:
-            qlc = h5['/raw']['Q%i' %i ][:]
-            t = qlc['t']
+            func(h5,i,label)
 
-            fm = ma.masked_array(qlc['f'],qlc['isBadReg'])
-            dt = h5['/pp/dt']['Q%i' %i ][:]
-            ftnd = ma.masked_array(dt['ftnd'],qlc['fmask'])
-            foutlier  = fm.copy()
-            foutlier.mask = ~qlc['isOutlier']
+def helper(i):
+    season = (i+1) % 4    
+    return dict( season = season,
+                 year   = (i - season)/4 ,
+                 qstr   = 'Q%i' % i )
+
+def plotraw(h5,i,label):
+    colors = ['RoyalBlue','Black']
+    d = helper(i)
+    year,season = d['year'],d['season']
+    xs =  365.25*year
+    ys =  year*0.01
+
+    qlc = h5['/raw/%(qstr)s' % d ][:]
+    dt = h5['/pp/dt/%(qstr)s' % d ][:]
+
+    t   = qlc['t']
+    fm = ma.masked_array(qlc['f'],qlc['isBadReg'])
+    ftnd = ma.masked_array(dt['ftnd'],qlc['fmask'])
+    foutlier  = fm.copy()
+    foutlier.mask = ~qlc['isOutlier']
+
+    fspsd  = fm.copy()
+    fspsd.mask = ~qlc['isStep']
+
+    fkw     = dict(color=colors[year % 2],lw=3)
+    foutkw  = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
+    fallkw  = dict(color=colors[year % 2],lw=3,alpha=0.4)
+    ftndkw  = dict(color='Tomato',lw=2)
+    fspsdkw = dict(color='Chartreuse',lw=10,alpha=0.5)
+
+    if label==True:
+        fkw['label']     = 'Raw Phot'
+        fallkw['label']  = 'Removed by Hand'
+        ftndkw['label']  = 'High Pass Filt'
+        foutkw['label']  = 'Outlier'
+        fspsdkw['label'] = 'SPSD'
+
+    def plot(*args,**kwargs):
+        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
+
+    plot(t , fm        ,**fkw)
+    plot(t , fm.data   ,**fallkw)
+    plot(t , ftnd      ,**ftndkw)
+    plot(t , foutlier  ,**foutkw)
+    plot(t , fspsd     ,**fspsdkw)
+
+    def plot(*args,**kwargs):
+        plt.plot( args[0] - xs,args[1] -ys+0.001, **kwargs )
+
+    addtrans(qlc,fm.data,label,plot)
+
+    xy =  (t[0]-xs , fm.compressed()[0]-ys)
+    plt.annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
 
 
-            fspsd  = fm.copy()
-            fspsd.mask = ~qlc['isStep']
 
-            fkw    = dict(color=colors[year % 2],lw=3)
-            foutkw = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
-            fallkw = dict(color=colors[year % 2],lw=3,alpha=0.4)
-            ftndkw = dict(color='Tomato',lw=2)
-            fspsdkw = dict(color='m',lw=5)
-
-            if ilabel==False:
-                fkw['label']    = 'Raw Phot'
-                fallkw['label'] = 'Removed by Hand'
-                ftndkw['label'] = 'High Pass Filt'
-                foutkw['label'] = 'Outlier'
-                fspsdkw['label'] = 'SPSD'
-                ilabel=True
-
-            xs =  365.25*year
-            ys =  year*0.01
-
-            plt.plot(t - xs, fm - ys      ,**fkw)
-            plt.plot(t - xs, fm.data - ys ,**fallkw)
-            plt.plot(t - xs, ftnd - ys    ,**ftndkw)
-            plt.plot(t - xs, foutlier - ys,**foutkw)
-            plt.plot(t - xs, fspsd - ys   ,**fspsdkw)
-            plt.text(t[0] -xs,fm.compressed()[0],'Q%i' % i) 
 
     plt.legend(loc='upper left')
 
-def plotcal(h5):
-    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+def addtrans(raw,y,label,plot):
+    """
+    Add little triangles marking where the transis are.
+    """
+    if raw.dtype.names.count('finj')==1:
+        finjkw = dict(color='m',mew=2,marker=7,ms=5,lw=0,mfc='none')
+        if label==True:
+            finjkw['label'] = 'Injected Transits'
+
+        ym =  ma.masked_array(y, raw['finj'] > -1e-6 ) 
+        t  =  raw['t']
+        sL = ma.clump_unmasked(ym)
+        id = [s.start for s in  ma.clump_unmasked(ym)]
+        plot(t[id] ,ym[id] + 0.001,**finjkw)
+
+def plotcal(h5,i,label):
     colors = ['RoyalBlue','k']
-    for i in range(1,15):
-        season = (i+1) % 4
-        year   = (i - season)/4
-        if qL.count(i)==1:
-            dt = h5['/pp/dt']['Q%i' %i][:]
-            raw = h5['raw']['Q%i'%i][:]
-            cal = h5['/pp/cal']['Q%i'%i][:]
-            t = raw['t']
+    d = helper(i)
+    year,season = d['year'],d['season']
 
-            fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
-            fit  = ma.masked_array(cal['fit'],raw['fmask'])
+    raw = h5['/raw/%(qstr)s'    % d][:]
+    dt  = h5['/pp/dt/%(qstr)s'  % d][:]
+    cal = h5['/pp/cal/%(qstr)s' % d][:]
 
-            fcal = ma.masked_array(cal['fcal'],raw['fmask'])
+    t = raw['t']
 
-            xs =  365.25*year
-            ys =  year*0.003
+    fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
+    fit  = ma.masked_array(cal['fit'],raw['fmask'])
+    fcal = ma.masked_array(cal['fcal'],raw['fmask'])
 
-            plt.plot(raw['t'] - xs,fit - ys,color='Tomato')
-            plt.plot(raw['t'] - xs,fcal - ys-0.001,color=colors[i%2])
+    xs =  365.25*year
+    ys =  year*0.003 
 
+    def plot(*args,**kwargs):
+        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
 
 
-def plotdt(h5):
-    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+    plot(t ,fit, color='Tomato')
+    plot(t ,fcal -0.001,color=colors[i%2])
+
+def plotdt(h5,i,label):
     colors = ['RoyalBlue','k']
-    for i in range(1,15):
-        season = (i+1) % 4
-        year   = (i - season)/4
-        if qL.count(i)==1:
-            dt = h5['/pp/dt']['Q%i' %i][:]
-            raw = h5['raw']['Q%i'%i][:]
-            t = raw['t']
+    d = helper(i)
+    year,season = d['year'],d['season']
+    xs =  365.25*year
+    ys =  year*0.003
 
-            fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
-            xs =  365.25*year
-            ys =  year*0.003
+    raw = h5['/raw/%(qstr)s'   % d][:]
+    t   = raw['t']
+    dt  = h5['/pp/dt/%(qstr)s' % d][:]
 
-            plt.plot(raw['t'] - xs,fdt - ys,color=colors[i%2])
+    fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
 
+    def plot(*args,**kwargs):
+        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
 
-
+    plot(t,fdt,color=colors[i%2])
 
 def plot_lc(h5):
     fig,axL = plt.subplots(nrows=2,figsize=(20,12),sharex=True)
 
     try:
         plt.sca(axL[0])
+        qstackplot(h5,plotraw)
 
-        plotraw(h5)
         plt.sca(axL[1])
-        plotdt(h5)
-        plotcal(h5)
+        qstackplot(h5,plotdt)
+        qstackplot(h5,plotcal)
+
     except:
         print sys.exc_info()[1]
-
 
     plt.tight_layout()
     plt.xlim(250,650)
@@ -539,3 +624,56 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
     if hidey : ax.yaxis.set_visible(False)
  
     return sb
+
+def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
+    """
+    Plot the SES    
+
+    time : plot time since mid transit 
+    
+    set colors by changing the 'axes.colorcycle'
+    """
+    ax = gca()
+
+    t = t.copy()
+
+    # Shift t-series so first transit is at t = 0 
+    dt = tval.t0shft(t,P,t0)
+    t += dt
+    phase = mod(t+P/4,P)/P-1./4
+
+    # Associate each section of length P to a specific
+    # transit. Sections start 1/4 P before and end 3/4 P after.
+    label = np.floor(t/P+1./4).astype(int) 
+    labelL = unique(label)
+
+    xshft = 0
+    yshft = 0
+    for l in labelL:
+        # Calculate shift in t-series.
+        row,col = np.modf(1.*l/maxhlines)
+        row = row*maxhlines
+        xshift = col
+        yshift = -row*step
+
+        blabel = (l == label)
+        phseg = phase[blabel]
+        yseg  = y[blabel]
+        sid   = np.argsort(phseg)
+        phseg = phseg[sid]
+        yseg  = yseg[sid]
+
+
+        def plot(*args,**kwargs):
+            ax.plot(args[0] +xshift, args[1] + yshift,**kwargs)
+
+        if time:
+            plot(phseg*P, yseg,**pltkw)
+        else:
+            plot(phseg, yseg, **pltkw)
+
+        imin = np.argmin(np.abs(phseg+xshift))
+        s = str(np.round(t[blabel][imin]-dt,decimals=1))
+        ax.text(0,yshift,s)
+
+    xlim(-.25,.75)

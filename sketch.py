@@ -14,22 +14,22 @@ import keptoy
 import qalg
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
-
-    
 def inspectT(t0,f0,P,ph,darr=None):
     """
     Inspect Transit
 
     """
-
     
-def stack(t,y,P,t0,cL=['RoyalBlue','Tomato'],step=1e-3,maxhlines=50,**kwargs):
+def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     """
     Plot the SES    
+
+    time : plot time since mid transit 
+    
+    set colors by changing the 'axes.colorcycle'
     """
     ax = gca()
 
-    ncL = len(cL)
     t = t.copy()
 
     # Shift t-series so first transit is at t = 0 
@@ -58,17 +58,20 @@ def stack(t,y,P,t0,cL=['RoyalBlue','Tomato'],step=1e-3,maxhlines=50,**kwargs):
         phseg = phseg[sid]
         yseg  = yseg[sid]
 
-        color = cL[ np.mod( l , len(cL) ) ]
-        ax.plot(phseg+xshift,yseg+yshift,color=color,**kwargs)
+
+        def plot(*args,**kwargs):
+            ax.plot(args[0] +xshift, args[1] + yshift,**kwargs)
+
+        if time:
+            plot(phseg*P, yseg,**pltkw)
+        else:
+            plot(phseg, yseg, **pltkw)
 
         imin = np.argmin(np.abs(phseg+xshift))
         s = str(np.round(t[blabel][imin]-dt,decimals=1))
         ax.text(0,yshift,s)
 
     xlim(-.25,.75)
-    axvline(0,alpha=.3)
-    axvline(.5,alpha=.3)
-
 
 def gridTraceSetup(wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
     """
@@ -145,24 +148,6 @@ def PF(t,y,P,t0,tdur):
     clf()
     ax = gca()
     ax.plot(mod(tm[~tm.mask]+P/2,P)-P/2,fldt[~fldt.mask],'.')
-
-
-def scar(r):
-    """
-    Plot scar plot
-
-    Parameters
-    ----------
-    r : res record array containing s2n,Pcad,t0cad, column
-    
-    """
-    bcut = r['s2n']> np.percentile(r['s2n'],90)
-    x = r['Pcad'][bcut]
-    x -= min(x)
-    x /= max(x)
-    y = (r['t0cad']/r['Pcad'])[bcut]
-    plot(x,y,',',mew=0)
-
 
 def stackold(x,y,size,pad=0.1,axl=None,**kw):
     """
