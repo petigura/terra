@@ -13,13 +13,9 @@ import numpy as np
 from numpy import ma
 from matplotlib import mlab
 
-#from keptoy import *
 import keptoy
 import keplerio
 import FFA_cext as FFA
-# import FBLS
-# import FBLS_cext as FBLS
-# import FBLS_cy
 
 from config import *
 
@@ -45,37 +41,41 @@ P2 = int(np.floor(config.P2/keptoy.lc))
 maCadCnt = int( np.floor(config.maCadCnt) )
 cut = 5e3
 
-def grid(h5):
+def grid(h5,parL):
     """
     Run the grid search
 
     Parameters
     ----------
-    h5 : an h5plus instance
-         P1,P2 must be attributes
+    h5   : h5 file. Will results will go in the it0 group.
+    parL : List of dictionaries each with the following keys:
+           Pcad1 - Lower bound of period search (integer # of cadences)
+           Pcad2 - Upper bound + 1
+           twdG  - Range of trial durations to search over
     """
 
     lc  = h5['/pp/mqcal'][:]
 
-
-    P1 = h5.attrs['P1_FFA']
-    P2 = h5.attrs['P2_FFA']
-    f     = lc[ h5.attrs['fluxField'] ]
+    f    = lc[ h5.attrs['fluxField'] ]
     mask = lc[ h5.attrs['fluxMask'] ] 
     t    = lc['t']
 
-    print P1,P2
-    print "itOutRej first run. Creating it0"
+    print "running from %i to %i cadences, in %i segments" \
+        % (parL[0]['Pcad1'],parL[-1]['Pcad2'],len(parL))
 
+    rL = []
+    for par in parL:        
+        fm    = ma.masked_array(f,mask,fill_value=0,copy=True)
+        PcadG = np.arange(par['Pcad1'],par['Pcad2'])
+        rtd   = tdpep(t,fm,PcadG,par['twdG'])
+        r     = tdmarg(rtd)
+        rL.append(r)
+
+    r = np.hstack(rL)
     it0 = h5.create_group('it0')
     it0 = h5['it0']
-
-
-    fm    = ma.masked_array(f,mask,fill_value=0,copy=True)
-    PcadG = np.arange(P1,P2)
-    rtd   = tdpep(t,fm,PcadG,config.twdG)
-    r     = tdmarg(rtd)
     it0['RES']   = r
+
 
 def itOutRej(h5):
     """
@@ -567,8 +567,18 @@ def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
 
     Pcad1 = int(P1/config.lc)
     Pcad2 = int(P2/config.lc)
+
+    twdG = []
+    delT = delTlim[0]
+    while delT < delTlim[1]:
+        twdG.append( int(round(delT) ) )
+        delT *= 1.33
+
+    twdG.append(delTlim[1])
+
     d = dict( qmi=qmi, qma=qma, fmi=fmi, nf=nf, df=df, farr=farr,nb=nb ,
-              delT1=delTlim[0], delT2=delTlim[1], Pcad1=Pcad1, Pcad2=Pcad2 )
+              delT1=delTlim[0], delT2=delTlim[1], Pcad1=Pcad1, Pcad2=Pcad2,
+              twdG=twdG)
     return d
 
 def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):

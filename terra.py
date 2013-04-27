@@ -18,7 +18,7 @@ from matplotlib import mlab
 import h5plus
 import copy
 import os
-
+import pandas
 deltaPcad = 10
 #######################
 # Top Level Functions #
@@ -93,15 +93,20 @@ def grid(par):
     >>> terra.grid(dgrid)    
 
     """
+    names = 'P1,P2,Pcad1,Pcad2,delT1,delT2,twdG'.split(',')
+
+    parL = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
+    df = pandas.DataFrame(parL,columns=names)
+
     print "Running grid on %s" % par['outfile'].split('/')[-1]
+    print df.to_string()
+
+    parL = [dict(df.ix[i]) for i in df.index]
     with h5F(par['outfile']) as h5:     
         h5.attrs['fluxField']  = par['fluxField']
         h5.attrs['fluxMask']   = par['fluxMask']
 
-        for k in 'P1_FFA,P2_FFA'.split(','):
-            h5.attrs[k] = par[k]
-
-        tfind.grid(h5) 
+        tfind.grid(h5,parL) 
 
 def dv(par):
     """
