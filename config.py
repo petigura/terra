@@ -18,7 +18,7 @@ blockSize = 1000
 # tfind
 miTransMES = 3 # Minimum number of transits to even be included in MES
 miSES      = 0 # All transits must have SES larger than this.
-twdG       = [3,5,7,10,14,18]
+twdG       = [3,5,7,10,14,18,23,28,32,38]
 P1,P2      = 5,50 # Days over which to compute periodogram 
 maCadCnt   = 5e3 # cadCount counts up the number of times a particular
                  # cadence goes into the MES calculation.  If a
