@@ -668,7 +668,6 @@ def FBLS(F,W,alg,d):
 
 ##### BLS-SNR ######
 
-
 def BLS_SNR(t,fm,P1,P2):
     """
     BLS based on SNR
@@ -703,44 +702,86 @@ def medfilt_interp(fm,s):
 
 
 import BLS_cy
-def multiScaleBLS(t,fm,d):
-    """
-    Multi-scale BLS
+import BLS_cext
 
-    BLS searches over a range of transit durations. We filter out all
-    trends longer than tdur * fact with a median filter. For each of
-    the trial durations, we return the maximum SNR.
-
-    """
-
-    filterW = np.array([5,10,20])
-    fact    = 3 # Filter is fact times wider than maximum duration searched over
-
-    Wmi     = filterW[filterW-d['delT1'] >= 0][0]
-    Wma     = filterW[filterW-d['delT2'] >= 0][0]
-    delTarr = filterW[(filterW >= Wmi) & (filterW <= Wma)]
-
-    print "searching for transits btween %(delT1)i and %(delT2)i meas" % d
-    print "running median filter w/ following footprint ",delTarr * fact
-
-    ndelT = delTarr.size
+def multiScaleBLS(t0,fm,d,alg):
+    fact = 3 # Filter is fact times wider than maximum duration searched over
     SNR2D = []
-    for i in range(ndelT):
+    for i in [0,1]:
+        t = t0.copy()
         if i==0:
             delT1 = d['delT1']
+            delT2 = d['delT2'] * 0.5
         else:
-            delT1 = delTarr[i-1]
-        delT2 = delTarr[i]
+            delT1 = d['delT2'] * 0.5
+            delT2 = d['delT2']
         
         qmi = float(delT1) / d['Pcad1']
         qma = float(delT2) / d['Pcad1']
 
         # preserve times up to delT[i+1]
-        fmed = medfilt_interp(fm,fact*delT2)
-        fbls = (fm - fmed).compressed()
+        filtW = fact*delT2
 
+        fmed = medfilt_interp(fm,filtW)
+
+        print "%(P1).2f %(P2).2f " % d, filtW
+        
+        fbls = fm - fmed
         Parr = 1./d['farr']
-        SNR,delTma,t0ma = BLS_cy.BLS_SNR(t[~fm.mask],fbls,Parr,d['nb'],qmi,qma)
-        SNR2D.append(SNR)
+        t    = t[~fm.mask]
+        fbls = fbls.compressed()
 
+        if alg=='cy':
+            SNR = BLS_cy.BLS_SNR(t,fbls,Parr,d['nb'],qmi,qma)
+        elif alg=='cext':
+            SNR = BLS_cext.cBLS(t,fbls,Parr,d['nb'],qmi,qma)
+        SNR2D.append(SNR)
+    
     return np.vstack(SNR2D).max(axis=0)
+
+def ebls(t,fm,P1,P2,alg,dv=False):
+    dL = pgramParsSeg(P1,P2,t.ptp(),nseg=10)
+    df = pandas.DataFrame(dL)
+    
+    SNR  = []
+    Parr = np.hstack(df.farr)
+    Parr = 1./Parr
+
+    def core(d):
+        SNR2D = multiScaleBLS(t,fm,d,alg)
+        return np.vstack(SNR2D).max(axis=0)
+    
+    if dv!=False:
+        dv.push(dict(t=t,fm=fm))
+        f = lambda d : multiScaleBLS(t,fm,d,'cext')
+        test = dv.map(f,dL,block=True)
+
+        SNR = dv.map(core,dL,block=True)
+    else:
+        SNR = map(core,dL)
+
+    SNR = np.hstack(SNR)
+    return Parr,SNR
+
+
+
+def pebls(t,fm,P1,P2,alg,dv=False):
+    dL = pgramParsSeg(P1,P2,t.ptp(),nseg=10)
+    df = pandas.DataFrame(dL)
+    
+    SNR  = []
+    Parr = np.hstack(df.farr)
+    Parr = 1./Parr
+
+    def core(d):
+        SNR2D = multiScaleBLS(t,fm,d,alg)
+        return 
+    
+    if dv!=False:
+        SNR = dv.map(core,dL,block=True)
+    else:
+        SNR = map(core,dL)
+
+    SNR = np.hstack(SNR)
+    return Parr,SNR
+
