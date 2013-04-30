@@ -58,7 +58,7 @@ def plot_diag(h5):
     h5.noDBRE    = 'climb'
 
     axStack.text( 0.87, 0.01, tval.diag_leg(h5) , name='monospace',
-                  bbox=dict(visible=True,fc='white'),transform=axStack.transAxes)
+                  bbox=dict(visible=True,fc='white',alpha=0.5),transform=axStack.transAxes)
     plt.tight_layout()
     plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
@@ -156,22 +156,29 @@ def plotAutoCorr(pk):
 def plotPF(h5,ph,diag=False):
     PF = h5['lcPF%i' % ph]
     x  = PF['tPF']
-    try:
+    
+    @handelKeyError
+    def plot_phase_folded():
         plt.plot(x,PF['f'],',',color='k')
-    except:
-        print sys.exc_info()[1]
 
-    try:
-#        import pdb;pdb.set_trace()
-        bPF = h5['blc10PF%i' % ph][:]
-        xb  = bPF['tb']
-        yb  = bPF['med']
+        bPF = h5['blc30PF0'][:]
+        t   = bPF['tb']
+        f   = bPF['med']
+        plt.plot(t,f,'+',mew=2,color='RoyalBlue')
 
-        plt.plot(xb,yb,'+',mew=2,color='RoyalBlue')
-        ybfit  = h5['fit']['fit'][:]
-        plt.plot(xb,ybfit,lw=3,color='Tomato')
-    except:
-        print sys.exc_info()[1]
+    @handelKeyError
+    def plot_fit():
+        fitgrp = h5['fit']
+        t    = fitgrp['t']
+        f    = fitgrp['f']
+        ffit = fitgrp['fit'][:]
+
+
+        plt.plot(t,ffit,lw=3,color='Tomato')
+
+    plot_phase_folded()
+    if ph==0:
+        plot_fit()
 
     if diag:
         cax = plt.gca()
@@ -181,6 +188,19 @@ def plotPF(h5,ph,diag=False):
         cax.add_artist(at)
 
     plt.xlabel('Phase')
+
+def handelKeyError(func):
+    """
+    Cut down on the number of try except statements
+    """
+    def handelProblems():
+        try:
+            func()
+        except KeyError:
+            print "%s: KeyError" %  func.__name__ 
+    return handelProblems
+            
+        
 
 def wrapHelp(h5,x,ym,d):
     df = h5['fit'].attrs['pL0'][0]**2

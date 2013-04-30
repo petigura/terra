@@ -374,14 +374,9 @@ def at_binPhaseFold(h5,ph,bwmin):
     for k in d.keys():
         h5[ name ].attrs[k] = d[k]
     
-def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
+def at_fit(h5,runmcmc=False,fixb=None):
     """
     Fit MA model binned phase folded light curves.
-
-    xdata : tb  - time at the center of the bin
-    ydata : med - binned median
-    err   : std / sqrt(count). Note this should probably be higher for
-            median, but it just introduces a scalar
             
     Parameters
     ----------
@@ -390,10 +385,23 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
     bPF    : binned lightcurve dataset 
     fitgrp : empty group to store fitted parameters
     """
-
     attrs    = dict(h5.attrs)
-    ph       = bPF.attrs['ph']
-    bPFattrs = dict(bPF.attrs) 
+    ph       = 0
+    fitgrp    = h5.create_group('fit')
+
+    if attrs['P'] < 50:
+        bPF = h5['blc10PF0'][:]
+        t   = bPF['tb']
+        y   = bPF['med']
+        err = bPF['std'] / np.sqrt( bPF['count'] )
+
+        b1  = bPF['count'] == 1 # for 1 value std ==0 which is bad
+        err[b1] = ma.median(ma.masked_invalid(bPF['std']))
+    else:
+        lc = h5['lcPF0'][:]
+        t  = lc['tPF']
+        y  = lc['f']
+        err = np.ones(lc.size)
 
     try:
         p0 = np.sqrt(1e-6*attrs['df'])
@@ -402,19 +410,15 @@ def at_fit(h5,bPF,fitgrp,runmcmc=False,fixb=None):
 
     pL0 = [ p0, attrs['tdur']/2. ,.3  ]
 
-    t   = bPF['tb']
-    y   = bPF['med']
-    err = bPF['std'] / np.sqrt( bPF['count'] )
-
-    b1  = bPF['count'] ==1 # for 1 value std ==0 which is bad
-    err[b1] = ma.median(ma.masked_invalid(bPF['std']))
-
     # Find global best fit value
     trans = TransitModel(t,y,err,attrs['climb'],pL0,fixb=fixb,dt=0)
     trans.register()
     pL1 = trans.fit()
     np.set_printoptions(precision=3)
     fitgrp['fit'] = trans.MA(pL1,trans.t)
+    fitgrp['t'] = t 
+    fitgrp['f'] = y
+
     fitgrp.attrs['pL%i'  % ph] = pL1
     fitgrp.attrs['X2_%i' % ph] = trans.chi2(pL1)
     fitgrp.attrs['dt_%i' % ph] = trans.dt
@@ -604,6 +608,29 @@ def at_autocorr(h5):
     h5['lag'] = lag
     h5['corr'] = corr
     h5.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
+
+def at_grass(h5):
+    """
+    Start with the tallest SNR period. Compute the median height of
+    three nearby peaks?
+    """
+
+    res = h5['it0']['RES'][:]
+    P   = h5.attrs['P']
+    fac = 1.4 # bin ranges from P/fac to P*fac.
+    bins  = np.logspace(np.log10(P/fac),np.log10(P*fac),101)
+    xp,yp  =findpks(res['Pcad']*config.lc,res['s2n'],bins)
+
+    h5.attrs['grass'] = np.median(np.sort(yp)[-5:]) # enough to ignore
+                                                    # the primary peak
+
+def findpks(x,y,bins):
+    id    = np.digitize(x,bins)
+    uid   = np.unique(id)[1:-1] # only elements inside the bin range
+
+    mL    = [np.max(y[id==i]) for i in uid]
+    mid   = [ np.where((y==m) & (id==i))[0][0] for i,m in zip(uid,mL) ] 
+    return x[mid],y[mid]
 
 ######
 # IO #
@@ -848,8 +875,8 @@ class TransitModel:
     """
     def __init__(self,t,y,err,climb,pL0,fixb=None,dt=0):
         """
-        t : time array
-        y : flux array
+        t   : time array
+        y   : flux array
         err : errors
         climb : size 4 array with non-linear limb-darkening components
         pL0 :  [ Rp/Rstar, tau, b]. If fixb is true, the value of b is ignored
@@ -862,6 +889,8 @@ class TransitModel:
 
         b         = np.vstack( map(np.isnan, [t,y,err]) ) 
         b         = b.astype(int).sum(axis=0) == 0 
+        b         = b & (err > 0.)
+
         self.tm   = t[b]
         self.ym   = y[b]
         self.errm = err[b]
@@ -883,8 +912,12 @@ class TransitModel:
             return res[1]
 
         X2L = np.array( map(f,dtarr) )
-        self.dt = dtarr[np.argmin(X2L)]
-        print "dt is now",self.dt
+        if (~np.isfinite(X2L)).sum() != 0:
+            print "problem with registration: setting dt to 0.0"
+            self.dt = 0.
+        else:
+            self.dt = dtarr[np.argmin(X2L)]
+            print "registration: setting dt to",self.dt
 
     def fit(self):
         if self.fixb != None:

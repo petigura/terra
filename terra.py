@@ -128,6 +128,18 @@ def dv(par):
     """
     print "Running dv on %s" % par['outfile'].split('/')[-1]
 
+    if par.has_key('mode'):
+        if par['mode'] = 'c':
+            l = 'SES,blc10PF0,blc30PF0,bx1,bx5,by1,by5,corr,fit,fmed,lag' + \
+                'lcPF0,lcPF180,tPF,tRegLbl'
+            l = l.split(',')
+            import sys
+            for i in l:
+                try:
+                    del h5[i]
+                except:
+                    sys.exc_info()[1]
+
     with h5F(par['outfile']) as h5:
         if dict(h5.attrs).has_key('climb') == False:
             climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
@@ -149,6 +161,7 @@ def dv(par):
         h5.RES,h5.lc = get_reslc(h5)
 
         tval.findPeak(h5) # Find the highest SNR peak
+        tval.at_grass(h5) # How many nearby SNR peaks are there?
         tval.toplevel(h5) 
         tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
@@ -156,10 +169,11 @@ def dv(par):
         if h5.attrs['num_trans'] >=2:
             tval.at_phaseFold(h5,0)
             tval.at_phaseFold(h5,180)
-            tval.at_binPhaseFold(h5,0,10)
 
-            fitgrp = h5.create_group('fit')
-            tval.at_fit(h5,h5['blc10PF0'],fitgrp,runmcmc=True)
+            tval.at_binPhaseFold(h5,0,10)
+            tval.at_binPhaseFold(h5,0,30)
+
+            tval.at_fit(h5,runmcmc=True)
 
             tval.at_med_filt(h5)
             tval.at_s2ncut(h5)
