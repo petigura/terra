@@ -128,19 +128,23 @@ def dv(par):
     """
     print "Running dv on %s" % par['outfile'].split('/')[-1]
 
-    if par.has_key('mode'):
-        if par['mode'] = 'c':
-            l = 'SES,blc10PF0,blc30PF0,bx1,bx5,by1,by5,corr,fit,fmed,lag' + \
-                'lcPF0,lcPF180,tPF,tRegLbl'
-            l = l.split(',')
-            import sys
-            for i in l:
-                try:
-                    del h5[i]
-                except:
-                    sys.exc_info()[1]
+
 
     with h5F(par['outfile']) as h5:
+        if par.has_key('mode'):
+            if par['mode']=='c':
+                l = 'SES,blc10PF0,blc30PF0,bx1,bx5,by1,by5,corr,fit,fmed,'+\
+                    'lag,lcPF0,lcPF180,tPF,tRegLbl'
+                l = l.split(',')
+
+                import sys
+                for i in l:
+                    try:
+                        del h5[i]
+                    except:
+                        print sys.exc_info()[1]
+
+
         if dict(h5.attrs).has_key('climb') == False:
             climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
             h5.attrs['climb'] = climb
@@ -174,7 +178,6 @@ def dv(par):
             tval.at_binPhaseFold(h5,0,30)
 
             tval.at_fit(h5,runmcmc=True)
-
             tval.at_med_filt(h5)
             tval.at_s2ncut(h5)
             tval.at_rSNR(h5)
