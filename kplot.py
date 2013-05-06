@@ -25,26 +25,30 @@ from numpy import ma
 from matplotlib import mlab
 import sys
 
+import pandas as pd
+pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
+
 seasonColors = ['r','c','m','g']
 tprop = dict(name='monospace')
 
 bbox=dict(boxstyle="round", fc="w",alpha=.5)
 annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox)
 
-plt.rc('axes',color_cycle=['RoyalBlue','Tomato'])
-plt.rc('font',size=8)
+rc('axes',color_cycle=['RoyalBlue','Tomato'])
+rc('font',size=8)
 
 def plot_diag(h5):
     """
     Print a 1-page diagnostic plot of a given h5.
     """
-    fig = plt.figure(figsize=(20,12))
+    fig = figure(figsize=(20,12))
     gs = GridSpec(8,10)
-    axGrid     = fig.add_subplot(gs[0,0:8])
-    axStack    = fig.add_subplot(gs[2:8 ,0:8])
-    axStackZoom = fig.add_subplot(gs[2:8 ,8:])
-    axPF       = fig.add_subplot(gs[1,0:2])
-    axPF180    = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
+
+    axPeriodogram  = fig.add_subplot(gs[0,0:8])
+    axStack        = fig.add_subplot(gs[2:8 ,0:8])
+    axStackZoom    = fig.add_subplot(gs[2:8 ,8:])
+    axPF           = fig.add_subplot(gs[1,0:2])
+    axPF180        = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
 
     axScar     = fig.add_subplot(gs[1,5])
     axSingSES  = fig.add_subplot(gs[0,-2])
@@ -57,63 +61,69 @@ def plot_diag(h5):
         '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
     h5.noDBRE    = 'climb'
 
-    axStack.text( 0.87, 0.01, tval.diag_leg(h5) , name='monospace',
-                  bbox=dict(visible=True,fc='white',alpha=0.5),transform=axStack.transAxes)
-    plt.tight_layout()
-    plt.gcf().subplots_adjust(hspace=0.01,wspace=0.01)
+    s = pd.Series(tval.flatten(h5,h5.noDiagRE))
+    s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
+    bbkw = dict(visible=True,fc='white',alpha=0.5)
+    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
+                      transform=axStack.transAxes)
+    tight_layout()
 
-    plt.sca(axGrid)
-    plotGrid(h5)
+    gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
-    plt.sca(axPF180)
-    plotPF(h5,180,diag=True)
+    sca(axPeriodogram)
+    plotPeriodogram(h5)
 
-    plt.sca(axPF)
+    sca(axPF)
     plotPF(h5,0,diag=True)
 
-    plt.sca(axStack)
+    sca(axPF180)
+    plotPF(h5,180,diag=True)
+
+
+
+    sca(axStack)
     plotSES(h5)
 
-    plt.sca(axScar)
+    sca(axScar)
     plotScar(h5)
 
-    plt.sca(axSingSES)
+    sca(axSingSES)
     plotSingSES(h5)
 
-    plt.sca(axAutoCorr)
+    sca(axAutoCorr)
     plotAutoCorr(h5)
 
-    plt.sca(axCDF)
+    sca(axCDF)
     plotCDF(h5)
 
-    plt.sca(axStackZoom)
+    sca(axStackZoom)
     plotCalWrap(h5)
 
-    plt.sca(axSeason)
+    sca(axSeason)
     plotSeason(h5)
 
-    plt.sca(axSingSES)
+    sca(axSingSES)
     plotSingSES(h5)
-    plt.tight_layout()
+    tight_layout()
 
 def plotSingSES(h5):    
-    cax = plt.gca()
+    cax = gca()
     rses = h5['SES']
-    plt.plot(rses['tnum'],rses['ses']*1e6,'.')
+    plot(rses['tnum'],rses['ses']*1e6,'.')
     cax.xaxis.set_visible(False)
     at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
     cax.add_artist(at)
-    xl = plt.xlim()
-    plt.xlim(xl[0]-1,xl[-1]+1)
+    xl = xlim()
+    xlim(xl[0]-1,xl[-1]+1)
 
 def plotSeason(h5):
-    cax = plt.gca()
+    cax = gca()
     rses = h5['SES']
     cax.plot(rses['season'],rses['ses']*1e6,'.')
     cax.xaxis.set_visible(False)
     at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
     cax.add_artist(at)
-    plt.xlim(-1,4)
+    xlim(-1,4)
 
 def plotScar(h5):
     """
@@ -124,7 +134,6 @@ def plotScar(h5):
     r : res record array containing s2n,Pcad,t0cad, column
     
     """
-
     r,lc = terra.get_reslc(h5)
     bcut = r['s2n']> np.percentile(r['s2n'],90)
     x = r['Pcad'][bcut]
@@ -132,26 +141,25 @@ def plotScar(h5):
     x /= max(x)
     y = (r['t0cad']/r['Pcad'])[bcut]
     plot(x,y,',',mew=0)
-    plt.gca().xaxis.set_visible(False)
-    plt.gca().yaxis.set_visible(False)
+    gca().xaxis.set_visible(False)
+    gca().yaxis.set_visible(False)
 
 def plotCDF(h5):
     lc = h5['/pp/mqcal'][:]
     sig = nd.median_filter(np.abs(lc['dM3']),200)
-    plt.plot(np.sort(sig))
+    plot(np.sort(sig))
     sig = nd.median_filter(np.abs(lc['dM6']),200)
-    plt.plot(np.sort(sig))
+    plot(np.sort(sig))
     sig = nd.median_filter(np.abs(lc['dM12']),200)
-    plt.plot(np.sort(sig))
-    plt.gca().xaxis.set_visible(False)
-    plt.gca().yaxis.set_visible(False)
+    plot(np.sort(sig))
+    gca().xaxis.set_visible(False)
+    gca().yaxis.set_visible(False)
 
 def plotAutoCorr(pk):
-    plt.xlabel('Displacement')
-    plt.plot(pk['lag'],pk['corr'])
-    plt.gca().xaxis.set_visible(False)
-    plt.gca().yaxis.set_visible(False)
-
+    xlabel('Displacement')
+    plot(pk['lag'],pk['corr'])
+    gca().xaxis.set_visible(False)
+    gca().yaxis.set_visible(False)
 
 def plotPF(h5,ph,diag=False):
     PF = h5['lcPF%i' % ph]
@@ -159,12 +167,11 @@ def plotPF(h5,ph,diag=False):
     
     @handelKeyError
     def plot_phase_folded():
-        plt.plot(x,PF['f'],',',color='k')
-
-        bPF = h5['blc30PF0'][:]
+        plot(x,PF['f'],',',color='k')
+        bPF = h5['blc30PF%i' % ph][:]
         t   = bPF['tb']
         f   = bPF['med']
-        plt.plot(t,f,'+',mew=2,color='RoyalBlue')
+        plot(t,f,'+',ms=5,mew=3,color='Chartreuse')
 
     @handelKeyError
     def plot_fit():
@@ -172,22 +179,26 @@ def plotPF(h5,ph,diag=False):
         t    = fitgrp['t']
         f    = fitgrp['f']
         ffit = fitgrp['fit'][:]
-
-
-        plt.plot(t,ffit,lw=3,color='Tomato')
+        plot(t,ffit,'r--',lw=3,alpha=0.7)
 
     plot_phase_folded()
     if ph==0:
         plot_fit()
+        title='Phase Folded'
+    else:
+        title='Phase Folded + 180'
+
+    depth = h5.attrs['mean']
+    if depth < 1e-4:
+        ylim(-5*depth,5*depth)
 
     if diag:
-        cax = plt.gca()
-        cax.xaxis.set_visible(False)
-        cax.yaxis.set_visible(False)
-        at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
+        cax = gca()
+        cax.xaxis.set_visible(False)        
+        at = AnchoredText(title,prop=tprop,frameon=True,loc=2)
         cax.add_artist(at)
 
-    plt.xlabel('Phase')
+    xlabel('Phase')
 
 def handelKeyError(func):
     """
@@ -199,8 +210,6 @@ def handelKeyError(func):
         except KeyError:
             print "%s: KeyError" %  func.__name__ 
     return handelProblems
-            
-        
 
 def wrapHelp(h5,x,ym,d):
     df = h5['fit'].attrs['pL0'][0]**2
@@ -211,7 +220,7 @@ def wrapHelp(h5,x,ym,d):
     stack(x,ym,**d)
     pltkw   = dict(alpha=0.2)
     stack(x,ym.data,pltkw=pltkw,**d)    
-    plt.autoscale(tight=True)
+    autoscale(tight=True)
 
 def plotCalWrap(h5):
     d = dict(time=True)
@@ -219,11 +228,11 @@ def plotCalWrap(h5):
     res,lc = terra.get_reslc(h5)
     ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],ym,d)
-    plt.ylabel('SES (ppm)')
-    plt.xlim(-2,2)
+    ylabel('SES (ppm)')
+    xlim(-2,2)
 
-    plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
-    plt.gca().yaxis.set_visible(False)
+    axvline(0, alpha=.1,lw=10,color='m',zorder=1)
+    gca().yaxis.set_visible(False)
 
 def plotSES(h5):
     d = dict(time=False)
@@ -231,9 +240,9 @@ def plotSES(h5):
     res,lc = terra.get_reslc(h5)
     fm = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],fm,d)
-    plt.ylabel('SES (ppm)')
-    plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
-    plt.axvline(.5,alpha=.1,lw=10,color='m',zorder=1)
+    ylabel('SES (ppm)')
+    axvline(0, alpha=.1,lw=10,color='m',zorder=1)
+    axvline(.5,alpha=.1,lw=10,color='m',zorder=1)
 
     if lc.dtype.names.count('finj')==1:
         finjkw = dict(color='m',mew=2,marker=7,ms=5,lw=0,mfc='none')
@@ -242,26 +251,30 @@ def plotSES(h5):
         id = [s.start for s in  ma.clump_masked(ym)]
         stack(t[id] ,ym.data[id] + 100,pltkw=finjkw,**d)
 
-def plotGrid(h5):
-    cax = plt.gca()
+def plotPeriodogram(h5):
+    cax = gca()
     res,lc = terra.get_reslc(h5)
     x = res['Pcad']*config.lc
     y = res['s2n']
 
-    plt.semilogx()
-    plt.minorticks_off()
-    xt = [5 , 8.9, 16, 28, 50. , 89, 158, 281, 500.]
-    plt.xticks(xt,xt)
+    semilogx()
+    xt = [0.1,0.2,0.5,1,2,5,10,20,50,100,200,400]
+
+    xt = [ 0. ,  0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
+         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
+         [ 0, 10, 20, 30, 40, 50, 60, 70, 80, 90] +\
+         [  0, 100, 200, 300, 400, 500, 600, 700, 800, 900]
+
+    xticks(xt,xt)
     at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
     cax.add_artist(at)
     cax.xaxis.set_ticks_position('top')
-    plt.title('Period (days)')
-    plt.ylabel('MES')
+    ylabel('MES')
     
-    plt.plot(x,y)
+    plot(x,y)
     id = np.argsort( np.abs(x - h5.attrs['P']) )[0]
-    plt.plot(x[id],y[id],'ro')
-    plt.autoscale(axis='x',tight=True)
+    plot(x[id],y[id],'ro')
+    autoscale(axis='x',tight=True)
 
 def plotMed(h5):
     lc = h5.lc
@@ -271,7 +284,7 @@ def plotMed(h5):
     t0 = h5.attrs['t0']
     df = h5.attrs['df']
     stack(t,fmed*1e6,P,t0,step=5*df)
-    plt.autoscale(tight=True)
+    autoscale(tight=True)
 
 def morton(h5):
     """
@@ -281,7 +294,7 @@ def morton(h5):
     t0 = h5.attrs['t0']
     df = h5.attrs['df']
 
-    fig = plt.figure(figsize=(20,12))
+    fig = figure(figsize=(20,12))
     gs = GridSpec(4,3)
 
     axPF0   = fig.add_subplot(gs[0,0])
@@ -290,49 +303,49 @@ def morton(h5):
     axStack    = fig.add_subplot(gs[1:,:])
 
     for ax,ph in zip([axPF0,axPF180],[0,180]):
-        plt.sca(ax)        
+        sca(ax)        
 
         PF  = h5['lcPF%i'%ph]
         bPF = h5['blc30PF%i' % ph ]
 
-        plt.plot(PF['tPF'],PF['f'],',',color='k')
-        plt.plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
+        plot(PF['tPF'],PF['f'],',',color='k')
+        plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
         xl = max(np.abs(PF['tPF']))
-        plt.xlim(np.array([-1,1])*xl )
+        xlim(np.array([-1,1])*xl )
 
-    cax = plt.gca()
+    cax = gca()
     cax.yaxis.set_visible(False)
     at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
 
-    plt.sca(axPF0)
+    sca(axPF0)
 
-    cax = plt.gca()
+    cax = gca()
     at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
     cax.add_artist(at)
-    plt.xlabel('t - t0 (days)')
-    plt.ylabel('flux')
-    plt.ylim(-3*df*1e-6,2*df*1e-6)
+    xlabel('t - t0 (days)')
+    ylabel('flux')
+    ylim(-3*df*1e-6,2*df*1e-6)
 
-    plt.sca(axPFSea)
+    sca(axPFSea)
 #    import pdb;pdb.set_trace()
 
     for season in range(4):
         try:
             PF = h5['PF_Season%i' % season ][:]
-            plt.plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
+            plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
         except:
             pass
 
     at = AnchoredText('Transit by Season',prop=tprop,frameon=True,loc=2)
-    cax = plt.gca()
+    cax = gca()
     cax.legend(loc='lower right',title='Season')
     cax.yaxis.set_visible(False)
     cax.add_artist(at)
-    plt.sca(axStack)
+    sca(axStack)
     plotManyTrans(h5)
  
-    plt.gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
+    gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
 
 def plotManyTrans(h5):
     PF = h5['lcPF0'][:]
@@ -383,19 +396,19 @@ def plotManyTrans(h5):
         else:
             color  = seasonColors[season]
 
-        plt.plot(xLout[i],yLout[i],color=color)
+        plot(xLout[i],yLout[i],color=color)
         
-    plt.autoscale(tight=True)
-    xl = plt.xlim() 
+    autoscale(tight=True)
+    xl = xlim() 
     if xl[1] < 1:
-        plt.xlim(xl[0],1)
-    xl = plt.xlim()
-    yl = plt.ylim()
+        xlim(xl[0],1)
+    xl = xlim()
+    yl = ylim()
     pad = 0.02
-    plt.xlim(xl[0]-3*pad,xl[1]+pad)
-    plt.ylim(yl[0]-pad,yl[1]+pad)
+    xlim(xl[0]-3*pad,xl[1]+pad)
+    ylim(yl[0]-pad,yl[1]+pad)
 
-    add_scalebar(plt.gca(),loc=3,matchx=False,matchy=False,sizex=1*kw1['t2ax'],sizey=1e-3*kw1['f2ax'],labelx='1 Day',labely='1000 ppm')    
+    add_scalebar(gca(),loc=3,matchx=False,matchy=False,sizex=1*kw1['t2ax'],sizey=1e-3*kw1['f2ax'],labelx='1 Day',labely='1000 ppm')    
 
 def rebin(xL,yL,bfac):
     iStart = 0 
@@ -475,7 +488,7 @@ def plotraw(h5,i,label):
         fspsdkw['label'] = 'SPSD'
 
     def plot(*args,**kwargs):
-        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
+        plot( args[0] - xs,args[1] -ys, **kwargs )
 
     plot(t , fm        ,**fkw)
     plot(t , fm.data   ,**fallkw)
@@ -484,17 +497,17 @@ def plotraw(h5,i,label):
     plot(t , fspsd     ,**fspsdkw)
 
     def plot(*args,**kwargs):
-        plt.plot( args[0] - xs,args[1] -ys+0.001, **kwargs )
+        plot( args[0] - xs,args[1] -ys+0.001, **kwargs )
 
     addtrans(qlc,fm.data,label,plot)
 
     xy =  (t[0]-xs , fm.compressed()[0]-ys)
-    plt.annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
+    annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
 
 
 
 
-    plt.legend(loc='upper left')
+    legend(loc='upper left')
 
 def addtrans(raw,y,label,plot):
     """
@@ -530,7 +543,7 @@ def plotcal(h5,i,label):
     ys =  year*0.003 
 
     def plot(*args,**kwargs):
-        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
+        plot( args[0] - xs,args[1] -ys, **kwargs )
 
 
     plot(t ,fit, color='Tomato')
@@ -550,26 +563,26 @@ def plotdt(h5,i,label):
     fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
 
     def plot(*args,**kwargs):
-        plt.plot( args[0] - xs,args[1] -ys, **kwargs )
+        plot( args[0] - xs,args[1] -ys, **kwargs )
 
     plot(t,fdt,color=colors[i%2])
 
 def plot_lc(h5):
-    fig,axL = plt.subplots(nrows=2,figsize=(20,12),sharex=True)
+    fig,axL = subplots(nrows=2,figsize=(20,12),sharex=True)
 
     try:
-        plt.sca(axL[0])
+        sca(axL[0])
         qstackplot(h5,plotraw)
 
-        plt.sca(axL[1])
+        sca(axL[1])
         qstackplot(h5,plotdt)
         qstackplot(h5,plotcal)
 
     except:
         print sys.exc_info()[1]
 
-    plt.tight_layout()
-    plt.xlim(250,650)
+    tight_layout()
+    xlim(250,650)
 
 #############################################################################
 

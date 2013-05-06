@@ -13,14 +13,16 @@ index = args.args[-1]
 files = args.args[:-1]
 multi = args.multi
 
-def func(f):
+dL = []
+for f in files:
     df = pandas.read_csv(f,index_col=0)
-    if index[0]=='0':
+    if len( index ) ==9:
         df.index = df.outfile.apply(lambda x : x.split('/')[-1][:-3])
-
-    return dict(df.ix[index]) 
-
-dL = map(func,files)
+        d = dict(df.ix[index])
+    else:
+        d = dict(df.ix[ int(index) ])
+        
+    dL.append(d)
 
 def last2(s):
     sL = s.split('/')[-2:]

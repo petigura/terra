@@ -668,10 +668,6 @@ def flatten(h5,exclRE):
 def pL2d(h5,pL):
     return dict(df=pL[0],tau=pL[1],b=pL[2])
 
-def __str__(h5):
-    dprint = h5.flatten(h5.noPrintRE)
-    return h5.dict2str(dprint)
-
 def diag_leg(h5):
     dprint = flatten(h5,h5.noDiagRE)
     return dict2str(h5,dprint)
