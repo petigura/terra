@@ -1,12 +1,13 @@
 #!/bin/bash
 UNTARDIR=$SCRATCH/untar/
+TARDIR=$PROJDIR/Kepler/tarfiles/
 echo "Untarring Q$1 into $UNTARDIR"
 
 case "$1" in
-    1|5|7) 
+    1|5|7|9|10) 
 	basedir="Q$1_public/"  
 	;;
-    2|3|4|6|8|9|11|12) 
+    2|3|4|6|8|11|12) 
 	basedir="archive/data3/keplerpub/Q$1_public/"
 	;;
     13|14)
@@ -19,17 +20,17 @@ esac
 
 case "$1" in
     1|2|3|4|5|6|7|8|9|10|11|12)
-	tar -xf $PROJDIR/Kepler/tarfiles/public_Q$1.tar -C $UNTARDIR/
+	tar -xf $TARDIR/public_Q$1.tar -C $UNTARDIR/
 	echo "here"
 	;;
     13|14)
-	tarfiles=$(find $PROJDIR/Kepler/tarfiles/public_Q$1_*.tar)
+	tarfiles=$(find $TARDIR/public_Q$1_*.tar)
 	n=$(echo "$tarfiles" | wc -l)
 	echo "$tarfiles" | parallel -j $n tar -xf {} -C $UNTARDIR/
 	basedir="Q$1_*/"
 	;;
     15) 
-	tarfiles=$(find $PROJDIR/Kepler/tarfiles/EX_Q15*.tgz)
+	tarfiles=$(find $TARDIR/EX_Q15*.tgz)
 	n=$(echo "$tarfiles" | wc -l)
 	echo "$tarfiles" | parallel -j $n tar -xf {} -C $UNTARDIR/
 	;;
@@ -45,4 +46,4 @@ python $KSCRIPTS/fits2h5.py $UNTARDIR/Q$1.h5 $files
 
 echo "Removing $nfiles files"
 echo "-----------------------"
-rm $files
+rm -R $UNTARDIR/$basedir

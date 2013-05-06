@@ -1,6 +1,5 @@
 """
 TERRA
-
 The top level controller.  This function encapsulates the complete pipeline.
 """
 
@@ -196,6 +195,24 @@ def plot_switch(h5,par):
                 figpath = par['outfile'].replace('.h5','.%s.png' % ext[k])
                 plt.gcf().savefig(figpath)
                 plt.close() 
+
+
+def multiCopyCut(file0,file1):
+    """
+    Multi Planet Copy Cut
+
+    Copys the calibrated light curve to file1. Cuts the transit out.
+    """
+    with h5F(file0) as h5, h5F(file1) as h5new:
+        h5new.create_group('pp')
+        h5new.copy(h5['/pp/mqcal'],'/pp/mqcal')
+
+        lc   = h5['/pp/mqcal'][:]
+        lcPF = h5['lcPF0'][:]
+        j = mlab.rec_join('t',lc,lcPF,jointype='leftouter')
+
+        lc['fmask'] = lc['fmask'] |  (j['tPF']!=0)
+        h5new['/pp/mqcal'][:] = lc
 
 
 ####################
