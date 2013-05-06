@@ -327,7 +327,6 @@ def morton(h5):
     ylim(-3*df*1e-6,2*df*1e-6)
 
     sca(axPFSea)
-#    import pdb;pdb.set_trace()
 
     for season in range(4):
         try:
@@ -486,19 +485,19 @@ def plotraw(h5,i,label):
         foutkw['label']  = 'Outlier'
         fspsdkw['label'] = 'SPSD'
 
-    def plot(*args,**kwargs):
+    def shiftplot(*args,**kwargs):
         plot( args[0] - xs,args[1] -ys, **kwargs )
 
-    plot(t , fm        ,**fkw)
-    plot(t , fm.data   ,**fallkw)
-    plot(t , ftnd      ,**ftndkw)
-    plot(t , foutlier  ,**foutkw)
-    plot(t , fspsd     ,**fspsdkw)
+    shiftplot(t , fm        ,**fkw)
+    shiftplot(t , fm.data   ,**fallkw)
+    shiftplot(t , ftnd      ,**ftndkw)
+    shiftplot(t , foutlier  ,**foutkw)
+    shiftplot(t , fspsd     ,**fspsdkw)
 
-    def plot(*args,**kwargs):
+    def shiftplot(*args,**kwargs):
         plot( args[0] - xs,args[1] -ys+0.001, **kwargs )
 
-    addtrans(qlc,fm.data,label,plot)
+    addtrans(qlc,fm.data,label,shiftplot)
 
     xy =  (t[0]-xs , fm.compressed()[0]-ys)
     annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
@@ -537,12 +536,11 @@ def plotcal(h5,i,label):
     xs =  365.25*year
     ys =  year*0.003 
 
-    def plot(*args,**kwargs):
+    def shiftplot(*args,**kwargs):
         plot( args[0] - xs,args[1] -ys, **kwargs )
 
-
-    plot(t ,fit, color='Tomato')
-    plot(t ,fcal -0.001,color=colors[i%2])
+    shiftplot(t ,fit, color='Tomato')
+    shiftplot(t ,fcal -0.001,color=colors[i%2])
 
 def plotdt(h5,i,label):
     colors = ['RoyalBlue','k']
@@ -557,14 +555,13 @@ def plotdt(h5,i,label):
 
     fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
 
-    def plot(*args,**kwargs):
+    def shiftplot(*args,**kwargs):
         plot( args[0] - xs,args[1] -ys, **kwargs )
 
-    plot(t,fdt,color=colors[i%2])
+    shiftplot(t,fdt,color=colors[i%2])
 
 def plot_lc(h5):
     fig,axL = subplots(nrows=2,figsize=(20,12),sharex=True)
-
     try:
         sca(axL[0])
         qstackplot(h5,plotraw)
