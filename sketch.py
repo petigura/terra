@@ -14,65 +14,6 @@ import keptoy
 import qalg
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
-def inspectT(t0,f0,P,ph,darr=None):
-    """
-    Inspect Transit
-
-    """
-    
-def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
-    """
-    Plot the SES    
-
-    time : plot time since mid transit 
-    
-    set colors by changing the 'axes.colorcycle'
-    """
-    ax = gca()
-
-    t = t.copy()
-
-    # Shift t-series so first transit is at t = 0 
-    dt = tval.t0shft(t,P,t0)
-    t += dt
-    phase = mod(t+P/4,P)/P-1./4
-
-    # Associate each section of length P to a specific
-    # transit. Sections start 1/4 P before and end 3/4 P after.
-    label = np.floor(t/P+1./4).astype(int) 
-    labelL = unique(label)
-
-    xshft = 0
-    yshft = 0
-    for l in labelL:
-        # Calculate shift in t-series.
-        row,col = np.modf(1.*l/maxhlines)
-        row = row*maxhlines
-        xshift = col
-        yshift = -row*step
-
-        blabel = (l == label)
-        phseg = phase[blabel]
-        yseg  = y[blabel]
-        sid   = np.argsort(phseg)
-        phseg = phseg[sid]
-        yseg  = yseg[sid]
-
-
-        def plot(*args,**kwargs):
-            ax.plot(args[0] +xshift, args[1] + yshift,**kwargs)
-
-        if time:
-            plot(phseg*P, yseg,**pltkw)
-        else:
-            plot(phseg, yseg, **pltkw)
-
-        imin = np.argmin(np.abs(phseg+xshift))
-        s = str(np.round(t[blabel][imin]-dt,decimals=1))
-        ax.text(0,yshift,s)
-
-    xlim(-.25,.75)
-
 def gridTraceSetup(wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
     """
 

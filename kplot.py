@@ -31,8 +31,8 @@ pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
 seasonColors = ['r','c','m','g']
 tprop = dict(name='monospace')
 
-bbox=dict(boxstyle="round", fc="w",alpha=.5)
-annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox)
+bbox=dict(boxstyle="round", fc="w",alpha=.5,ec='none')
+annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light')
 
 rc('axes',color_cycle=['RoyalBlue','Tomato'])
 rc('font',size=8)
@@ -79,10 +79,13 @@ def plot_diag(h5):
     sca(axPF180)
     plotPF(h5,180,diag=True)
 
-
-
     sca(axStack)
     plotSES(h5)
+
+    
+    if h5.attrs['num_trans'] < 20: 
+        sca(axStackZoom)
+        plotCalWrap(h5)
 
     sca(axScar)
     plotScar(h5)
@@ -96,14 +99,10 @@ def plot_diag(h5):
     sca(axCDF)
     plotCDF(h5)
 
-    sca(axStackZoom)
-    plotCalWrap(h5)
 
     sca(axSeason)
     plotSeason(h5)
 
-    sca(axSingSES)
-    plotSingSES(h5)
     tight_layout()
 
 def plotSingSES(h5):    
@@ -230,8 +229,8 @@ def plotCalWrap(h5):
     wrapHelp(h5,lc['t'],ym,d)
     ylabel('SES (ppm)')
     xlim(-2,2)
-
     axvline(0, alpha=.1,lw=10,color='m',zorder=1)
+
     gca().yaxis.set_visible(False)
 
 def plotSES(h5):
@@ -503,10 +502,6 @@ def plotraw(h5,i,label):
 
     xy =  (t[0]-xs , fm.compressed()[0]-ys)
     annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
-
-
-
-
     legend(loc='upper left')
 
 def addtrans(raw,y,label,plot):
@@ -667,7 +662,6 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     set colors by changing the 'axes.colorcycle'
     """
     ax = gca()
-
     t = t.copy()
 
     # Shift t-series so first transit is at t = 0 
@@ -680,33 +674,29 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     label = np.floor(t/P+1./4).astype(int) 
     labelL = unique(label)
 
-    xshft = 0
-    yshft = 0
-    for l in labelL:
-        # Calculate shift in t-series.
-        row,col = np.modf(1.*l/maxhlines)
-        row = row*maxhlines
-        xshift = col
-        yshift = -row*step
 
-        blabel = (l == label)
+    df  = pd.DataFrame(labelL,columns=['label'])
+
+    row,col = np.modf(1.*df.label/maxhlines)
+    row = row*maxhlines    
+    df['row'] = row
+    df['col'] = col
+    df['xshft'] = col
+    df['yshft'] = -df.row*step
+    df['tmid']  = df['label']*P-dt
+
+
+    def plot(x):
+        blabel = label==x['label']
         phseg = phase[blabel]
         yseg  = y[blabel]
-        sid   = np.argsort(phseg)
-        phseg = phseg[sid]
-        yseg  = yseg[sid]
-
-
-        def plot(*args,**kwargs):
-            ax.plot(args[0] +xshift, args[1] + yshift,**kwargs)
-
         if time:
-            plot(phseg*P, yseg,**pltkw)
-        else:
-            plot(phseg, yseg, **pltkw)
+            phseg = phseg*P
 
-        imin = np.argmin(np.abs(phseg+xshift))
-        s = str(np.round(t[blabel][imin]-dt,decimals=1))
-        ax.text(0,yshift,s)
+        ax.plot(phseg +x['xshft'], yseg + x['yshft'],**pltkw)
 
-    xlim(-.25,.75)
+        xy = (x['xshft'],x['yshft'])
+        ax.annotate('%.1f ' % x['tmid'], xy=xy, xytext=(10, 10),**annkw)
+
+    df.apply(plot,axis=1)
+
