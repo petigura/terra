@@ -473,7 +473,7 @@ def plotraw(h5,i,label):
     fspsd.mask = ~qlc['isStep']
 
     fkw     = dict(color=colors[year % 2],lw=3)
-    foutkw  = dict(color=colors[year-1 % 2],lw=0,marker='x',mew=2,ms=5)
+    foutkw  = dict(color=colors[(year-1) % 2],lw=0,marker='x',mew=2,ms=5)
     fallkw  = dict(color=colors[year % 2],lw=3,alpha=0.4)
     ftndkw  = dict(color='Tomato',lw=2)
     fspsdkw = dict(color='Chartreuse',lw=10,alpha=0.5)

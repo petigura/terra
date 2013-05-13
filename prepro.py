@@ -106,7 +106,8 @@ def mapgroup(h5,f,inpG,outG,**kwd):
         kwargs={}
         if kwd!={}:
             kwargs  = kwd[q]
-
+            
+        print "%s on %s " %  (f.__name__,q)
         rout    = f(*rinpL,**kwargs)
 
         if same:
