@@ -51,7 +51,26 @@ def pp(par):
     'skic': 7831530, 'svd_folder': '/global/project/projectdirs/m1669/Kepler/svd/', 'type': 'mc',
     'plot_lc':True}
     >>> terra.pp(dpp)
-    
+
+
+    Make a dataframe with the following columns
+    Minumum processing to look at LC
+
+           skic  
+    0   3544595  
+    1  10318874  
+    2   5735762  
+    3  12252424  
+    4   4349452  
+    5  11295426  
+    6  11075737  
+    7   2692377  
+    8   8753657  
+    9  11600889  
+
+    nt['outfile'] = nt.skic.apply(lambda x : "%09d.h5" % x)
+    nt['svd_folder']='/global/project/projectdirs/m1669/Kepler/svd/'
+    terra.pp(dict(nt.ix[0]))
     """
 
     print "creating %(outfile)s" %par
