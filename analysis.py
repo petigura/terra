@@ -331,11 +331,11 @@ def found(df):
 
 import config
 
-b12k = pd.read_csv('../TERRA2/b12k.csv')
+b12k = pd.read_csv('/Users/petigura/Marcy/Kepler/TERRA2/b12k.csv')
 b12k['skic'] = b12k.kic.astype('|S10').str.pad(9).str.replace(' ','0')
 b12k = b12k['kic,skic,a1,a2,a3,a4'.split(',')]
 
-store = pd.HDFStore('../files/ah_par_strip.h5')
+store = pd.HDFStore('/Users/petigura/Marcy/Kepler/files/ah_par_strip.h5')
 ah_par = store['kic']
 ah_par['kic'] = ah_par['KICID']
 
@@ -347,7 +347,8 @@ ah_par         = ah_par[['Mstar','Rstar','kic']]
 
 
 def MC(pp,res,cuts):
-    DV = pd.merge(pp,res,on=['outfile','skic'],how='left')
+    pp = pp.drop('skic',axis=1)
+    DV = pd.merge(pp,res,on=['outfile'],how='left')
     print DV.columns
 
     DV =  pd.merge(DV,ah_par,left_on='skic',right_on='kic')

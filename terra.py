@@ -45,7 +45,7 @@ def pp(par):
     'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132, 
     'inj_phase': 0.583,'inj_tau': 0.178,
     'outfile': 'temp.grid.h5','rawfile': 'lc/007831530.h5',
-    'skic': 7831530, 'svd_folder': '../terra5-50/svd/', 'type': 'mc',
+    'skic': 7831530, 'svd_folder':'svd/', 'type': 'mc',
     'plot_lc':True}
     >>> terra.pp(dpp)
     
