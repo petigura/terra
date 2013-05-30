@@ -35,8 +35,8 @@ kic = []
 for f in fL:
     try:
         hduL = pyfits.open(f)
+        kic[i]   = hduL[0].header['KEPLERID']
         h5['phot'][i] = hduL[1].data
-        kic.append( hduL[0].header['KEPLERID']  )
     except:
         print >> sys.stderr, "problem with ", f 
     i += 1

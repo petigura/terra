@@ -7,6 +7,8 @@ import h5py
 from h5py import File as h5F 
 
 import numpy as np
+import glob
+
 
 import prepro
 import tfind
@@ -19,6 +21,7 @@ import copy
 import os
 import pandas
 deltaPcad = 10
+
 #######################
 # Top Level Functions #
 #######################
@@ -44,18 +47,48 @@ def pp(par):
     >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
     'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132, 
     'inj_phase': 0.583,'inj_tau': 0.178,
-    'outfile': 'temp.grid.h5','rawfile': 'lc/007831530.h5',
-    'skic': 7831530, 'svd_folder':'svd/', 'type': 'mc',
+    'outfile': 'temp.grid.h5',
+    'skic': 7831530, 'svd_folder': '/global/project/projectdirs/m1669/Kepler/svd/', 'type': 'mc',
     'plot_lc':True}
     >>> terra.pp(dpp)
-    
+
+
+    Make a dataframe with the following columns
+    Minumum processing to look at LC
+
+           skic  
+    0   3544595  
+    1  10318874  
+    2   5735762  
+    3  12252424  
+    4   4349452  
+    5  11295426  
+    6  11075737  
+    7   2692377  
+    8   8753657  
+    9  11600889  
+
+    nt['outfile'] = nt.skic.apply(lambda x : "%09d.h5" % x)
+    nt['svd_folder']='/global/project/projectdirs/m1669/Kepler/svd/'
+    terra.pp(dict(nt.ix[0]))
     """
 
     print "creating %(outfile)s" %par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
-    with h5F(par['rawfile']) as h5raw, h5F(par['outfile']) as h5:
-        h5.copy(h5raw['raw'],'raw')
+    with h5F(par['outfile']) as h5:
+        h5dir = '/global/project/projectdirs/m1669/Kepler/h5files/'
+        fL    = glob.glob(h5dir+'*.h5')
+
+        raw  = h5.create_group('/raw')
+        for f in fL:
+            q = int(f.split('/')[-1].split('.')[0][1:])
+
+            r = getkic(f,par['skic'])
+            if r != None:
+                r = prepro.modcols(r)
+                raw['Q%i' % q] = r
+
         if par['type'].find('mc') != -1:
             inj(h5,par)
 
@@ -73,6 +106,45 @@ def pp(par):
                 figpath = par['outfile'].replace('.h5','.lc.png')
                 plt.gcf().savefig(figpath)
                 plt.close() 
+
+def getkic(f,kic):
+    with h5py.File(f) as h5:
+        b   = kic==h5['kic'][:]
+        s   = f.split('/')[-1]
+        if b.sum()==0:
+            print '%s does not contain %i' % (s,kic)
+        elif h5['phot'][b,0]['TIME'] < 1:
+            print '%s does not contain %i' % (s,kic)
+        else:
+            print '%s %i' % (s,kic)
+            return h5['phot'][b,:][0]
+
+
+def raw(h5,files,fields=[]):
+    """
+    Take list of .fits files and store them in the raw group
+
+    fields - list of fields to keep. Use a subset for smaller file size.
+    """
+    raw  = h5.create_group('/raw')
+    hduL = []
+    kicL = []
+    qL   = []
+    for f in files:
+        h = pyfits.open(f)
+        hduL += [h]
+        kicL += [h[0].header['KEPLERID'] ]
+        qL   += [h[0].header['QUARTER'] ]
+
+    assert np.unique(kicL).size == 1,'KEPLERID not the same'
+    assert np.unique(qL).size == len(qL),'duplicate quarters'
+
+    h5.attrs['KEPLERID'] = kicL[0] 
+    for h,q in zip(hduL,qL):
+        r = np.array(h[1].data)
+        if fields!=[]:
+            r = mlab.rec_keep_fields(r,fields)
+
 
 def grid(par):
     """
