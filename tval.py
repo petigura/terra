@@ -268,29 +268,28 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
 # tdur
 # climb
 
-def findPeak(h5):
-    # Pull the peak information
-    res = h5.RES
-    id  = np.argmax(res['s2n'])        
+def read_dv(h5):
+    """
+    Read h5 file for data validation
+
+    1. Finds the highest SNR peak
+    2. Adds oft-used variables to top level
+    """
+
+    h5.lc  = h5['/pp/mqcal'][:] # Convenience
+    h5.RES = h5['/it0/RES'][:]
+
+    id  = np.argmax(h5.RES['s2n'])        
     for k in ['t0','Pcad','twd','mean','s2n','noise']:
-        h5.attrs[k] =  res[k][id]
+        h5.attrs[k]  =  h5.RES[k][id]
+
     h5.attrs['tdur'] = h5.attrs['twd']*config.lc
     h5.attrs['P']    = h5.attrs['Pcad']*config.lc
 
-def toplevel(h5):
-    """
-    Store variables accessed frequently at the top level.
-
-    Cuts down on the number of times we grab the h5 attrs
-    """
-
-
-    h5.tdurcad  = int (h5.attrs['tdur'] / config.lc)
-
-    lc    = h5.lc
-    h5.fm =  ma.masked_array(lc['fcal'],lc['fmask'])
-    h5.dM = tfind.mtd(lc['t'],h5.fm,h5.tdurcad)
-    h5.t  = lc['t']
+    # Convenience
+    h5.fm = ma.masked_array(h5.lc['fcal'],h5.lc['fmask'])
+    h5.dM = tfind.mtd(h5.lc['t'],h5.fm,h5.attrs['twd'])
+    h5.t  = h5.lc['t']
 
 def checkHarmh5(h5):
     """
@@ -332,7 +331,7 @@ def at_phaseFold(h5,ph):
 
     rPF   = PF(t,fm,P,t0,tdur,**kw)
     qarr = keplerio.t2q( rPF['t'] ).astype(int)
-    rPF   = mlab.rec_append_fields(rPF,'qarr',qarr)
+    rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
     h5['lcPF%i' % ph] = rPF
 
 def at_binPhaseFold(h5,ph,bwmin):
@@ -464,8 +463,8 @@ def at_med_filt(h5):
     P  = h5.attrs['P']
     t0 = h5.attrs['t0']
     tdur= h5.attrs['tdur']
-
-    y = h5.fm-nd.median_filter(h5.fm,size=h5.tdurcad*3)
+    twd = h5.attrs['twd']
+    y = h5.fm-nd.median_filter(h5.fm,size=twd*3)
     h5['fmed'] = y
 
     # Shift t-series so first transit is at t = 0 
@@ -511,7 +510,9 @@ def at_s2ncut(h5):
     else:
         s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
 
-    h5.attrs['s2ncut'] = s2n
+    h5.attrs['s2ncut']      = s2n
+    h5.attrs['s2ncut_t0']   = r['t0cad'][i]*keptoy.lc + h5.t[0]
+    h5.attrs['s2ncut_mean'] = r['mean'][i]
 
 def at_SES(h5):
     """
@@ -615,11 +616,10 @@ def at_grass(h5):
     three nearby peaks?
     """
 
-    res = h5['it0']['RES'][:]
     P   = h5.attrs['P']
     fac = 1.4 # bin ranges from P/fac to P*fac.
     bins  = np.logspace(np.log10(P/fac),np.log10(P*fac),101)
-    xp,yp  =findpks(res['Pcad']*config.lc,res['s2n'],bins)
+    xp,yp  =findpks(h5.RES['Pcad']*config.lc,h5.RES['s2n'],bins)
 
     h5.attrs['grass'] = np.median(np.sort(yp)[-5:]) # enough to ignore
                                                     # the primary peak
