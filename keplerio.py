@@ -23,13 +23,13 @@ import tarfile
 import glob
 import pyfits
 import sqlite3
+import pandas as pd
 
 from matplotlib import mlab
 import keptoy
 import detrend
 import tfind
 import qalg
-
 kepdir = os.environ['KEPDIR']
 kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
@@ -346,23 +346,15 @@ def idQ2mo(id,q):
     m,o = res[0]
     return m,o
 
-
 def qStartStop():
     """
     Quarter Start Stop
 
     """
 
-    files = os.path.join(os.environ['KEPBASE'],'files/qSamp/*')
-    files = glob.glob(files)
-    rL = []
-    for f in files:
-        hdu = pyfits.open(f)
-        rL.append( (hdu[0].header['QUARTER'], hdu[1].header['TSTART'], 
-                   hdu[1].header['TSTOP'])  )
-    rL = np.array(rL,dtype=[('q',int),('tstart',float),('tstop',float)] )
-    rL.sort()
-    return rL
+    file = os.path.join(os.environ['KEPBASE'],'files/qStartStop.txt')
+    rL  = pd.read_csv(file,sep='\s*')
+    return rL.to_records()
 
 def t2q(t):
     """

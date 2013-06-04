@@ -41,69 +41,104 @@ def plot_diag(h5):
     """
     Print a 1-page diagnostic plot of a given h5.
     """
+#    import pdb;pdb.set_trace()
+    tval.read_dv(h5)
+    del h5['SES']
+    del h5['tRegLbl']
+    tval.at_SES(h5)
+
     fig = figure(figsize=(20,12))
     gs = GridSpec(8,10)
 
+    # Top row
     axPeriodogram  = fig.add_subplot(gs[0,0:8])
+    axSingSES      = fig.add_subplot(gs[0,-2])
+    axSeason       = fig.add_subplot(gs[0,-1])
+
+    # Second row
+    axPF       = fig.add_subplot(gs[1,0:2])
+    axPF180    = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
+    axPFSec    = fig.add_subplot(gs[1,4:6],sharex=axPF)
+    axCDF      = fig.add_subplot(gs[1,6])
+    axScar     = fig.add_subplot(gs[1,7])
+    axAutoCorr = fig.add_subplot(gs[1,8])
+
+    # Last row
     axStack        = fig.add_subplot(gs[2:8 ,0:8])
     axStackZoom    = fig.add_subplot(gs[2:8 ,8:])
-    axPF           = fig.add_subplot(gs[1,0:2])
-    axPF180        = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
 
-    axScar     = fig.add_subplot(gs[1,5])
-    axSingSES  = fig.add_subplot(gs[0,-2])
-    axSeason   = fig.add_subplot(gs[0,-1])
-    axAutoCorr = fig.add_subplot(gs[1,6])
-    axCDF      = fig.add_subplot(gs[1,4])
-
-    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
-    h5.noDiagRE  = \
-        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-    h5.noDBRE    = 'climb'
-
-    s = pd.Series(tval.flatten(h5,h5.noDiagRE))
-    s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
-    bbkw = dict(visible=True,fc='white',alpha=0.5)
-    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
-                      transform=axStack.transAxes)
     tight_layout()
 
     gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
+    # Top row
     sca(axPeriodogram)
     plotPeriodogram(h5)
 
+    sca(axSingSES)
+    plotSingSES(h5)
+
+    sca(axSeason)
+    plotSeason(h5)
+
+    # Second row
     sca(axPF)
     plotPF(h5,0,diag=True)
 
     sca(axPF180)
     plotPF(h5,180,diag=True)
 
+    sca(axPFSec)
+    plotSec(h5)
+
+    sca(axCDF)
+    plotCDF(h5)
+
+    sca(axScar)
+    plotScar(h5)
+
+    sca(axAutoCorr)
+    plotAutoCorr(h5)
+
+    # Bottom row
     sca(axStack)
     plotSES(h5)
-
     
     if h5.attrs['num_trans'] < 20: 
         sca(axStackZoom)
         plotCalWrap(h5)
 
-    sca(axScar)
-    plotScar(h5)
+    # Info
+    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+    h5.noDiagRE  = \
+        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+    h5.noDBRE    = 'climb'
+    s = pd.Series(tval.flatten(h5,h5.noDiagRE))
+    s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
+    bbkw = dict(visible=True,fc='white',alpha=0.5)
+    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
+                      transform=axStack.transAxes)
 
-    sca(axSingSES)
-    plotSingSES(h5)
-
-    sca(axAutoCorr)
-    plotAutoCorr(h5)
-
-    sca(axCDF)
-    plotCDF(h5)
-
-
-    sca(axSeason)
-    plotSeason(h5)
 
     tight_layout()
+
+def plotSec(h5):
+    """
+    Plot secondary eclipse
+    """
+
+    tval.at_s2ncut(h5)
+    at = h5.attrs
+
+    rPF = tval.PF(h5.t,h5.fm,at['P'],at['s2ncut_t0'],at['tdur'])
+    plot(rPF['tPF'],rPF['f'])
+
+    title = 'ph = %.1f' % ((at['t0'] - at['s2ncut_t0']) / at['P'] * 360.)
+    cax = gca()
+    cax.xaxis.set_visible(False)        
+    at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
+    cax.add_artist(at)
+
 
 def plotSingSES(h5):    
     cax = gca()
@@ -118,6 +153,8 @@ def plotSingSES(h5):
 def plotSeason(h5):
     cax = gca()
     rses = h5['SES']
+
+
     cax.plot(rses['season'],rses['ses']*1e6,'.')
     cax.xaxis.set_visible(False)
     at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
@@ -133,7 +170,7 @@ def plotScar(h5):
     r : res record array containing s2n,Pcad,t0cad, column
     
     """
-    r,lc = terra.get_reslc(h5)
+    r,lc = h5.RES,h5.lc
     bcut = r['s2n']> np.percentile(r['s2n'],90)
     x = r['Pcad'][bcut]
     x -= min(x)
@@ -183,9 +220,9 @@ def plotPF(h5,ph,diag=False):
     plot_phase_folded()
     if ph==0:
         plot_fit()
-        title='Phase Folded'
+        title='ph = 0'
     else:
-        title='Phase Folded + 180'
+        title='ph = 180'
 
     depth = h5.attrs['mean']
     if depth < 1e-4:
@@ -194,9 +231,10 @@ def plotPF(h5,ph,diag=False):
     if diag:
         cax = gca()
         cax.xaxis.set_visible(False)        
-        at = AnchoredText(title,prop=tprop,frameon=True,loc=2)
+        at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
         cax.add_artist(at)
-
+    
+    autoscale('x')
     xlabel('Phase')
 
 def handelKeyError(func):
@@ -224,7 +262,7 @@ def wrapHelp(h5,x,ym,d):
 def plotCalWrap(h5):
     d = dict(time=True)
 
-    res,lc = terra.get_reslc(h5)
+    res,lc = h5.RES,h5.lc
     ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],ym,d)
     ylabel('SES (ppm)')
@@ -236,7 +274,7 @@ def plotCalWrap(h5):
 def plotSES(h5):
     d = dict(time=False)
 
-    res,lc = terra.get_reslc(h5)
+    res,lc = h5.RES,h5.lc
     fm = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],fm,d)
     ylabel('SES (ppm)')
@@ -252,7 +290,7 @@ def plotSES(h5):
 
 def plotPeriodogram(h5):
     cax = gca()
-    res,lc = terra.get_reslc(h5)
+    res,lc = h5.RES,h5.lc
     x = res['Pcad']*config.lc
     y = res['s2n']
 

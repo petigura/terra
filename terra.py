@@ -83,7 +83,6 @@ def pp(par):
         raw  = h5.create_group('/raw')
         for f in fL:
             q = int(f.split('/')[-1].split('.')[0][1:])
-
             r = getkic(f,par['skic'])
             if r != None:
                 r = prepro.modcols(r)
@@ -199,8 +198,6 @@ def dv(par):
     """
     print "Running dv on %s" % par['outfile'].split('/')[-1]
 
-
-
     with h5F(par['outfile']) as h5:
         if par.has_key('mode'):
             if par['mode']=='c':
@@ -233,11 +230,9 @@ def dv(par):
         h5.noDBRE    = 'climb'
 
         # Attach attributes
-        h5.RES,h5.lc = get_reslc(h5)
-
-        tval.findPeak(h5) # Find the highest SNR peak
+        tval.read_dv(h5)
         tval.at_grass(h5) # How many nearby SNR peaks are there?
-        tval.toplevel(h5) 
+
         tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
 
@@ -263,11 +258,11 @@ def plot_switch(h5,par):
             if par[k]:
                 from matplotlib import pylab as plt
                 import kplot
-                exec('kplot.%s(h5)' % k)
+                exec(s)
                 figpath = par['outfile'].replace('.h5','.%s.png' % ext[k])
                 plt.gcf().savefig(figpath)
                 plt.close() 
-
+                print "created %s" % figpath
 
 def multiCopyCut(file0,file1):
     """
@@ -285,7 +280,6 @@ def multiCopyCut(file0,file1):
 
         lc['fmask'] = lc['fmask'] |  (j['tPF']!=0)
         h5new['/pp/mqcal'][:] = lc
-
 
 ####################
 
@@ -355,20 +349,6 @@ def DVout(h5out,pardict):
     out['tau0'] = pL[1]
     out['b0']   = pL[2]
     return out
-
-def get_reslc(h5):
-    """
-    Get res array.
-
-    3 Cases
-    - Peak.  it0/RES, mqcal
-    - No peak, no outliers. it0/mqcal
-    - No peak, outliers itN/fmask
-    """
-    lc  = h5['/pp/mqcal'][:]
-    RES = h5['/it0/RES'][:]
-        
-    return RES,lc
 
 def findItMax(h5):
     # Find maximum iteration 
