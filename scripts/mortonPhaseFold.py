@@ -36,6 +36,7 @@ if args.o != None:
 else:
     row['pkname'] = "%s/pk/%s.h5" % (morton.MORTONDIR,args.koi)
 
+
 morton.phaseFoldKOI(row)
 print "created: %(pkname)s" % row
 with h5py.File(row['pkname']) as pk:
@@ -43,7 +44,7 @@ with h5py.File(row['pkname']) as pk:
     ax = plt.gca()
 
     ds = pandas.Series(row)
-    txt = ds.drop(['lcname','pkname','name']).to_string()
+    txt = ds.drop(['pkname','name']).to_string()
     at = AnchoredText(txt,prop=dict(size='medium'),frameon=True,loc=4)
     ax.add_artist(at)
 

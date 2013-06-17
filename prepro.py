@@ -154,7 +154,7 @@ def cal(h5,svd_folder):
     mapgroup(h5,qcal,['raw','/pp/dt'],'/pp/cal',**kwd)
 
 
-def sQ(h5):
+def sQ(h5,stitch_groups='/raw,/pp/dt,/pp/cal'):
     """
     Stitch Quarters
 
@@ -162,9 +162,11 @@ def sQ(h5):
     stich the quarters together.
 
     Adds the mqcal dataset to the h5 directory.
+
+    stitch_groups - comma separated list of groups to stich together
     """
     
-    groups = [ h5[k] for k in '/raw,/pp/dt,/pp/cal'.split(',') ]
+    groups = [ h5[k] for k in stitch_groups.split(',') ]
     groups = [ g for g in groups if g.name!='/mqcal' ]
 
     quarters = [i[0] for i in groups[0].items()]

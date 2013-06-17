@@ -337,7 +337,7 @@ def morton(h5):
     axPF0   = fig.add_subplot(gs[0,0])
     axPF180 = fig.add_subplot(gs[0,1],sharey=axPF0)
     axPFSea = fig.add_subplot(gs[0,2],sharey=axPF0)
-    axStack    = fig.add_subplot(gs[1:,:])
+    axStack = fig.add_subplot(gs[1:,:])
 
     for ax,ph in zip([axPF0,axPF180],[0,180]):
         sca(ax)        
