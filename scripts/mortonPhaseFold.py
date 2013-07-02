@@ -24,12 +24,7 @@ parser.add_argument('-o',type=str)
 args = parser.parse_args()
 
 cat = args.cat
-if cat=='CB':
-    row = morton.getParCB(args.koi)
-elif cat=='Q12':
-    row = morton.getParQ12(args.koi)
-else:
-    row = morton.getParJR(args.koi)
+row = morton.getPar(args.koi,args.cat)
 
 if args.o != None:
     row['pkname'] = args.o

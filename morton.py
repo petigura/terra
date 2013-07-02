@@ -1,3 +1,4 @@
+
 """
 Phase folded ligth curves for Tim Morton
 
@@ -73,11 +74,14 @@ def getParCB(koi):
     row['lcname'] = MORTONDIR+"lc/%(skic)s.h5" % row
     return row
 
-def getParQ12(koi):
+def getPar(koi,file):
     """
 
     """
-    df = pd.read_csv(KOIDIR+'koi-q12_2013jun16.csv',skiprows=74)
+    bname = file.split('/')[-1]
+    if bname=='cumulative_2013jul26.csv':
+        df = pd.read_csv(file,skiprows=76)
+
     df['skic'] = ["%09d" % i for i in df.kepid]
     df['koi']  = df.kepoi_name
     
@@ -94,6 +98,7 @@ def getParQ12(koi):
     row  = dict(df.ix[koi])
     row['pkname'] = MORTONDIR+"pk/%(name)s.h5" % row
     return row
+
 
 def phaseFoldKOI(row):
     """
