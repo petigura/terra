@@ -43,15 +43,15 @@ def pp(par):
     Example
     -------
 
+    # Monte Carlo run
     >>> import terra
     >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
-    'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132, 
-    'inj_phase': 0.583,'inj_tau': 0.178,
-    'outfile': 'temp.grid.h5',
-    'skic': 7831530, 'svd_folder': '/global/project/projectdirs/m1669/Kepler/svd/', 'type': 'mc',
-    'plot_lc':True}
+               'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132,
+               'inj_phase': 0.583,'inj_tau': 0.178, 'outfile':
+               'temp.grid.h5', 'skic': 7831530, 'svd_folder':
+               '/global/project/projectdirs/m1669/Kepler/svd/',
+               'type': 'mc', 'plot_lc':True}
     >>> terra.pp(dpp)
-
 
     Make a dataframe with the following columns
     Minumum processing to look at LC

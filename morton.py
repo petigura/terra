@@ -1,21 +1,25 @@
+
 """
 Phase folded ligth curves for Tim Morton
+
 """
-from numpy import *
-import pandas
+import numpy as np
+from numpy import ma
+import pandas as pd
 import tval
 import h5py
 import sys
 import h5plus
 import config
+import os
+import keplerio
+from matplotlib import mlab
+import glob
+import prepro
+import terra
 
-MORTONDIR    = '/global/scratch/sd/petigura/Morton/'
-
-#jr.to_csv(MORTONDIR+'parfile.csv',index=False)
-#with open(MORTONDIR+'koi.txt','w') as f:
-#    f.writelines(["%s\n" % t for t in jr.koi])
-
-
+MORTONDIR  = os.environ['MORTONDIR']
+KOIDIR     = MORTONDIR+'koilists/'
 
 def getParJR(koi):
     """
@@ -27,9 +31,9 @@ def getParJR(koi):
     - tdur [days]
     - df [ppm]
     """
-    jr = pandas.read_csv('/global/homes/p/petigura/Kepler/files/koi_Aug8.csv')
-    jr = jr.ix[~isnan(jr.KepID)]
-    jr = jr.ix[~isnan(jr.KOI)]
+    jr = pd.read_csv(KOIDIR+'koi_Aug8.csv')
+    jr = jr.ix[~np.isnan(jr.KepID)]
+    jr = jr.ix[~np.isnan(jr.KOI)]
     jr['skic'] = ["%09d" % i for i in jr.KepID]
     jr['koi']  = ["%.2f"  % i for i in jr.KOI]
 
@@ -43,9 +47,7 @@ def getParJR(koi):
 
     jr['pkname'] = MORTONDIR+"pk/%(name)s.h5" % row
     jr['lcname'] = MORTONDIR+"lc/%(skic)s.h5" % row
-
     return jr.ix[koi]     
-
 
 def getParCB(koi):
     """
@@ -53,7 +55,7 @@ def getParCB(koi):
     
     Same as getParJR
     """
-    df = pandas.read_csv(MORTONDIR+'KOI-list_Jan-21.csv',skiprows=3)
+    df = pd.read_csv(KOIDIR+'KOI-list_Jan-21.csv',skiprows=3)
     df['skic'] = ["%09d" % i for i in df.kepid]
     df['koi']  = df.kepoi_name
     
@@ -72,39 +74,82 @@ def getParCB(koi):
     row['lcname'] = MORTONDIR+"lc/%(skic)s.h5" % row
     return row
 
+def getPar(koi,file):
+    """
+
+    """
+    bname = file.split('/')[-1]
+    if bname=='cumulative_2013jul26.csv':
+        df = pd.read_csv(file,skiprows=76)
+
+    df['skic'] = ["%09d" % i for i in df.kepid]
+    df['koi']  = df.kepoi_name
+    
+    # Note that there is no epoch offset here, counteract the hack downstream
+    df['t0'] = df.koi_time0bk + config.lc 
+
+    df['P']  = df.koi_period
+    df['tdur']  = df.koi_duration / 24.
+
+    df['df'] = df.koi_depth
+    df = df[['skic','koi','P','t0','tdur','df']]
+    df['name'] = df.koi
+    df.index = df['koi']
+    row  = dict(df.ix[koi])
+    row['pkname'] = MORTONDIR+"pk/%(name)s.h5" % row
+    return row
+
 
 def phaseFoldKOI(row):
     """
-    Contains the following fields
+    Phase Fold KOI
+
+    Takes reads in a light curve from the h5 directory, stiches the
+    quarters together, and folds the data on the published
+    ephemeris. Must contain the following fields:
+
     - koi
     - skic
     - P, t0, tdur
+    - pkname : where we will write out the file.
+
     """
     pkname = row['pkname']
-    lcname = row['lcname']
-    print "reading lc from " + lcname
-    with h5py.File(lcname,'r') as lc, h5plus.File(pkname,'c') as pk:
+    with h5plus.File(pkname,'c') as pk:
         h5plus.add_attrs(pk,row)
         try:
-            phaseFold(lc,pk)
+            h5dir = os.path.join(os.environ['PROJDIR'],'Kepler/h5files/')
+            fL    = glob.glob(h5dir+'*.h5')
+            raw  = pk.create_group('/raw')
+
+            for f in fL:
+                q = int(f.split('/')[-1].split('.')[0][1:])
+                r = terra.getkic(f,int(row['skic']))
+                if r != None:
+                    r = prepro.modcols(r)
+                    raw['Q%i' % q] = r
+
+            pk.create_group('/pp')
+            prepro.mask(pk)
+            prepro.sQ(pk,stitch_groups='raw')
+
+            phaseFold(pk)
             pk.attrs['status'] = 'Pass'
         except:
             status = 'Failed: Other'
-            print status
+            print sys.exc_info()[1]
             pk.attrs['status'] = status
         
-def phaseFold(lc,pk):
+def phaseFold(pk):
     print """
 Folding %(koi)s on
 ------------------
 P    - %(P).2f
 tdur - %(tdur).2f
 """ % dict(pk.attrs)
-
-    lc = lc['mqcal'][:]
+    lc = pk['/pp/mqcal'][:]
     lc['fmask'] = lc['desat'] | lc['atTwk'] | lc['isBadReg']
-    lc['fmask'] = lc['fmask'] | isnan(lc['f'])
-    pk['mqcal'] = lc
+    lc['fmask'] = lc['fmask'] | np.isnan(lc['f'])
 
     cpad    = 0.5 # Default fitting parameters
     cfrac   = 3
@@ -145,6 +190,7 @@ tdur - %(tdur).2f
     pk.attrs['nCont']   = nCont
     pk.attrs['LDT_deg'] = LDT_deg
 
+
     for ph in [0,180]:
         tval.at_phaseFold(pk,ph)
         tval.at_binPhaseFold(pk,ph,10)
@@ -169,7 +215,7 @@ def at_Season(h5):
             nbins = int( np.round( (xma-xmi)/bw ) )
             bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
             tb    = 0.5*(bins[1:]+bins[:-1])
-            yb = bapply(x,y,bins,np.median)
+            yb = tval.bapply(x,y,bins,np.median)
             dtype = [('t',float),('fmed',float)]
             r    = np.array(zip(tb,yb),dtype=dtype )
             h5['PF_Season%i' % season] = r
