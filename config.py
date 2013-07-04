@@ -5,12 +5,16 @@ Plim =  0.001   # Periods must agree to this fractional amount
 epochlim =  0.1 # Epochs must agree to 0.1 days   
 
 # keptoy
-G = 6.67e-8 # cgs
-R_sun = 6.9e10 # cm
-M_sun = 2.0e33 # g
 sc = 58.8488 /60./60./24. # SC time in days
 lc = sc*30 # LC exp time in days
-c = 100   # Parameter that controls how sharp P05 edge is.
+P05c = 100   # Parameter that controls how sharp P05 edge is.
+
+G          = 6.672e-8 # [cm3 g^-1 s^-2]
+Rsun       = 6.955e10 # cm
+Rearth     = 6.378e8  # cm
+Msun       = 1.989e33 # [g]
+AU         = 1.496e13 # [cm]
+sec_in_day = 86400.
 
 # sim
 blockSize = 1000

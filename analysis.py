@@ -3,6 +3,7 @@ import numpy as np
 from numpy import histogram2d as h2d
 from scipy.stats import poisson
 
+from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
 comp_ness_flds = 'P,Rp,comp'.split(',')
 
@@ -24,8 +25,14 @@ def upoisson(Np):
     hi = (hi-Np) / Np
     return lo,hi
 
+def getbins(panel):
+    lua = lambda x : list(np.unique(np.array(x)))
+    Rpb = lua(panel.Rp1) + [ lua(panel.Rp2)[-1] ]
+    Pb  = lua(panel.P1)  + [ lua(panel.P2)[-1]  ]
+    bins = Pb,Rpb
+    return bins
 
-def completeness(Pb,Rpb,df_mc):
+def completeness(panel,df_mc):
     """
     Compute completeness
 
@@ -38,16 +45,18 @@ def completeness(Pb,Rpb,df_mc):
     """    
     for k in comp_ness_flds:
         assert list(df_mc.columns).count(k) == 1,'Missing %s' % k
+
+    bins = getbins(panel)
     
     df_comp = df_mc[ df_mc['comp'] ]
-    bins = Pb,Rpb
     nPass,xe,ye = h2d(df_comp.P,df_comp.Rp, bins=bins)
-    nTot,xe,ye  = h2d(df_mc.P,df_mc.Rp, bins=bins)
-    comp        = nPass/nTot
-    comp[np.isnan(comp)] = 0 
-    return comp
 
-def occurrence(Pb,Rpb,df_tps,comp):
+    nTot,xe,ye  = h2d(df_mc.P,df_mc.Rp, bins=bins)
+    panel['comp'] = nPass/nTot
+    panel['comp'][np.isnan(panel)] = 0 
+    return panel
+
+def occurrence(df_tps,cPnl,nstars):
     """
 
     Parameters
@@ -62,26 +71,21 @@ def occurrence(Pb,Rpb,df_tps,comp):
 
     """
 
-    bins = Pb,Rpb
-    nstars = 12e3
-    items = 'fcell,fcellRaw,fcellAdd,Np,NpAug,comp,fuNp1,fuNp2'.split(',')
 
-    panel = pd.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
-    panel2 =  binDataFrame(Pb,Rpb)
-    dfshape = panel.shape[1],panel.shape[2]
+    bins  = getbins(cPnl)
+    panel =  zerosPanel( np.array(bins[0]) , np.array(bins[1]) )
 
-    for i in panel2.items:
-        panel[i]=panel2[i]
+    items = 'Rp1,Rp2,Rpc,P1,P2,fcell,fcellRaw,fcellAdd,Np,NpAug,comp,fuNp1,fuNp2'.split(',')
+    for i in items:
+        panel[i]=0.
 
     def countPlanets(**kw):
         return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
 
     panel['Np']       = countPlanets( weights=np.ones( len(df_tps) )) 
-
-
     panel             = addPoisson(panel)
     panel['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
-    panel['comp']     = comp
+    panel['comp']     = cPnl.comp
 
     panel['fcellRaw'] = panel['NpAug']    / nstars
     panel['fcell']    = panel['fcellRaw'] / panel['comp']
@@ -147,13 +151,23 @@ def compareCatalogs(me,cat):
     tcom = pd.merge(tcom,cat0,how='left',on=['kic','P_cat'])
     return tcom
 
-def binDataFrame(Pb,Rpb):
+def zerosPanel(Pb, Rpb, items='Rp1,Rp2,Rpc,P1,P2'.split(',') ):
     """
+    Zeros Panel
+    
+    Create an empty panel.
+
+    Parameters
+    ----------
+    
+    Pb  : limits of the major axis (Period)
+    Rpb : limits of the minor axis (Radius)
     """
-    items='Rp1,Rp2,Rpc,P1,P2'.split(',')
+
     panel = pd.Panel(items=items,major_axis=Pb[:-1],minor_axis=Rpb[:-1])
 
     a  = np.zeros((panel.shape[1],panel.shape[2]))
+
     panel['Rp1'] = a + Rpb[np.newaxis,:-1]
     panel['Rp2'] = a + Rpb[np.newaxis,1:]
     panel['Rpc'] = np.sqrt(panel['Rp1'] * panel['Rp2'] )
@@ -162,8 +176,6 @@ def binDataFrame(Pb,Rpb):
     panel['P2'] = a + Pb[1:,np.newaxis]
     panel['Pc'] = np.sqrt(panel['P1'] * panel['P2'] )
     return panel
-
-
 
 def margP(panel):
     """
@@ -223,43 +235,55 @@ def addPoisson(panel):
 #######################################################################
 
 
-# Commonly used functions for dealing with cuts
-### Mstar, 
-G = 6.672e-8 # [cm3 g^-1 s^-2]
-Rsun = 6.955e10 # cm
-Rearth = 6.3781e8 # cm
-Msun = 1.9891e33 # [g]
-AU   = 1.49597871e13 # [cm]
-sec_in_day = 86400
 
 
-def addCuts(df):
+def addTransPars(df):
     """
-    Add the following DV statistics (ratios of other DV statistics)
+    Add transit parameters
+    """
+
+    Rstar = df.Rstar * Rsun       # Rstar [cm]
+    Mstar = df.Mstar * Msun       # Mstar [g]
+
+    P     = df.P_out*sec_in_day # P [s]
+    a     = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
+
+    df['a/Rstar'] = a/Rstar
+    df['a']    = a / AU
+    df['Rp']   = df.p0 * df.Rstar * Rsun /Rearth
+    return df
+
+def addFeat(df):
+    """
+    Add Features
+
+    Statistics regarding supposed transit. These features will be used
+    in the automated DV step to determine if an object is a planet.
+
     """
     scols0 = set(df.columns) # initial list of columns
 
-    Rstar = df.Rstar * Rsun # Rstar [cm]
-    Mstar = df.Mstar * Msun # Mstar [g]
-    P = df.P_out*sec_in_day # P [s]
+    Rstar = df.Rstar * Rsun       # Rstar [cm]
+    Mstar = df.Mstar * Msun       # Mstar [g]
+    P     = df.P_out * sec_in_day # P [s]
 
-    a = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
-    df['a/R*'] = a/Rstar
-    P = df.P_out*sec_in_day # P [s]
-    tauMa =  Rstar*P/2/np.pi/a
-    df['tauMa']         = tauMa / sec_in_day # Max tau given circ. orbit
-    df['taur']          = df.tau0 / df.tauMa
+    tauMa =  Rstar * P / 2 / np.pi / (df['a']*AU)
+
+    df['tauMa']         = tauMa     / sec_in_day # Max tau given circ. orbit
+    df['taur']          = df.tau0   / df.tauMa
     df['s2n_out_on_in'] = df.s2ncut / df.s2n
     df['med_on_mean']   = df.medSNR / df.s2n
-    df['Rp']            = np.sqrt(df.df0)*df.Rstar*109.04
+    df['s2n_on_grass']  = df.s2n    / df.grass
     df['phase_out']     = np.mod(df.t0/df.P_out,1)
-    scols1 = set(df.columns) # final list of columns
+
+    scols1  = set(df.columns) # final list of columns
     scols12 = scols0 ^ scols1 # 
-    
-    print "addCuts: Added the following columns"
-    print "-"*80
-    for c in scols12:
-        print c
+
+    print """
+addCuts: Added the following columns:
+-------------------------------------
+%s
+""" % reduce(lambda x,y : x+', '+y, [str(c) for c in scols12] )
 
     return df
 
@@ -328,48 +352,85 @@ def found(df):
     df['found'] = (dP <.1) & (dt0 < .1) 
     return df
 
+def read_stellar(cat,short=True):
+    cat_bname = cat.split('/')[-1]
+    if cat_bname == 'b42k.csv':
+        stellar = pd.read_csv(cat,index_col=0)
+        stellar['kic']  = stellar['kepid']
+        stellar['Rstar'] = stellar.radius
+    elif cat_bname == 'ah_par_strip.h5':
+        store = pd.HDFStore(cat)
+        stellar = store['kic']
+        stellar = stellar.rename(columns = {'KICID':'kic'})
 
-import config
+        stellar['Rstar'] = stellar.YY_RADIUS
+        stellar['logg']  = stellar.YY_LOGG
 
-b12k = pd.read_csv('/Users/petigura/Marcy/Kepler/TERRA2/b12k.csv')
-b12k['skic'] = b12k.kic.astype('|S10').str.pad(9).str.replace(' ','0')
-b12k = b12k['kic,skic,a1,a2,a3,a4'.split(',')]
+    stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
+    if short==True:
+        stellar = stellar[['Mstar','Rstar','kic','logg']]
 
-store = pd.HDFStore('/Users/petigura/Marcy/Kepler/files/ah_par_strip.h5')
-ah_par = store['kic']
-ah_par['kic'] = ah_par['KICID']
+    return stellar
 
-keepcols = [c for c in ah_par.columns if (c.find('YY_')!=-1) or (c.find('kic')!=-1)]
-ah_par   = ah_par[keepcols]
-ah_par['Rstar'] = ah_par.YY_RADIUS
-ah_par['Mstar'] = ah_par.YY_MSTAR
-ah_par         = ah_par[['Mstar','Rstar','kic']]
-
-
-def MC(pp,res,cuts):
+def MC(pp,res,cuts,stellar):
     pp = pp.drop('skic',axis=1)
-    DV = pd.merge(pp,res,on=['outfile'],how='left')
-    print DV.columns
 
-    DV =  pd.merge(DV,ah_par,left_on='skic',right_on='kic')
-    DV['df0'] = DV['p0']**2
-    DV['Re']  = DV['inj_p'] * DV['Rstar'] * 109.
+    DV = pd.merge(pp,res,on=['outfile'],how='left')
+    DV = pd.merge(DV,stellar,left_on='skic',right_on='kic')
 
     def wrap(DV):
-        DV = addCuts(DV)
+        DV = addTransPars(DV)
+        DV = addFeat(DV)
         DV = applyCuts(DV,cuts)
         DV = found(DV)
-        DV['pass'] = DV.found & DV.bDV
+        DV['comp'] = DV.found & DV.bDV
         return DV
 
+    DV['inj_Rp']    = DV['inj_p'] * DV['Rstar'] * Rsun / Rearth
     DV['P_out']     = DV['P']
     DV['phase_inp'] = DV['inj_phase']
-    #DV['phase_inp'] = DV['inj_phase']
-    DV['P_inp'] = DV['inj_P']
-    DV['P'] = DV['P_inp']
-    #DV['bname'] = DV['sid']
-
-    print cuts
+    DV['P_inp']     = DV['inj_P']
+    DV['P']         = DV['P_inp']
 
     DV = wrap(DV)
     return DV
+
+from matplotlib.pylab import *
+
+# Nice logticks
+xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
+      [ 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
+      [ 10, 20, 30, 40, 50, 60, 70, 80, 90] +\
+      [ 100, 200, 300, 400, 500, 600, 700, 800, 900]
+
+sxt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  '',  '',  '',  ''] + \
+       [ 1, 2, 3, 4, 5, '', '', '', ''] +\
+       [ 10, 20, 30, 40, 50, '', '', '', ''] +\
+       [ 100, 200, 300, 400, 500, '', '', '', '']  
+
+
+def plotDV(DV):
+    """
+    Displays results from injection and recovery.
+    """
+    b = DV.found & DV.bDV
+    loglog(DV[b].P_inp,DV[b].inj_Rp,'s',ms=1.3,mew=0,color='RoyalBlue',label='found/DV - Y/Y')
+
+    b = DV.found & ~DV.bDV
+    loglog(DV[b].P_inp,DV[b].inj_Rp,'x',ms=3,mew=0.75,color='RoyalBlue',label='found/DV - Y/N')
+
+    b = ~DV.found & DV.bDV
+    loglog(DV[b].P_inp,DV[b].inj_Rp,'x',ms=3,mew=0.75,color='Tomato',label='found/DV - N/Y')
+
+    b = ~DV.found & ~DV.bDV
+    loglog(DV[b].P_inp,DV[b].inj_Rp,'s',ms=1.3,mew=0,color='Tomato',label='found/DV - N/N')
+
+    legend()
+    xt = np.round(logspace(log10(5),log10(500),13),decimals=1)
+    xticks(xt,xt,rotation=45)
+    
+    ylim(0.5,30)
+    xlim(5,400)
+
+    xlabel('Period [days]')
+    ylabel('Planet Size [Re]')

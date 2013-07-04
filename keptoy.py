@@ -5,7 +5,7 @@ from numpy.polynomial import Legendre
 import copy
 import occultsmall
 
-from config import *
+from config import Rsun,Msun,G,AU,lc
 
 def a2tdur(a0,Rstar=1.,Mstar=1.):
     """
@@ -19,10 +19,10 @@ def a2tdur(a0,Rstar=1.,Mstar=1.):
     """
     a0 = array(a0)
     a = a0.copy()
-    a *= 1.50e13 # cm
+    a *= AU # cm
     
-    M = Mstar*M_sun
-    R = Rstar*R_sun
+    M = Mstar*Msun
+    R = Rstar*Rsun
 
     P = sqrt(4*pi**2*a**3/G/M) # seconds    
     P /= 3600*24. # period in days    
@@ -39,9 +39,9 @@ def P2a(P0,Mstar=1):
     P = P0.copy()
     P *= 3600*24 # seconds
 
-    M = Mstar*M_sun
+    M = Mstar*Msun
     a = (G*M / (4*pi**2) * P**2)**(1/3.) # cm
-    a /= 1.50e13 # AU    
+    a /= AU # [AU]
     return a
 
 def ntpts(P,tdur,tbase,cad):
@@ -189,7 +189,7 @@ def P05(p,t):
 
     tp = tprime(P,epoch,tdur,t)
 
-    return df * ( 0.5*( 2. - tanh(c*(tp + 0.5)) + tanh(c*(tp - 0.5)) ) - 1.)
+    return df * ( 0.5*( 2. - tanh(P05c*(tp + 0.5)) + tanh(P05c*(tp - 0.5)) ) - 1.)
 
 def tprime(P,epoch,tdur,t):
     """
