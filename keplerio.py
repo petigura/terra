@@ -31,7 +31,6 @@ import detrend
 import tfind
 import qalg
 kepdir = os.environ['KEPDIR']
-kepdat = os.environ['KEPDAT']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
 qsfx  = mlab.csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')

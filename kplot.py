@@ -76,10 +76,10 @@ def plot_diag(h5):
     plotPeriodogram(h5)
 
     sca(axSingSES)
-    plotSingSES(h5)
+#    plotSingSES(h5)
 
     sca(axSeason)
-    plotSeason(h5)
+#    plotSeason(h5)
 
     # Second row
     sca(axPF)

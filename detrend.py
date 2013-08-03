@@ -11,8 +11,6 @@ import copy
 dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
-kepdir = os.environ['KEPDIR']
-kepdat = os.environ['KEPDAT']
 
 def GPdt(xi,x,y):
     """

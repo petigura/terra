@@ -1,11 +1,14 @@
 import pandas as pd
 import numpy as np
 from numpy import histogram2d as h2d
-from scipy.stats import poisson
+import scipy.stats
+import sqlite3
+from pandas.io import sql
+import glob
+import os
+from matplotlib.pylab import *
 
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
-
-comp_ness_flds = 'P,Rp,comp'.split(',')
 
 def upoisson(Np):
     """
@@ -13,9 +16,8 @@ def upoisson(Np):
 
     Returns fractional uncertanty (asymetric)
     """
-    
     x  = np.arange(100)
-    cdf= poisson.cdf(x,Np)
+    cdf = scipy.stats.poisson.cdf(x,Np)
 
     xi = np.linspace(0,x[-1],1000)
     yi = np.interp(xi,x,cdf)
@@ -32,13 +34,14 @@ def getbins(panel):
     bins = Pb,Rpb
     return bins
 
+comp_ness_flds = 'inj_P,inj_Rp,comp'.split(',')
 def completeness(panel,df_mc):
     """
     Compute completeness
 
     df_mc  : dataframe with the following columns
-             - P
-             - Rp
+             - inj_P
+             - inj_Rp
              - comp (whether a particular simluation counts toward
                completeness)
 
@@ -48,52 +51,14 @@ def completeness(panel,df_mc):
 
     bins = getbins(panel)
     
-    df_comp = df_mc[ df_mc['comp'] ]
-    nPass,xe,ye = h2d(df_comp.P,df_comp.Rp, bins=bins)
+    df_comp       = df_mc[ df_mc['comp'] ]
+    nPass , xe,ye = h2d(df_comp.inj_P , df_comp.inj_Rp , bins=bins)
+    nTot ,  xe,ye = h2d(df_mc.inj_P   , df_mc.inj_Rp   , bins=bins)
 
-    nTot,xe,ye  = h2d(df_mc.P,df_mc.Rp, bins=bins)
+    panel['nPass'] = nPass
+    panel['nTot']  = nTot
     panel['comp'] = nPass/nTot
     panel['comp'][np.isnan(panel)] = 0 
-    return panel
-
-def occurrence(df_tps,cPnl,nstars):
-    """
-
-    Parameters
-    ----------
-    Pb     : bins in period
-    Rpb    : bins in planet radius
-    df_tps : dataframe with the following columns
-             - P 
-             - Rp
-             - a/Rstar
-    comp   : DataFrame must match the size of the panel
-
-    """
-
-
-    bins  = getbins(cPnl)
-    panel =  zerosPanel( np.array(bins[0]) , np.array(bins[1]) )
-
-    items = 'Rp1,Rp2,Rpc,P1,P2,fcell,fcellRaw,fcellAdd,Np,NpAug,comp,fuNp1,fuNp2'.split(',')
-    for i in items:
-        panel[i]=0.
-
-    def countPlanets(**kw):
-        return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
-
-    panel['Np']       = countPlanets( weights=np.ones( len(df_tps) )) 
-    panel             = addPoisson(panel)
-    panel['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
-    panel['comp']     = cPnl.comp
-
-    panel['fcellRaw'] = panel['NpAug']    / nstars
-    panel['fcell']    = panel['fcellRaw'] / panel['comp']
-    panel['fcellAdd'] = panel['fcell'] - panel['fcellRaw']
-
-    panel['log10Rp']  = np.log10(panel['Rp2']/panel['Rp1'])
-    panel['log10P']   = np.log10(panel['P2']/panel['P1'])
-    panel['flogA']    = panel['fcell'] / (panel['log10Rp'] * panel['log10P'])
     return panel
 
 
@@ -115,14 +80,23 @@ def compareCatalogs(me,cat):
     me  : my catalog. Must contain `kic` and `P` fields
     cat : other catalog. Must contain `kic` and `P` fields
 
+
     Note
     ----
+    kic and period are treated as the unique identifier for a transit
+
+
     Catalogs may contain other fields as long as they are not duplicates.
 
     Returns
     -------
 
-    tcom - outer join of two catalog
+    tcom - outer join of two catalog with columns
+           kic   
+           P_me   
+           P_cat  
+           in_me  : convienience, tcom.in_me ~tcom.P_me.isnull()
+           in_cat : same
     """
     me   = me.rename(columns={'P':'P_me'})
     cat  = cat.rename(columns={'P':'P_cat'})
@@ -134,21 +108,13 @@ def compareCatalogs(me,cat):
     cat  = cat[['P_cat','kic']]
 
     # Outer join is the union of the entries in me,cat, and both
-    tcom = pd.merge(cat,me,how='inner',on='kic')
-    tcom = tcom[np.abs(tcom.P_me-tcom.P_cat) < .01] # planets in both catalogs
+    tcom = pd.merge(me,cat,on='kic',how='outer')
+    tcom = tcom[ np.abs( tcom.P_me - tcom.P_cat ) < .1 ]
+    tcom = pd.merge(me,tcom,on=['kic','P_me'],how='outer')
+    tcom = pd.merge(cat,tcom,on=['kic','P_cat'],how='outer')
 
-    tcat = pd.merge(cat,tcom,how='left',on=['kic','P_cat'])
-    tcat = tcat[tcat.P_me.isnull()] # These appear only in cat
-
-    tme  = pd.merge(me,tcom,how='left',on=['kic','P_me'])
-    tme  = tme[tme.P_cat.isnull()] # These appear only in me
-
-    # shared planets, planets in tme not in cat
-    tcom = pd.concat( [tcom , tme, tcat] )
-
-    # Join the remaining planets back on
-    tcom = pd.merge(tcom,me0,how='left',on=['kic','P_me'])
-    tcom = pd.merge(tcom,cat0,how='left',on=['kic','P_cat'])
+    tcom['in_me']  = ~tcom.P_me.isnull()
+    tcom['in_cat'] = ~tcom.P_cat.isnull()
     return tcom
 
 def zerosPanel(Pb, Rpb, items='Rp1,Rp2,Rpc,P1,P2'.split(',') ):
@@ -175,6 +141,8 @@ def zerosPanel(Pb, Rpb, items='Rp1,Rp2,Rpc,P1,P2'.split(',') ):
     panel['P1'] = a + Pb[:-1,np.newaxis]
     panel['P2'] = a + Pb[1:,np.newaxis]
     panel['Pc'] = np.sqrt(panel['P1'] * panel['P2'] )
+    panel.major_axis.name='P'
+    panel.minor_axis.name='Rp'
     return panel
 
 def margP(panel):
@@ -198,6 +166,104 @@ def margP(panel):
         dfRp[k] = panel[k].mean()
 
     return dfRp
+
+import copy
+
+def marg(panel,maxis):
+    """
+    Marginalize over a given axis
+    """
+    axes = panel.axes
+    if maxis=='P':
+        maxis=1
+        kaxis=2
+        firstcols = 'Rp1,Rp2,Rpc'.split(',')
+    elif maxis=='Rp':
+        maxis=2
+        kaxis=1
+        firstcols = 'P1,P2,Pc'.split(',')
+
+    sumcols     = 'fcell,fcellRaw,fcellAdd,Np'.split(',') 
+    sumquadcols = 'ufcell1,ufcell2'.split(',') 
+    allcols     = firstcols + sumcols +sumquadcols
+    
+    df = pd.DataFrame(index=axes[kaxis] , columns=allcols )
+
+    for k in allcols:
+        arr3d = np.array(panel.ix[[k] , : ,:])
+        arr3d = arr3d.swapaxes(1,maxis) # we're getting rid of first axis
+        arr2d = arr3d[0]
+        if sumcols.count(k)==1:
+            df.ix[:,k] = np.sum(arr2d, axis=0)
+        elif firstcols.count(k)==1:
+            df.ix[:,k] = arr2d[0,:]
+        elif sumquadcols.count(k)==1:
+            df.ix[:,k] = np.sqrt( np.sum(arr2d**2,axis=0) )
+
+    return df
+
+
+
+def calcufcell(x):
+    """
+
+    """
+    nstareff = 12e3*x['comp']
+    nsamp    = 1e4
+    if x['Np']==0:
+        return np.zeros(nsamp)
+    else:
+        p = x['Np']/nstareff # probabilty for planet
+        fac =   x['NpAug'] / x['Np'] / nstareff
+        return np.random.binomial(nstareff,p,nsamp)*fac
+
+def margP2(panel):
+    """
+    Marginalize over period
+    """
+    print "summing up occurrence from P = 5-50 days"
+    dfRp = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
+
+    # Add the following columns over bins in P
+    for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
+        dfRp[k] = panel[k].sum()
+
+    ufcell = pmap(calcufcell,panel)
+    dfRp['ufcell15'] = 0.
+    dfRp['ufcell50'] = 0.
+    dfRp['ufcell85'] = 0.
+    for Rp in dfRp.index:
+        ufcellL = []
+        for P in ufcell.axes[1]:
+            ufcellL.append( ufcell.ix[Rp,P] ) 
+
+        comb = reduce(addpdf,ufcellL)
+        parr = np.percentile(comb,[15,50,85])
+        print parr
+        dfRp['ufcell15'].ix[Rp] = parr[0]
+        dfRp['ufcell50'].ix[Rp] = parr[1]
+        dfRp['ufcell85'].ix[Rp] = parr[2]
+        
+
+    # The following are constant across P
+    for k in 'Rp1,Rp2,Rpc'.split(','):
+        dfRp[k] = panel[k].mean()
+
+    return dfRp
+
+def addpdf(a,b):
+    """
+    Add two pdfs together:
+
+    Should add every little piece of probability 
+    together. That results in too many pieces, 
+    so we down-select.
+    """
+
+    assert a.size==b.size,'arrays must be of equal sizes'
+    ia = random_integers(0,a.size-1,a.size)
+    ib = random_integers(0,a.size-1,a.size)
+    return a[ia] + b[ib]
 
 def margRp(panel0):
     """
@@ -230,30 +296,8 @@ def addPoisson(panel):
     panel['fuNp2']    = np.array([r[1] for r in res]).reshape(dfshape)
     return panel
 
-
-
 #######################################################################
-
-
-
-
-def addTransPars(df):
-    """
-    Add transit parameters
-    """
-
-    Rstar = df.Rstar * Rsun       # Rstar [cm]
-    Mstar = df.Mstar * Msun       # Mstar [g]
-
-    P     = df.P_out*sec_in_day # P [s]
-    a     = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
-
-    df['a/Rstar'] = a/Rstar
-    df['a']    = a / AU
-    df['Rp']   = df.p0 * df.Rstar * Rsun /Rearth
-    return df
-
-def addFeat(df):
+def addFeat(df,ver=False):
     """
     Add Features
 
@@ -265,7 +309,7 @@ def addFeat(df):
 
     Rstar = df.Rstar * Rsun       # Rstar [cm]
     Mstar = df.Mstar * Msun       # Mstar [g]
-    P     = df.P_out * sec_in_day # P [s]
+    P     = df.P     * sec_in_day # P [s]
 
     tauMa =  Rstar * P / 2 / np.pi / (df['a']*AU)
 
@@ -274,20 +318,22 @@ def addFeat(df):
     df['s2n_out_on_in'] = df.s2ncut / df.s2n
     df['med_on_mean']   = df.medSNR / df.s2n
     df['s2n_on_grass']  = df.s2n    / df.grass
-    df['phase_out']     = np.mod(df.t0/df.P_out,1)
 
     scols1  = set(df.columns) # final list of columns
     scols12 = scols0 ^ scols1 # 
 
-    print """
-addCuts: Added the following columns:
+    if ver:
+        s  = \
+"""\
+addFeat: Added the following columns:
 -------------------------------------
 %s
 """ % reduce(lambda x,y : x+', '+y, [str(c) for c in scols12] )
+        print s
 
     return df
 
-def applyCuts(df,cuts):
+def applyCuts(df,cuts,ver=False):
     """
     Apply cuts
 
@@ -296,11 +342,9 @@ def applyCuts(df,cuts):
     """
 
     cutkeys  = []
-    nPass    = []
-    nPassS2N = []
 
-    for name in cuts['name']:
-        cut = cuts.ix[np.where(cuts.name==name)[0]]
+    for name in cuts.index:
+        cut = cuts.ix[name]
         hi = float(cut['upper'])
         lo = float(cut['lower'])
         if np.isnan(hi):
@@ -311,66 +355,115 @@ def applyCuts(df,cuts):
         cutk = 'b'+name
         cutkeys.append(cutk)
         df[cutk]=(df[name] > lo) & (df[name] < hi) 
-
-        nPass.append( len(df[df[cutk]]) ) 
-        nPassS2N.append( len(df[df[cutk] & df['bs2n'] ]) ) 
-
-    df['bDV'] = df[cutkeys].T.sum()==len(cutkeys)
-    summary = cuts.copy()
-    summary['nPass'] = nPass
-    summary['nPassS2N'] = nPassS2N
-
-    print "applyCuts: summary"
-    print "-"*80
-    print summary.to_string(index=False)
-    print "%i stars passed all cuts" % len(df[df.bDV])
-    return df
+    
+    all = np.array(df[cutkeys])
+    df['bDV'] = all.sum(axis=1) == len(cuts)
+    return cutkeys
 
 def found(df):
     """
     Did we find the transit?
     
-    Test that the period and phase peak is the same as the input
+    Test that the period and phase peak is the same as the input.
     
     Parameters
     ----------
     df  : DataFrame with the following columns defined
-          - P_inp
-          - P_out
-          - phase_inp
-          - phase_out
+          - inj_P     : injected period
+          - P         : output period
+          - inj_phase : injected phase
+          - t0        : output epoch (combined with P to get phase)
 
     Returns
     -------
-    found column
+    DataFrame with `phase` and `found` columns added
     """
-
-    dP     = np.abs( df.P_inp     - df.P_out     )
-    dphase = np.abs( df.phase_inp - df.phase_out )
+    df['phase']     = np.mod(df.t0/df.P,1)
+    dP     = np.abs( df.inj_P     - df.P     )
+    dphase = np.abs( df.inj_phase - df.phase )
     dphase = np.min( np.vstack([ dphase, 1-dphase ]),axis=0 )
-    dt0    = dphase*df.P_out
-    df['found'] = (dP <.1) & (dt0 < .1) 
+    dt0    = dphase*df.P
+    df['found']  = (dP <.1) & (dt0 < .1) 
     return df
 
-def read_stellar(cat,short=True):
-    cat_bname = cat.split('/')[-1]
-    if cat_bname == 'b42k.csv':
-        stellar = pd.read_csv(cat,index_col=0)
-        stellar['kic']  = stellar['kepid']
-        stellar['Rstar'] = stellar.radius
-    elif cat_bname == 'ah_par_strip.h5':
-        store = pd.HDFStore(cat)
+stellardir = '/Users/petigura/Marcy/Kepler/files/stellar/'
+import sqlite3
+from pandas.io import sql
+def read_stellar(cat,sub=None):
+    """
+    Read Stellar
+
+    Unified way to read in stellar parameters:
+    
+    cat : str; one of the following:
+          - 'kepstellar' : Kepler stellar parameters from Exoplanet Archive
+          - 'kic'        : Kepler Input Catalog
+          - 'ah'         : Andrew Howard's YY corrected paramters
+         
+    Note
+    ---- 
+    Mstar is a derived parameter from Rstar and logg.
+
+    Future Work
+    -----------
+    Add an attribute to DataFrame returned that keeps track of the prov.
+    """
+
+    cols = 'kic,teff,logg,prov,Rstar'.split(',')
+    if cat=='kepstellar':
+        cat     = '%s/keplerstellar.csv' % stellardir
+        stellar = pd.read_csv(cat,skiprows=25)
+        namemap = {'kepid':'kic','radius':'Rstar','prov_prim':'prov'}
+        stellar = stellar.rename(columns=namemap)
+    elif cat=='kic':
+        cat     = '%s/kic_stellar.db' % stellardir
+        con     = sqlite3.Connection(cat)
+        query = 'SELECT kic,kic_teff,kic_logg,kic_radius FROM kic'
+        stellar = sql.read_frame(query,con)
+        namemap = {'kic_radius':'Rstar','kic_teff':'teff','kic_logg':'logg'}
+        stellar = stellar.rename(columns=namemap)
+        stellar = stellar.convert_objects(convert_numeric=True)
+        stellar['prov'] = 'kic'
+    elif cat == 'ah':
+        cat     = '%s/ah_par_strip.h5' % stellardir
+        store   = pd.HDFStore(cat)
         stellar = store['kic']
-        stellar = stellar.rename(columns = {'KICID':'kic'})
-
-        stellar['Rstar'] = stellar.YY_RADIUS
-        stellar['logg']  = stellar.YY_LOGG
-
+        namemap = {'KICID':'kic','YY_RADIUS':'Rstar','YY_LOGG':'logg',
+                   'YY_TEFF':'teff'}
+        stellar = stellar.rename(columns=namemap)
+        stellar['prov'] = 'ah'
+    else:
+        print "invalid catalog"
+        return None
+    stellar = stellar[cols]
     stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
-    if short==True:
-        stellar = stellar[['Mstar','Rstar','kic','logg']]
 
+    if sub is not None:
+        sub = pd.DataFrame(sub,columns=['kic'])
+        stellar = pd.merge(sub,stellar) 
     return stellar
+
+def query_kic(*args):
+    """
+    Query KIC
+   
+    Connect to Kepler kic sqlite database and return PANDAS dataframe
+    """
+    cnx = sqlite3.connect(os.environ['KEPBASE']+'/files/db/kic_ct.db')
+    if len(args)==0:
+        query  = "SELECT * FROM KIC WHERE kic=8435766"
+        print "enter an sqlite query, columns include:"
+        print sql.read_frame(query,cnx).T        
+        return None
+    
+    query = args[0]
+    if len(args)==2:
+        kic = args[1]
+        kic = tuple( list(kic) )
+        query += ' WHERE kic IN %s' % str( kic ) 
+
+    df = sql.read_frame(query,cnx)
+    return df
 
 def MC(pp,res,cuts,stellar):
     pp = pp.drop('skic',axis=1)
@@ -395,8 +488,6 @@ def MC(pp,res,cuts,stellar):
     DV = wrap(DV)
     return DV
 
-from matplotlib.pylab import *
-
 # Nice logticks
 xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
       [ 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
@@ -409,24 +500,31 @@ sxt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  '',  '',  '',  ''] + \
        [ 100, 200, 300, 400, 500, '', '', '', '']  
 
 
-def plotDV(DV):
+
+def plotWhyFailDV(DV,cuts,s2n=True):
     """
-    Displays results from injection and recovery.
+    Look at the injected signals that were found, but failed DV? Why
+    was that the case?
+    
+    s2n removes the cases that would have not passed the s2n cut.
     """
-    b = DV.found & DV.bDV
-    loglog(DV[b].P_inp,DV[b].inj_Rp,'s',ms=1.3,mew=0,color='RoyalBlue',label='found/DV - Y/Y')
 
     b = DV.found & ~DV.bDV
-    loglog(DV[b].P_inp,DV[b].inj_Rp,'x',ms=3,mew=0.75,color='RoyalBlue',label='found/DV - Y/N')
+    if s2n:
+        FailDV = DV[b & DV.bs2n]
+    else:
+        FailDV = DV[b]
 
-    b = ~DV.found & DV.bDV
-    loglog(DV[b].P_inp,DV[b].inj_Rp,'x',ms=3,mew=0.75,color='Tomato',label='found/DV - N/Y')
+    loglog(FailDV.inj_P,FailDV.inj_Rp,'x',ms=3,mew=0.75,color='RoyalBlue',
+           label='found/DV - Y/N')
+    FailDV['fails'] = ''
+    for cut in cuts.index:
+        for i in FailDV.index:
+            if ~FailDV.ix[i,'b'+cut]:
+                FailDV.ix[i,'fails'] += cut+'\n'
 
-    b = ~DV.found & ~DV.bDV
-    loglog(DV[b].P_inp,DV[b].inj_Rp,'s',ms=1.3,mew=0,color='Tomato',label='found/DV - N/N')
-
+    FailDV.apply(lambda x : text(x['inj_P'],x['inj_Rp'],x['fails'],size=4),axis=1)
     legend()
-    xt = np.round(logspace(log10(5),log10(500),13),decimals=1)
     xticks(xt,xt,rotation=45)
     
     ylim(0.5,30)
@@ -434,3 +532,448 @@ def plotDV(DV):
 
     xlabel('Period [days]')
     ylabel('Planet Size [Re]')
+
+def files2bname(path):
+    """
+    Takes a list of files, pulls out the basename, and sticks them
+    into a pandas DataFrame.
+    """
+    
+    fL = glob.glob(path)
+    df = pd.DataFrame(fL,columns=['file'])
+    file2bname = lambda x : x.split('/')[-1].split('.')[0]
+    df['bname'] = df.file.apply(file2bname)
+    df = df.drop('file',axis=1)
+    return df
+    
+
+def pmap(f,panel):
+    """
+    Panel Map
+
+    Runs a function element-wise on a pandas DataFrame 
+    """
+    
+    major_axis = panel.major_axis
+    minor_axis = panel.minor_axis
+
+    df = pd.DataFrame(columns=panel.major_axis,index=panel.minor_axis)
+    for ima in major_axis:
+        for imi in minor_axis:
+            df.ix[imi,ima] = f(panel.major_xs(ima).ix[imi])
+    return df
+
+def texp(vmag,expmeter,iod=False):
+    """
+    Exposure Time
+
+    Estimate exposure time based on scaling.
+
+    expmeter : 250 = 250k
+               10  = 10k (CKS)
+    iod      : iodine cell in or out. If out, throughput is higher by 30%
+    """
+    
+    t1 = 110.
+    v1 = 8.
+    
+    tbase = t1*10.**(0.4*(vmag-v1))
+    tbase *= expmeter / 250.
+    if iod==False:
+        tbase *= 0.7
+    return tbase
+import copy
+
+class TERRA():
+    """
+    TERRA results class
+    """
+    def __init__(self,pp,res,cat):
+        """
+        Injection and recovery obejct:
+
+        pp   : DataFrame of Injected parameters
+        res  : DataFrame of DV output
+        cuts : DataFrame listing the cuts.
+        """
+        
+
+        stellar       = read_stellar(cat,sub=pp)
+
+        self.res      = res
+        self.cat      = cat
+        self.pp       = pp
+        self.stellar  = stellar
+        self.cuts     = None
+
+        self.nlc  = self.pp.__len__()
+        self.ngrid   = self.res.P.dropna().__len__()
+        self.nfit    = self.res.p0.dropna().__len__()
+
+    def __repr__(self):
+        """
+        String summary of injection and recovery
+        """
+
+        s = """\
+Pipeline Summary
+----------------
+%6i Light curves submitted
+%6i completed TERRA-grid
+%6i completed TERRA-DV
+""" % (self.nlc , self.ngrid, self.nfit)
+        
+        if self.cuts is not None:
+            s += self.smry()
+
+        return s
+            
+    def smry(self):
+        smry = self.cuts.copy()
+        DV      = self.getDV()
+        smry['pass'] = 0
+        smry['only'] = 0
+        s2npasscol = '+s2n>%.1f' % self.cuts.ix['s2n','lower']
+        
+        smry[s2npasscol ] = 0 
+        for name in self.cuts.index:
+            DVpass = DV['b%s' % name]
+            smry.ix[name,'pass']     = DVpass.sum()
+            smry.ix[name,s2npasscol] = (DVpass & DV.bs2n).sum()
+            
+            if name!='s2n':
+                allbut = copy.copy(self.cutkeys)
+                bname = 'b'+name
+                allbut.remove(bname)
+                allbut.remove('bs2n')
+                print allbut
+                bOther = array(DV[allbut]).sum(axis=1)==len(allbut)
+                bOnly  = bOther & ~DV[bname] & DV['bs2n']
+                smry.ix[name,'only'] = bOnly.sum()
+
+            s = """
+Cuts Summary
+------------
+%s
+
+nTCE = %i
+""" % (smry.to_string(),DV.bDV.sum())
+
+        return s
+
+    def mergeFrames(self):
+        """
+        Take the pp, res, and stellar dataframe and merge them 
+        """
+
+        comb = pd.merge( self.pp,self.res,on=['outfile','kic'],how='left' )
+        comb = pd.merge( comb , self.stellar, on='kic' )
+
+        Rstar = comb['Rstar'] * Rsun                   # Rstar [cm]
+        Mstar = comb['Mstar'] * Msun                   # Mstar [g]
+        P     = comb['P']*sec_in_day                   # P [s]
+        a     = (P**2*G*Mstar / 4/ np.pi**2)**(1./3) # in cm 
+
+        comb['a/Rstar'] = a / Rstar
+        comb['a']       = a / AU
+        comb['Rp']      = comb['p0'] * comb['Rstar'] * Rsun /Rearth
+
+        return comb.drop_duplicates()
+        
+    def getDV(self):
+        """
+        Generate DV frame (usually too verbose to deal with at the top
+        level).
+        """
+        DV = self.mergeFrames()
+        DV = addFeat(DV)
+        self.cutkeys = applyCuts(DV,self.cuts)
+        return DV
+
+    def setGrid(self,gridName):
+        if gridName is 'terra1yr':
+            self.Pb   = array([6.25,12.5,25,50.0,100,200,400])
+            self.Rpb  = array([0.5, 1.0, 2,4.0,8.0,16.])        
+        elif gridName is 'terra50d':
+            self.Pb   = array([5,10.8,23.2,50])
+            self.Rpb  = array([0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.])        
+
+class MC(TERRA):
+    def __init__(self,pp,res,cat):
+        TERRA.__init__(self,pp,res,cat)
+        self.setGrid('terra50d')
+
+    def getDV(self):
+        DV = self.mergeFrames()
+        DV = addFeat(DV)
+        self.cutkeys = applyCuts(DV,self.cuts)
+        DV['inj_Rp']  = DV['inj_p'] * DV['Rstar'] *  Rsun / Rearth
+        DV = found(DV)
+        DV['comp'] = DV.found & DV.bDV
+        return DV
+
+    def plotDV(self):
+        plotDV( self.getDV() )
+   
+    def getPanel(self):
+        """Return panel with completeness"""
+        cPnl = zerosPanel(self.Pb,self.Rpb)
+        cPnl = completeness( cPnl , self.getDV() )
+        return cPnl
+
+
+class TPS(TERRA):
+    """
+    Transiting Planet Search object
+    """
+
+    def __init__(self,pp,res,cat):
+        TERRA.__init__(self,pp,res,cat)
+
+    def make_triage(self,path):
+        """
+        Make Triage Directories makes the following folders.
+
+        path/TCE
+        path/eKOI
+        path/notplanet
+        path/tce.txt
+        path/cuts.txt
+        """
+
+        def softmkdir(path):
+            try: 
+                os.mkdir(path)
+            except OSError:
+                print path+" exists"
+                pass
+
+        def softto_csv(df,path,**kwargs):
+            if ~os.path.exists(path):
+                df.to_csv(path,**kwargs)                
+            else:
+                print path+" exists"
+            
+        softmkdir("%s/" %path)
+        softmkdir("%s/TCE" %path)
+        softmkdir("%s/eKOI"%path)
+
+        tcepath = "%s/TCE.txt"  % path
+        cutpath = "%s/cuts.csv" % path
+
+        DV = self.getDV()
+        file2skic = lambda x : x.split('/')[-1].split('.')[0]
+        skic = DV[DV.bDV].outfile.apply(file2skic)
+
+        softto_csv(skic,tcepath,index=False)
+        softto_csv(self.cuts,cutpath)
+        
+    def read_triage(self,path):
+        self.tce  = read_triage(path)
+        ekoi = self.tce[self.tce.eKOI]
+        addcols = 'P,Rp,kic,a/Rstar'.split(',')
+        DV = self.getDV()[addcols].rename(columns={'kic':'bname'})
+        self.ekoi = pd.merge(ekoi,DV)
+        self.cuts = pd.read_csv("%s/cuts.csv" % path,index_col=0)
+
+    def ploteKOI(self):
+        loglog()        
+        cut = self.ekoi[~self.ekoi.notplanet]
+        plot(cut.P,cut.Rp,'.',mew=0,ms=5,label='eKOI')
+        cut = self.ekoi[self.ekoi.notplanet]
+        plot(cut.P,cut.Rp,'x',ms=3,mew=1,label='not planet')
+        
+        legend()
+        xticks(xt,sxt)
+        yticks(xt,sxt)
+        xlabel('Period [days]')
+        ylabel('Rp [Earth-radii]')
+
+        xlim(5,500)
+        ylim(0.5,16)
+
+class Occur():
+    def __init__(self,tps,mc):
+        self.tps = tps
+        self.mc  = mc
+        self.mc.setGrid('terra50d')
+
+    def OccurPanel(self):
+        cPnl = self.mc.getPanel()
+        ekoi = self.tps.ekoi 
+        plnt = ekoi[~ekoi.notplanet]
+        return occurrence(plnt,cPnl,self.tps.nlc)
+    
+    def occurAnn(self):
+        occur = self.OccurPanel()
+        occur = addpercen(occur)
+        addlines(occur)
+
+        def anntext(x):
+            s = " %(Np)-2i (%(NpAug).1f)  %(fcellp).2f%%\n %(compp)i%%  " % x
+            text( x['P1'] , x['Rp2'] , s, size=6,va='top') 
+
+        occur.to_frame().apply(anntext,axis=1)
+
+def addlines(panel):
+    Pb,Rpb = getbins(panel)
+    Pb,Rpb = np.array(Pb) , np.array(Rpb)
+    colors = np.zeros(panel.fcell.T.shape)
+    pcolor(Pb,Rpb, colors, edgecolors='LightGrey',lw=1,cmap=cm.gray_r)
+
+
+def occurrence(df_tps,cPnl,nstars):
+    """
+
+    Parameters
+    ----------
+    Pb     : bins in period
+    Rpb    : bins in planet radius
+    df_tps : dataframe with the following columns
+             - P 
+             - Rp
+             - a/Rstar
+    comp   : DataFrame must match the size of the panel
+
+    """
+
+    panel = cPnl.copy()
+    bins  = getbins(cPnl)
+
+    def countPlanets(**kw):
+        return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
+
+    panel['Np']       = countPlanets(weights=ones(len(df_tps)))
+    panel             = addPoisson(panel)
+    panel['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
+
+    panel['fcellRaw'] = panel['NpAug']    / nstars
+    panel['fcell']    = panel['fcellRaw'] / panel['comp']
+    panel['fcellAdd'] = panel['fcell'] - panel['fcellRaw']
+
+    panel['ufcell1'] = panel['fcell'] * panel['fuNp1']
+    panel['ufcell2'] = panel['fcell'] * panel['fuNp2']
+
+    panel['log10Rp']  = np.log10(panel['Rp2']/panel['Rp1'])
+    panel['log10P']   = np.log10(panel['P2']/panel['P1'])
+    panel['flogA']    = panel['fcell'] / (panel['log10Rp'] * panel['log10P'])
+    return panel
+
+def addpercen(panel):
+    panel['fcellp']  = 100*panel['fcell']
+    panel['compp']   = 100*panel['comp']
+    panel['flogAp']  = 100*panel['flogA']
+    return panel
+    
+
+
+
+def plotDV(DV):
+    """
+    Displays results from injection and recovery.
+    """
+    b = DV.found & DV.bDV
+    loglog(DV[b].inj_P,DV[b].inj_Rp,'s',ms=1,mew=.5,color='RoyalBlue',
+           label='found/DV - Y/Y',mec='RoyalBlue',mfc='none')
+
+    b = DV.found & ~DV.bDV
+    loglog(DV[b].inj_P,DV[b].inj_Rp,'x',ms=2.5,mew=0.75,color='RoyalBlue',
+           label='found/DV - Y/N')
+
+    b = ~DV.found & DV.bDV
+    loglog(DV[b].inj_P,DV[b].inj_Rp,'x',ms=2.5,mew=0.75,color='Tomato',
+           label='found/DV - N/Y')
+
+    b = ~DV.found & ~DV.bDV
+    loglog(DV[b].inj_P,DV[b].inj_Rp,'s',ms=1,mew=.5,color='Tomato',
+           label='found/DV - N/N',mec='Tomato',mfc='none')
+
+    legend()
+    xticks(xt,xt,rotation=45)
+    
+    ylim(0.5,64)
+    xlim(5,400)
+
+    xlabel('Period [days]')
+    ylabel('Planet Size [Re]')
+
+def read_pp(file):
+    pp     = pd.read_csv(file,index_col=0)
+    pp     = pp.rename(columns={'skic':'kic'})
+    return pp
+
+def read_res(file,**kwargs):
+    res = pd.read_csv(file,**kwargs)
+    res = res.rename(columns={'skic':'kic'})
+    return res
+
+def read_triage(path):
+    """
+    Read Triage Directory
+    
+    Looks for TCE.txt, eKOI.txt, notplanet.txt. If these files don't
+    exist, we make them from the list of pngs in the TCE/, eKOI/, and
+    notplanet/ folders
+    """
+
+    # TCEs
+    tce = txtpng('triage/TCE')
+    # eKOIs
+    ekoi = txtpng('triage/eKOI')
+    tce  = pd.merge(tce,ekoi,how='left')
+
+    # EBs
+    notplanet = txtpng('triage/notplanet')
+    tce = pd.merge(tce,notplanet,how='left')
+    tce = tce.fillna(False)
+
+    tce['eKOI']      = tce.eKOI.astype(bool)
+    tce['notplanet'] = tce.notplanet.astype(bool)
+
+    print """\
+%6i stars designated TCE   
+%6i stars designated eKOI  
+%6i stars look like EBs    
+""" %  (len(tce) , len(tce[tce.eKOI]) , len( tce[tce.eKOI & tce.notplanet] ))
+    return tce
+
+def txtpng(path):
+    """
+    Given a path to the dircetory e.g.:
+    
+       ./TCE/
+
+    look for ./TCE.txt and read and return DataFrame. If the file does
+    not exist, build it out of all png files in TCE/
+    """
+    
+    basename = path.split('/')[-1]
+    pathtxt = '%s.txt' % path
+    pathpngs ='%s/*.png' % path
+
+    try:
+        with open(pathtxt) as f:
+            df = pd.read_table(f,sep='\s*',names=['bname'])
+    except IOError:
+        print """\
+Constructing %s.txt
+from         %s
+""" % (path,pathpngs)
+        df = files2bname(pathpngs)
+        df.bname.to_csv(pathtxt,index=False)
+
+    df[basename] = True
+    return df
+        
+
+
+
+
+
+
+
+
+
+
+
+
