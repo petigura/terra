@@ -41,7 +41,6 @@ def plot_diag(h5):
     """
     Print a 1-page diagnostic plot of a given h5.
     """
-#    import pdb;pdb.set_trace()
     tval.read_dv(h5)
     del h5['SES']
     del h5['tRegLbl']
@@ -57,18 +56,17 @@ def plot_diag(h5):
 
     # Second row
     axPF       = fig.add_subplot(gs[1,0:2])
-    axPF180    = fig.add_subplot(gs[1,2:4],sharex=axPF,sharey=axPF)
-    axPFSec    = fig.add_subplot(gs[1,4:6],sharex=axPF)
-    axCDF      = fig.add_subplot(gs[1,6])
-    axScar     = fig.add_subplot(gs[1,7])
-    axAutoCorr = fig.add_subplot(gs[1,8])
+    axPFzoom   = fig.add_subplot(gs[1,2:4],sharex=axPF,)
+    axPF180    = fig.add_subplot(gs[1,4:6],sharex=axPF)
+    axPFSec    = fig.add_subplot(gs[1,6:8],sharex=axPF)
+    axScar     = fig.add_subplot(gs[1,8])
+    axAutoCorr = fig.add_subplot(gs[1,9])
 
     # Last row
     axStack        = fig.add_subplot(gs[2:8 ,0:8])
     axStackZoom    = fig.add_subplot(gs[2:8 ,8:])
 
     tight_layout()
-
     gcf().subplots_adjust(hspace=0.01,wspace=0.01)
 
     # Top row
@@ -85,14 +83,14 @@ def plot_diag(h5):
     sca(axPF)
     plotPF(h5,0,diag=True)
 
+    sca(axPFzoom)
+    plotPF(h5,0,diag=True,zoom=True)
+
     sca(axPF180)
     plotPF(h5,180,diag=True)
 
     sca(axPFSec)
     plotSec(h5)
-
-    sca(axCDF)
-    plotCDF(h5)
 
     sca(axScar)
     plotScar(h5)
@@ -197,13 +195,14 @@ def plotAutoCorr(pk):
     gca().xaxis.set_visible(False)
     gca().yaxis.set_visible(False)
 
-def plotPF(h5,ph,diag=False):
+def plotPF(h5,ph,diag=False,zoom=False):
     PF = h5['lcPF%i' % ph]
     x  = PF['tPF']
     
     @handelKeyError
     def plot_phase_folded():
-        plot(x,PF['f'],',',color='k')
+        if zoom==False:
+            plot(x,PF['f'],',',color='k')
         bPF = h5['blc30PF%i' % ph][:]
         t   = bPF['tb']
         f   = bPF['med']
@@ -224,9 +223,13 @@ def plotPF(h5,ph,diag=False):
     else:
         title='ph = 180'
 
+    
     depth = h5.attrs['mean']
     if depth < 1e-4:
         ylim(-5*depth,5*depth)
+
+    if zoom==True:
+        autoscale(axis='y')
 
     if diag:
         cax = gca()
