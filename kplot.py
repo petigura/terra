@@ -40,6 +40,8 @@ rc('font',size=8)
 def plot_diag(h5):
     """
     Print a 1-page diagnostic plot of a given h5.
+    
+    Right now, we recompute the single transit statistics on the fly.
     """
     tval.read_dv(h5)
     del h5['SES']
@@ -74,10 +76,10 @@ def plot_diag(h5):
     plotPeriodogram(h5)
 
     sca(axSingSES)
-#    plotSingSES(h5)
+    plotSingSES(h5)
 
     sca(axSeason)
-#    plotSeason(h5)
+    plotSeason(h5)
 
     # Second row
     sca(axPF)
