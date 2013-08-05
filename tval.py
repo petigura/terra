@@ -517,12 +517,23 @@ def at_s2ncut(h5):
 def at_SES(h5):
     """
     Look at individual transits SES.
+    
+    Finds the cadence closes to the transit midpoint. For each
+    cadence, record in dataset `SES` the following information:
 
-    Using the global overall period as a starting point, find the
-    cadence corresponding to the peak of the SES timeseries in that
-    region. Note: I'm not sure if using the maximum is the right way
-    to go, will that screw up the intrisic dispersion I expect to see
-    in SES?
+        ses    : Depth of the transit
+        tnum   : transit number (starts at 0)
+        season : What season did the transit occur in?
+
+    Also computes the median for odd/even transits and each season
+    individually.
+
+    Notes
+    -----
+    Aug 5, 2013 - Changed to strictly look at the point closest to the
+                  center of each transit. Before, I was searching for
+                  the max SES value within the transit range (allowed
+                  for TTVs)
     """
     lc   = h5['/pp/mqcal'][:]
     t    = lc['t']
@@ -537,40 +548,30 @@ def at_SES(h5):
         b = (t > r['tstart']) & (t < r['tstop'])
         q[b] = r['q']
 
+    season = np.mod(q,4)
     tRegLbl = rLbl['tRegLbl']
 
-    # Search for the transit midpoint by looking for the maximum SES peak
-    btmid = np.zeros(tRegLbl.size,dtype=bool) 
-    for iTrans in np.unique(tRegLbl)[1:]:
-        tRegSES  = dM[ tRegLbl==iTrans ] 
-        tRegfcal = fcal[ tRegLbl==iTrans ] 
-        if tRegfcal.count() > 0.75 * tRegfcal.size:
-            maSES = np.nanmax( tRegSES.compressed() )
-            btmid[(dM==maSES) & (tRegLbl==iTrans)] = True
-
-    tnum = tRegLbl[btmid]
-    ses  = dM[btmid]
-    q    = q[btmid]
-    season = np.mod(q,4)
-
     dtype = [('ses',float),('tnum',int),('season',int)]
-    rses = np.array(zip(ses,tnum,season),dtype=dtype )
+    dM.fill_value=np.nan
+    rses  = np.array(zip(dM.filled(),rLbl['tLbl'],season),dtype=dtype )
+    rses  = rses[rLbl['tLbl'] >=0]
 
     h5.attrs['num_trans'] = 0
+
     if rses.size > 0:
         h5['SES'] = rses
         h5.attrs['num_trans'] = rses.size
         h5['tRegLbl'] = tRegLbl
-        ses_o,ses_e = ses[season % 2  == 1],ses[season % 2  == 0]
-        h5.attrs['SES_even'] = np.median(ses_e) 
-        h5.attrs['SES_odd']  = np.median(ses_o) 
-        h5.attrs['KS_eo']    = ks_2samp(ses_e,ses_o)[1]
 
+        # Median SES, even/odd
+        for sfx,i in zip(['even','odd'],[0,1]):
+            medses =  np.median( rses['ses'][rses['tnum'] % 2 == i] ) 
+            h5.attrs['SES_%s' %sfx] = medses
+
+        # Median SES, different seasons
         for i in range(4):
-            ses_i = ses[season % 4  == i]
-            ses_not_i = ses[season % 4  != i]
-            h5.attrs['SES_%i' %i] = np.median(ses_i)
-            h5.attrs['KS_%i' %i]  = ks_2samp(ses_i,ses_not_i)[1]
+            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
+            h5.attrs['SES_%i' %i] = medses
 
 def at_rSNR(h5):
     """

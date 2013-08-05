@@ -40,6 +40,8 @@ rc('font',size=8)
 def plot_diag(h5):
     """
     Print a 1-page diagnostic plot of a given h5.
+    
+    Right now, we recompute the single transit statistics on the fly.
     """
     tval.read_dv(h5)
     del h5['SES']
@@ -74,10 +76,10 @@ def plot_diag(h5):
     plotPeriodogram(h5)
 
     sca(axSingSES)
-#    plotSingSES(h5)
+    plotSingSES(h5)
 
     sca(axSeason)
-#    plotSeason(h5)
+    plotSeason(h5)
 
     # Second row
     sca(axPF)
@@ -141,7 +143,7 @@ def plotSec(h5):
 def plotSingSES(h5):    
     cax = gca()
     rses = h5['SES']
-    plot(rses['tnum'],rses['ses']*1e6,'.')
+    plot(rses['tnum'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
     at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
     cax.add_artist(at)
@@ -153,7 +155,7 @@ def plotSeason(h5):
     rses = h5['SES']
 
 
-    cax.plot(rses['season'],rses['ses']*1e6,'.')
+    cax.plot(rses['season'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
     at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
     cax.add_artist(at)
