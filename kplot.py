@@ -139,6 +139,74 @@ def plotSec(h5):
     at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
     cax.add_artist(at)
 
+def plotfitchain(h5):
+    """
+    Plot the median 10-min points 
+    Plot the best fit
+    Show the range of fits
+    """
+    bPF = h5['blc10PF0'][:]
+    x = bPF['tb']    
+    y = bPF['med']
+    plot(x,bPF['med'],'o',ms=3,mew=0)
+    plot(x,y-h5['fit/fit']+1e-4)
+
+    yL = h5['fit/fits'][:]
+    lo,up  = np.percentile(yL,[15,85],axis=0)
+    xL = vstack( [x]*yL.shape[0] )
+    fill_between(x, lo, up, where=up>=lo, facecolor='r',alpha=.5,lw=0)
+    plot(x,h5['fit/fit'],'r',lw=3)
+    xlabel('t - t0 [days]' )
+
+def plot_bp_covar(h5):
+    """
+    Plot the covariance between impact parameter, b, and radius ratio, p.
+    """
+    chain = h5['fit/chain'][:]
+
+    x = chain[:,2]
+    y = chain[:,0]  * 1e2 # convert to percent
+    pars = h5['fit'].attrs['upL0']
+    plot(abs(x),y,'o',mew=0,alpha=.2,ms=2)
+    plot([pars[1,2]], [pars[1,0] ])
+    xlabel('b')
+    ylabel('Rp/Rstar %')
+
+def yticksppm():
+    """
+    Convienence function to convert fractional flux to ppm.
+    """
+    yt = yticks()[0]
+    yt = (yt*1e6).astype(int)
+    yt = np.round(yt,-2)
+    yticks(yt/1e6,yt)
+    ylabel("flux (ppm)")
+
+def MC_diag(h5):
+    fig = figure(figsize=(8,6))
+    gs = GridSpec(2,2)
+
+    axFitClean  = fig.add_subplot(gs[0,0])
+    sca(axFitClean)
+    plotfitchain(h5)
+    yticksppm()
+    axFitFull   = fig.add_subplot(gs[1,0],sharex=axFitClean)
+    sca(axFitFull)
+    plotPF(h5,0)
+    yticksppm()
+
+    axbp = fig.add_subplot(gs[0,1])
+    sca(axbp) 
+    plot_bp_covar(h5)
+    ylim(0,10)
+    xlim(0,1)
+    
+    axbpzoom = fig.add_subplot(gs[1,1],sharex=axbp)
+    sca(axbpzoom)
+    plot_bp_covar(h5)
+    autoscale(axis='y')
+    tight_layout()
+
 
 def plotSingSES(h5):    
     cax = gca()
@@ -153,8 +221,6 @@ def plotSingSES(h5):
 def plotSeason(h5):
     cax = gca()
     rses = h5['SES']
-
-
     cax.plot(rses['season'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
     at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
@@ -240,7 +306,7 @@ def plotPF(h5,ph,diag=False,zoom=False):
         cax.add_artist(at)
     
     autoscale('x')
-    xlabel('Phase')
+    xlabel('t - t0 [days]')
 
 def handelKeyError(func):
     """
