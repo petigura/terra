@@ -10,6 +10,20 @@ from matplotlib.pylab import *
 
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
+def pngs2txt(path):
+    """
+    List all the .png files in a directory and create a flat ascii of
+    all the basenames.
+    """
+    fL = glob.glob('%s/*.png' %path)
+    print "reading pngs from %s" %path
+    df = pd.DataFrame(fL,columns=['file'])
+    df['skic'] = df.file.apply(lambda x : x.split('/')[-1].split('.')[0])
+    outfile = '%s.txt' % path
+    print "writing skic to %s" % outfile
+    df.skic.to_csv(outfile,index=False)
+
+
 def upoisson(Np):
     """
     Poisson Uncertanty
@@ -62,24 +76,23 @@ def completeness(panel,df_mc):
     return panel
 
 
-def compareCatalogs(me,cat):
+def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
     """
     Compare Catalogs
     
     Determine which planets appear in both catalogs. Candidates are
     considered equal if:
 
-    |P_me - P_cat| < 0.01 days
+    |P_cat1 - P_cat2| < 0.01 days
 
     I believe the SQL equivalent is:
     
-    SELECT * FROM me OUTER JOIN cat ON me.kic=cat.kic AND abs(me.P-cat.P) <.1
+    SELECT * FROM cat1 OUTER JOIN cat2 ON cat1.kic=cat2.kic AND abs(cat1.P-cat2.P) <.1
 
     Parameters
     ----------
-    me  : my catalog. Must contain `kic` and `P` fields
-    cat : other catalog. Must contain `kic` and `P` fields
-
+    cat1 : my catalog. Must contain `kic` and `P` fields
+    cat2 : other catalog. Must contain `kic` and `P` fields
 
     Note
     ----
@@ -93,28 +106,35 @@ def compareCatalogs(me,cat):
 
     tcom - outer join of two catalog with columns
            kic   
-           P_me   
-           P_cat  
-           in_me  : convienience, tcom.in_me ~tcom.P_me.isnull()
-           in_cat : same
+           P_cat1   
+           P_cat2  
+           in_cat1  : convienience, tcom.in_cat1 ~tcom.P_cat1.isnull()
+           in_cat2 : same
     """
-    me   = me.rename(columns={'P':'P_me'})
-    cat  = cat.rename(columns={'P':'P_cat'})
+    cat1 = cat1.rename(columns={'P':'P_cat1'})
+    cat2 = cat2.rename(columns={'P':'P_cat2'})
 
-    me0  = me.copy()
-    cat0 = cat.copy()
+    cat10 = cat1.copy()
+    cat20 = cat2.copy()
 
-    me   = me[['P_me','kic']]
-    cat  = cat[['P_cat','kic']]
+    cat1 = cat1[['P_cat1','kic']]
+    cat2 = cat2[['P_cat2','kic']]
 
     # Outer join is the union of the entries in me,cat, and both
-    tcom = pd.merge(me,cat,on='kic',how='outer')
-    tcom = tcom[ np.abs( tcom.P_me - tcom.P_cat ) < .1 ]
-    tcom = pd.merge(me,tcom,on=['kic','P_me'],how='outer')
-    tcom = pd.merge(cat,tcom,on=['kic','P_cat'],how='outer')
+    tcom = pd.merge(cat1,cat2,on='kic',how='outer')
+    tcom = tcom[ np.abs( tcom.P_cat1 - tcom.P_cat2 ) < .1 ]
+    tcom = pd.merge(cat10,tcom,on=['kic','P_cat1'],how='outer')
+    tcom = pd.merge(cat20,tcom,on=['kic','P_cat2'],how='outer')
+    tcom['in_cat1'] = ~tcom.P_cat1.isnull()
+    tcom['in_cat2'] = ~tcom.P_cat2.isnull()
 
-    tcom['in_me']  = ~tcom.P_me.isnull()
-    tcom['in_cat'] = ~tcom.P_cat.isnull()
+    col0 = tcom.columns
+    for c in col0:
+        if c.find('cat1') != -1:
+            tcom = tcom.rename( columns={ c:c.replace('cat1',suffixes[0]) } )
+        elif c.find('cat2') != -1:
+            tcom = tcom.rename( columns={ c:c.replace('cat2',suffixes[1]) } )
+
     return tcom
 
 def zerosPanel(Pb, Rpb, items='Rp1,Rp2,Rpc,P1,P2'.split(',') ):
@@ -202,8 +222,6 @@ def marg(panel,maxis):
 
     return df
 
-
-
 def calcufcell(x):
     """
 
@@ -216,40 +234,6 @@ def calcufcell(x):
         p = x['Np']/nstareff # probabilty for planet
         fac =   x['NpAug'] / x['Np'] / nstareff
         return np.random.binomial(nstareff,p,nsamp)*fac
-
-def margP2(panel):
-    """
-    Marginalize over period
-    """
-    print "summing up occurrence from P = 5-50 days"
-    dfRp = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
-
-    # Add the following columns over bins in P
-    for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
-        dfRp[k] = panel[k].sum()
-
-    ufcell = pmap(calcufcell,panel)
-    dfRp['ufcell15'] = 0.
-    dfRp['ufcell50'] = 0.
-    dfRp['ufcell85'] = 0.
-    for Rp in dfRp.index:
-        ufcellL = []
-        for P in ufcell.axes[1]:
-            ufcellL.append( ufcell.ix[Rp,P] ) 
-
-        comb = reduce(addpdf,ufcellL)
-        parr = np.percentile(comb,[15,50,85])
-        print parr
-        dfRp['ufcell15'].ix[Rp] = parr[0]
-        dfRp['ufcell50'].ix[Rp] = parr[1]
-        dfRp['ufcell85'].ix[Rp] = parr[2]
-        
-
-    # The following are constant across P
-    for k in 'Rp1,Rp2,Rpc'.split(','):
-        dfRp[k] = panel[k].mean()
-
-    return dfRp
 
 def addpdf(a,b):
     """
@@ -265,29 +249,6 @@ def addpdf(a,b):
     ib = random_integers(0,a.size-1,a.size)
     return a[ia] + b[ib]
 
-def margRp(panel0):
-    """
-    Marginalize over Rp
-    """
-    panel = panel0.copy()
-
-    panel = panel0.swapaxes(copy=True)
-    RpRange = panel.major_axis[panel.major_axis >=1]
-    print "using the following Rps", RpRange
-    panel = panel.ix[:,RpRange]
-    df = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
-
-    # Add the following columns over bins in Rp
-    for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
-        df[k] = panel[k].sum()
-
-    for k in 'P1,P2,Pc,log10P'.split(','):
-        df[k] = panel[k].mean()
-
-    # Add the following errors in quadrature
-    df['ufcell1'] = np.sqrt(((panel['fuNp1']*panel['fcell'])**2).sum())
-    df['ufcell2'] = np.sqrt(((panel['fuNp2']*panel['fcell'])**2).sum())
-    return df
 
 def addPoisson(panel):
     dfshape = panel.shape[1],panel.shape[2]
@@ -606,7 +567,7 @@ class TERRA():
         self.stellar  = stellar
         self.cuts     = None
 
-        self.nlc  = self.pp.__len__()
+        self.nlc     = self.pp.__len__()
         self.ngrid   = self.res.P.dropna().__len__()
         self.nfit    = self.res.p0.dropna().__len__()
 
@@ -627,6 +588,12 @@ Pipeline Summary
             s += self.smry()
 
         return s
+
+    def subsamp_args(self,stars):
+        stars = pd.DataFrame(stars,columns=['kic'])
+        pp    = pd.merge(stars,self.pp)
+        res   = pd.merge(stars,self.res)
+        return pp,res,self.cat
             
     def smry(self):
         smry = self.cuts.copy()
@@ -703,6 +670,13 @@ class MC(TERRA):
         TERRA.__init__(self,pp,res,cat)
         self.setGrid('terra50d')
 
+    def subsamp(self,stars):
+        stars = pd.DataFrame(stars,columns=['kic'])
+        pp,res,cat = self.subsamp_args(stars)
+        mc  = MC(pp,res,cat)
+        mc.cuts = self.cuts
+        return mc
+
     def getDV(self):
         DV = self.mergeFrames()
         DV = addFeat(DV)
@@ -729,6 +703,26 @@ class TPS(TERRA):
 
     def __init__(self,pp,res,cat):
         TERRA.__init__(self,pp,res,cat)
+        self.tce = None
+    def __add__(self,tps2):
+        pp_comb  = pd.concat( [self.pp,tps2.pp] )
+        res_comb = pd.concat( [self.res,tps2.res] )
+        assert self.cat==tps2.cat,"two catalogs must be equal"
+        tps = TPS(pp_comb,res_comb,self.cat)
+
+        tps.cuts = self.cuts
+        if self.tce is not None:
+            tps.tce = pd.concat( [self.tce,tps2.tce] )
+
+        return tps
+
+    def subsamp(self,stars):
+        stars = pd.DataFrame(stars,columns=['kic'])
+        pp,res,cat = self.subsamp_args(stars)
+        tps  = TPS(pp,res,cat)
+        tps.tce  = pd.merge(stars,self.tce,left_on='kic',right_index=True)
+        tps.cuts = self.cuts
+        return tps
 
     def make_triage(self,path):
         """
@@ -769,19 +763,21 @@ class TPS(TERRA):
         softto_csv(self.cuts,cutpath)
         
     def read_triage(self,path):
-        self.tce  = read_triage(path)
+        self.tce  = read_pngtree('%s/pngtree.txt' % path)
+
+    def geteKOI(self):
         ekoi = self.tce[self.tce.eKOI]
         addcols = 'P,Rp,kic,a/Rstar'.split(',')
-        DV = self.getDV()[addcols].rename(columns={'kic':'bname'})
-        self.ekoi = pd.merge(ekoi,DV)
-        self.cuts = pd.read_csv("%s/cuts.csv" % path,index_col=0)
+        DV = self.getDV()[addcols]
+        return pd.merge(ekoi,DV,left_index=True,right_on='kic')
 
     def ploteKOI(self):
         loglog()        
-        cut = self.ekoi[~self.ekoi.notplanet]
-        plot(cut.P,cut.Rp,'.',mew=0,ms=5,label='eKOI')
-        cut = self.ekoi[self.ekoi.notplanet]
-        plot(cut.P,cut.Rp,'x',ms=3,mew=1,label='not planet')
+        ekoi = self.geteKOI()
+        cut = ekoi[~ekoi.notplanet]
+        plot(cut.P,cut.Rp,'.',mew=0,ms=5,label='Candidate')
+        cut = ekoi[ekoi.notplanet]
+        plot(cut.P,cut.Rp,'x',ms=3,mew=1,label='FP')
         
         legend()
         xticks(xt,sxt)
@@ -800,7 +796,7 @@ class Occur():
 
     def OccurPanel(self):
         cPnl = self.mc.getPanel()
-        ekoi = self.tps.ekoi 
+        ekoi = self.tps.geteKOI()
         plnt = ekoi[~ekoi.notplanet]
         return occurrence(plnt,cPnl,self.tps.nlc)
     
@@ -907,6 +903,38 @@ def read_res(file,**kwargs):
     res = res.rename(columns={'skic':'kic'})
     return res
 
+def read_pngtree(path):
+    df = pd.read_table(path,names=['path'])
+    df['dir1'] = df.path.apply(lambda x :x.split('/')[1])
+    df['kic'] = df.path.apply(lambda x :int(x.split('/')[-1][:-7]))
+    df.index=df.kic
+
+    tce  = df[df.dir1=='TCE']
+    tce['TCE'] = True
+    tce = tce[['TCE']]
+
+    eKOI = df[df.dir1=='eKOI']
+    eKOI['eKOI'] = True
+    eKOI = eKOI[['eKOI']]
+
+    notplanet = df[df.dir1=='notplanet']
+    notplanet['notplanet'] = True
+    notplanet['notplanetdes']  = notplanet.path.apply(lambda x: x.split('/')[2][2:])
+    notplanet = notplanet[['notplanet','notplanetdes']]
+    tce = pd.concat([tce,eKOI,notplanet],axis=1)
+    tce = tce.fillna(False)
+
+    tce['eKOI']      = tce.eKOI.astype(bool)
+    tce['notplanet'] = tce.notplanet.astype(bool)
+
+    print """\
+%6i stars designated TCE   
+%6i stars designated eKOI  
+%6i stars look like EBs    
+""" %  (len(tce) , len(tce[tce.eKOI]) , len( tce[tce.eKOI & tce.notplanet] ))
+
+    return tce
+
 def read_triage(path):
     """
     Read Triage Directory
@@ -965,15 +993,3 @@ from         %s
     df[basename] = True
     return df
         
-
-
-
-
-
-
-
-
-
-
-
-
