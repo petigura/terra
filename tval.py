@@ -375,25 +375,49 @@ def at_binPhaseFold(h5,ph,bwmin):
     
 def at_fit(h5,runmcmc=False,fixb=None):
     """
-    Fit MA model binned phase folded light curves.
-            
+    Attach Fit
+
+    Fit Mandel Agol (2002) to phase folded light curve. For short
+    period transits with many in-transit points, we fit median phase
+    folded flux binned up into 10-min bins to reduce computation time.
+
+    Light curves are fit using the following proceedure:
+    1. Registraion : best fit transit epcoh is determined by searching
+                     over a grid of transit epochs
+    2. Simplex Fit : transit epoch is frozen, and we use a simplex
+                     routine (fmin) to search over the remaining
+                     parameters.
+    3. MCMC        : If runmcmc is set, explore the posterior parameter space
+                     around the best fit results of 2.
+
     Parameters
     ----------
+    h5     : h5 file handle
 
-    h5     : h5 file handel
-    bPF    : binned lightcurve dataset 
-    fitgrp : empty group to store fitted parameters
+    Returns
+    -------
+    Modified h5 file. Add/update the following datasets in h5['fit/']
+    group:
+
+    fit/t     : time used in fit
+    fit/f     : flux used in fit
+    fit/fit   : best fit light curve determined by simplex algorithm
+    fit/chain : values used in MCMC chain post burn-in
+
+    And the corresponding attributes
+    fit.attrs['pL0']  : best fit parameters from simplex alg
+    fit.attrs['X2_0'] : chi2 of fit
+    fit.attrs['dt_0'] : Shift used in the regsitration.
     """
-    attrs    = dict(h5.attrs)
-    ph       = 0
-    fitgrp    = h5.create_group('fit')
+
+    attrs  = dict(h5.attrs)
+    fitgrp = h5.create_group('fit')
 
     if attrs['P'] < 50:
         bPF = h5['blc10PF0'][:]
         t   = bPF['tb']
         y   = bPF['med']
         err = bPF['std'] / np.sqrt( bPF['count'] )
-
         b1  = bPF['count'] == 1 # for 1 value std ==0 which is bad
         err[b1] = ma.median(ma.masked_invalid(bPF['std']))
     else:
@@ -401,12 +425,12 @@ def at_fit(h5,runmcmc=False,fixb=None):
         t  = lc['tPF']
         y  = lc['f']
         err = np.ones(lc.size)
-
     try:
         p0 = np.sqrt(1e-6*attrs['df'])
     except:
         p0 = np.sqrt(attrs['mean'])
 
+    # Initial guess for MA parameters.
     pL0 = [ p0, attrs['tdur']/2. ,.3  ]
 
     # Find global best fit value
@@ -418,9 +442,9 @@ def at_fit(h5,runmcmc=False,fixb=None):
     fitgrp['t'] = t 
     fitgrp['f'] = y
 
-    fitgrp.attrs['pL%i'  % ph] = pL1
-    fitgrp.attrs['X2_%i' % ph] = trans.chi2(pL1)
-    fitgrp.attrs['dt_%i' % ph] = trans.dt
+    fitgrp.attrs['pL0'  % ph] = pL1
+    fitgrp.attrs['X2_0' % ph] = trans.chi2(pL1)
+    fitgrp.attrs['dt_0' % ph] = trans.dt
 
     print pL1
 
@@ -437,6 +461,7 @@ def at_fit(h5,runmcmc=False,fixb=None):
         sampler = emcee.EnsembleSampler(nwalkers,ndims,trans)
         nburn = 100
         pos, prob, state = sampler.run_mcmc(p0, nburn)
+        import pdb;pdb.set_trace()
 
         # Real run
         sampler.reset()
@@ -444,7 +469,7 @@ def at_fit(h5,runmcmc=False,fixb=None):
         foo = sampler.run_mcmc(pos, niter, rstate0=state)
         
         uncert = np.percentile(sampler.flatchain,[15,50,85],axis=0)
-        fitgrp.attrs['upL%i' % ph]  = uncert
+        fitgrp.attrs['upL0' % ph]  = uncert
         fitgrp['chain'] = sampler.flatchain 
 
         nsamp = 200

@@ -145,17 +145,21 @@ def plotfitchain(h5):
     Plot the best fit
     Show the range of fits
     """
-    bPF = h5['blc10PF0'][:]
-    x = bPF['tb']    
-    y = bPF['med']
-    plot(x,bPF['med'],'o',ms=3,mew=0)
-    plot(x,y-h5['fit/fit']+1e-4)
+
+    fitgrp = h5['fit']
+    t   = fitgrp['t'][:]
+    f   = fitgrp['f'][:]
+    fit = fitgrp['fit'][:]
+
+    plot(t,f,'o',ms=3,mew=0)
+    plot(t,f-fit+1e-4)
+    plot(t,fit,'r--',lw=3,alpha=0.4)
+    
+    # Show the range of fit from MCMC
 
     yL = h5['fit/fits'][:]
     lo,up  = np.percentile(yL,[15,85],axis=0)
-    xL = vstack( [x]*yL.shape[0] )
-    fill_between(x, lo, up, where=up>=lo, facecolor='r',alpha=.5,lw=0)
-    plot(x,h5['fit/fit'],'r',lw=3)
+    fill_between(t, lo, up, where=up>=lo, facecolor='r',alpha=.5,lw=0)
     xlabel('t - t0 [days]' )
 
 def plot_bp_covar(h5):
@@ -201,10 +205,9 @@ def MC_diag(h5):
     ylim(0,10)
     xlim(0,1)
     
-    axbpzoom = fig.add_subplot(gs[1,1],sharex=axbp)
+    axbpzoom = fig.add_subplot(gs[1,1])
     sca(axbpzoom)
     plot_bp_covar(h5)
-    autoscale(axis='y')
     tight_layout()
 
 
