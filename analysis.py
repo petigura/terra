@@ -581,7 +581,7 @@ Pipeline Summary
 ----------------
 %6i Light curves submitted
 %6i completed TERRA-grid
-%6i completed TERRA-DV
+%6i completed TERRA-DV\
 """ % (self.nlc , self.ngrid, self.nfit)
         
         if self.cuts is not None:
@@ -700,10 +700,12 @@ class TPS(TERRA):
     """
     Transiting Planet Search object
     """
-
     def __init__(self,pp,res,cat):
         TERRA.__init__(self,pp,res,cat)
         self.tce = None
+        self.maxRpPlanet = 20 # Objects larger than 20 Re, will
+                                # automatically be considered EBs
+
     def __add__(self,tps2):
         pp_comb  = pd.concat( [self.pp,tps2.pp] )
         res_comb = pd.concat( [self.res,tps2.res] )
@@ -764,7 +766,13 @@ class TPS(TERRA):
         
     def read_triage(self,path):
         self.tce  = read_pngtree('%s/pngtree.txt' % path)
-
+        ekoi = self.geteKOI()
+        ekoi.index = ekoi.kic
+        kicEB = ekoi[~ekoi.notplanet & (ekoi.Rp > 20)].kic
+        print "%6i more FPs due to Rp > %i Re" % (len(kicEB),self.maxRpPlanet)
+        self.tce.ix[kicEB,'notplanet'] = True
+        self.tce.ix[kicEB,'notplanetdes'] = 'radius'
+                
     def geteKOI(self):
         ekoi = self.tce[self.tce.eKOI]
         addcols = 'P,Rp,kic,a/Rstar'.split(',')
@@ -906,7 +914,7 @@ def read_res(file,**kwargs):
 def read_pngtree(path):
     df = pd.read_table(path,names=['path'])
     df['dir1'] = df.path.apply(lambda x :x.split('/')[1])
-    df['kic'] = df.path.apply(lambda x :int(x.split('/')[-1][:-7]))
+    df['kic']  = df.path.apply(lambda x :int(x.split('/')[-1][:-7]))
     df.index=df.kic
 
     tce  = df[df.dir1=='TCE']
