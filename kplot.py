@@ -139,42 +139,84 @@ def plotSec(h5):
     at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
     cax.add_artist(at)
 
-def plotfitchain(h5):
+def MC_diag(h5):
+    fig = figure(figsize=(8,6))
+    gs = GridSpec(8,2)
+
+    axFitResid = fig.add_subplot(gs[0,0])
+    axFitClean = fig.add_subplot(gs[1:4,0])
+    axFitFull   = fig.add_subplot(gs[4:,0],sharex=axFitClean)
+
+    plotfitchain(h5,axFitResid,axFitClean)
+
+    sca(axFitResid)
+    yticksppm()
+    sca(axFitFull)
+    plotPF(h5,0)
+
+    for ax in [axFitResid,axFitClean,axFitFull]:
+        sca(ax)
+        yticksppm()
+    for ax in [axFitResid,axFitClean]:
+        ax.xaxis.set_visible(False)
+    
+
+    axbp = fig.add_subplot(gs[:4,1])
+    sca(axbp)
+    gca().xaxis.set_visible(False)
+    plot_bp_covar(h5)
+    ylim(0,0.1)
+    xlim(0,1)
+    ytickspercen()
+    
+    axbpzoom = fig.add_subplot(gs[4:,1])
+    sca(axbpzoom)
+    plot_bp_covar(h5)
+    ytickspercen()
+    fig.subplots_adjust(hspace=0.0001)
+
+def plotfitchain(h5,ax1,ax2):
     """
     Plot the median 10-min points 
     Plot the best fit
     Show the range of fits
     """
-
     fitgrp = h5['fit']
-    t   = fitgrp['t'][:]
-    f   = fitgrp['f'][:]
-    fit = fitgrp['fit'][:]
+    t      = fitgrp['t'][:]
+    f      = fitgrp['f'][:]
+    fit    = fitgrp['fit'][:]
 
+    sca(ax1)
+    plot(t,f-fit)
+
+    sca(ax2) 
     plot(t,f,'o',ms=3,mew=0)
-    plot(t,f-fit+1e-4)
     plot(t,fit,'r--',lw=3,alpha=0.4)
-    
     # Show the range of fit from MCMC
 
     yL = h5['fit/fits'][:]
     lo,up  = np.percentile(yL,[15,85],axis=0)
     fill_between(t, lo, up, where=up>=lo, facecolor='r',alpha=.5,lw=0)
-    xlabel('t - t0 [days]' )
+
 
 def plot_bp_covar(h5):
     """
     Plot the covariance between impact parameter, b, and radius ratio, p.
     """
     chain = h5['fit/chain'][:]
+    uncert = h5['fit/uncert'][:]
 
-    x = chain[:,2]
-    y = chain[:,0]  * 1e2 # convert to percent
-    pars = h5['fit'].attrs['upL0']
-    plot(abs(x),y,'o',mew=0,alpha=.2,ms=2)
-    plot([pars[1,2]], [pars[1,0] ])
+    plot( abs(chain['b']), chain['p'], 'o', mew=0, alpha=.2, ms=2)
+    
+#    ub = uncert['b']
+#    axvspan(ub[0],ub[1],alpha=.5)
+
+    up = uncert['p']
+    axhspan(up[0],up[2],alpha=.2,ec='none')
+
     xlabel('b')
     ylabel('Rp/Rstar %')
+
 
 def yticksppm():
     """
@@ -186,30 +228,14 @@ def yticksppm():
     yticks(yt/1e6,yt)
     ylabel("flux (ppm)")
 
-def MC_diag(h5):
-    fig = figure(figsize=(8,6))
-    gs = GridSpec(2,2)
-
-    axFitClean  = fig.add_subplot(gs[0,0])
-    sca(axFitClean)
-    plotfitchain(h5)
-    yticksppm()
-    axFitFull   = fig.add_subplot(gs[1,0],sharex=axFitClean)
-    sca(axFitFull)
-    plotPF(h5,0)
-    yticksppm()
-
-    axbp = fig.add_subplot(gs[0,1])
-    sca(axbp) 
-    plot_bp_covar(h5)
-    ylim(0,10)
-    xlim(0,1)
-    
-    axbpzoom = fig.add_subplot(gs[1,1])
-    sca(axbpzoom)
-    plot_bp_covar(h5)
-    tight_layout()
-
+def ytickspercen():
+    """
+    Convienence function to convert fractional flux to ppm.
+    """
+    yt = yticks()[0]
+    yt = (yt*1e2)
+#    yt = np.round(yt,)
+    yticks(yt/1e2,yt)
 
 def plotSingSES(h5):    
     cax = gca()
@@ -828,10 +854,10 @@ class TransitModel(tval.TransitModel):
         legend()
 
     def plottrans(self):
-        plot(self.t,self.y,'.',label='PF LC')
-        self.yfit = self.MA(self.pL,self.t)
-        plot(self.t,self.yfit,lw=2,alpha=2,label='Fit')
+        plot(self.t,self.f,'.',label='PF LC')
+        self.ffit = self.MA(self.pdict,self.t)
+        plot(self.t,self.ffit,lw=2,alpha=2,label='Fit')
     def plotres(self):
-        plot(self.t,self.y-self.yfit,lw=1,alpha=1,label='Residuals')        
+        plot(self.t,self.f-self.ffit,lw=1,alpha=1,label='Residuals')        
 
     

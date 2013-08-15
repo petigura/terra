@@ -8,6 +8,7 @@ from scipy.spatial import cKDTree
 import sqlite3
 import h5plus
 import re
+import copy
 
 import numpy as np
 from numpy import ma
@@ -26,6 +27,7 @@ from matplotlib.cbook import is_string_like,is_numlike
 import keplerio
 import config
 from emcee import EnsembleSampler
+import pandas as pd
 
 def scar(res):
     """
@@ -374,7 +376,7 @@ def at_binPhaseFold(h5,ph,bwmin):
         h5[ name ].attrs[k] = d[k]
 
 
-def at_fit(h5,runmcmc=False,fixb=None):
+def at_fit(h5):
     """
     Attach Fit
 
@@ -412,18 +414,11 @@ def at_fit(h5,runmcmc=False,fixb=None):
     """
 
     attrs = dict(h5.attrs)
-    trans = TM_read_h5(h5,fixb=fixb)
-
-    import kplot
-    trans.__class__ = kplot.TransitModel
+    trans = TM_read_h5(h5)
     trans.register()
-    trans.fit()
-    trans.useprior=True
-    if runmcmc:
-        trans.MCMC()
-
-    fitgrp = h5.create_group('fit')
-    TM_to_h5(trans,fitgrp)
+    trans.pdict = trans.fit()[0]
+    trans.MCMC()
+    TM_to_h5(trans,h5)
 
 def at_med_filt(h5):
     """Add median detrended lc"""
@@ -769,9 +764,9 @@ def s2n_known(d,t,fm):
     # phases and the injected phase.  Phases can be measured going
     # clockwise or counter clockwise, so we must choose the minmum
     # value.  No phases are more distant than 0.5.
-    dP    = np.abs(phase-d['phase']) 
-    dP    = np.vstack([dP,1-dP])
-    dP    = dP.min(axis=0)      
+    dP = np.abs(phase-d['phase']) 
+    dP = np.vstack([dP,1-dP])
+    dP = dP.min(axis=0)      
 
     iphase_close = np.argmin(dP)
     phase_close  = phase[iphase_close]
@@ -841,37 +836,38 @@ class TransitModel:
     
     Simple class for fitting transit    
     """
-    def __init__(self,t,y,err,climb,pL,fixb=None,dt=0):
+    def __init__(self,t,f,ferr,climb,pdict,
+                 fixdict=dict(p=False,tau=False,b=False,dt=True)):
         """
         Constructor for transit model.
 
         Parameters
         ----------
         t     : time array
-        y     : flux array
-        err   : errors
+        f     : flux array
+        ferr  : errors
         climb : size 4 array with non-linear limb-darkening components
-        pL    : Parameter list [ Rp/Rstar, tau, b]. 
-        fixb  : Do not allow impact parameter to float
+        pL    : Parameter list dictionary [ Rp/Rstar, tau, b, dt]. 
+        fix   : Same keys as above, determines which parameters to fix
         """
-        self.t     = t
-        self.y     = y
-        self.err   = err
+        # Protect input arrays 
+        self.t     = t.copy()
+        self.f     = f.copy()
+        self.ferr  = ferr.copy()
         self.climb = climb
-        self.pL    = pL
-        self.dt    = dt
-        self.fixb  = fixb
-        self.usebprior = False
+        self.pdict   = pdict
+        self.fixdict = fixdict
 
         # Strip nans from t, y, and err
-        b = np.vstack( map(np.isnan, [t,y,err]) ) 
+        b = np.vstack( map(np.isnan, [t,f,ferr]) ) 
         b = b.astype(int).sum(axis=0) == 0 
-        b = b & (err > 0.)
-        self.tm   = t[b]
-        self.ym   = y[b]
-        self.errm = err[b]
+        b = b & (ferr > 0.)
+
         if b.sum() < b.size:
-            print "removing %i measurements " % b.size - b.sum()
+            print "removing %i measurements " % (b.size - b.sum())
+            self.t    = t[b]
+            self.f    = f[b]
+            self.ferr = ferr[b]
 
     def register(self):
         """
@@ -883,23 +879,26 @@ class TransitModel:
         we find the best fitting MA model. We adopt the displacement
         with the minimum overall Chi2.
         """
+        # For the starting value to the optimization, use the current
+        # parameter vector.
+        pdict0 = copy.copy(self.pdict)
+        tau0   = pdict0['tau']
 
-        tau0  = self.pL[1]
-        dt_per_lc = 3      # Number trial t0 per grid point
-
+        dt_per_lc = 3   # Number trial t0 per grid point
         dtarr = np.linspace(-2*tau0,2*tau0,4*tau0/keptoy.lc*dt_per_lc)
+
         def f(dt):
-            self.dt = dt
-            res = optimize.fmin(self.chi2,self.pL,disp=False,full_output=True) 
-            return res[1]
+            self.pdict['dt'] = dt
+            pdict,X2 = self.fit()
+            return X2
 
         X2L = np.array( map(f,dtarr) )
         if (~np.isfinite(X2L)).sum() != 0:
             print "problem with registration: setting dt to 0.0"
-            self.dt = 0.
+            self.pdict['dt'] = 0.
         else:
-            self.dt = dtarr[np.argmin(X2L)]
-            print "registration: setting dt to",self.dt
+            self.pdict['dt'] = dtarr[np.argmin(X2L)]
+            print "registration: setting dt to %(dt).2f" % self.pdict
 
     def fit(self):
         """
@@ -909,20 +908,11 @@ class TransitModel:
         best-fitting MA light curve. If we are holding impact
         parameter fixed.
         """
-
-        if self.fixb != None:
-            pL = self.pL[:2]
-        else:
-            pL = self.pL
-
-        pL1 = optimize.fmin(self.chi2,pL,disp=False)
-
-        if self.fixb != None:
-            pL1 = np.hstack( [ pL1[:2], self.fixb ] ) 
-
-        # Update best parameters and
-        self.pL   = pL1 # Updating best guess parameters
-        self.X2_0 = self.chi2(self.pL) 
+        pL   = self.pdict2pL(self.pdict)
+        res  = optimize.fmin(self.chi2,pL,disp=False,full_output=True)
+        pdict = self.pL2pdict(res[0])
+        X2    = res[1]
+        return pdict,X2
 
     def MCMC(self):
         """
@@ -950,38 +940,53 @@ running MCMC
 %6i step run
 """ % (nwalkers,nburn,niter)
 
-        p0      = np.vstack([self.pL]*nwalkers)
-        p0[:,0] += 1e-4*rand.randn(nwalkers)
-        p0[:,1] += 1e-2*self.pL[1]*rand.random(nwalkers)
-        p0[:,2] = 0.8*rand.random(nwalkers) + .1
-        
-        import pdb;pdb.set_trace()
+        # Initialize walkers
+        pL  = self.pdict2pL(self.pdict)
+        fltpars = [ k for k in self.pdict.keys() if not self.fixdict[k] ]
+        allpars = self.pdict.keys()
+        p0  = np.vstack([pL]*nwalkers) 
+        for i,name in zip(range(ndims),fltpars):
+            if name=='p':
+                p0[:,i] += 1e-4*rand.randn(nwalkers)
+            elif name=='tau':
+                p0[:,i] += 1e-2*pL[i]*rand.random(nwalkers)
+            elif name=='b':
+                p0[:,i] = 0.8*rand.random(nwalkers) + .1
+
+        # Burn in 
         sampler = EnsembleSampler(nwalkers,ndims,self)
         pos, prob, state = sampler.run_mcmc(p0, nburn)
 
         # Real run
         sampler.reset()
         foo   = sampler.run_mcmc(pos, niter, rstate0=state)
-        
-        uncert = np.percentile(sampler.flatchain,[15,50,85],axis=0)
-        self.upL0  = uncert
-        self.chain = sampler.flatchain 
+
+        chain  = pd.DataFrame(sampler.flatchain,columns=fltpars)
+        uncert = pd.DataFrame(index=['15,50,85'.split(',')],columns=allpars)
+        for k in self.pdict.keys():
+            if self.fixdict[k]:
+                chain[k]  = self.pdict[k]
+                uncert[k] = self.pdict[k]
+            else:
+                uncert[k] = np.percentile( chain[k], [15,50,85] )
+
+        self.chain  = chain.to_records(index=False)
+        self.uncert = uncert.to_records(index=False)
 
         nsamp = 200
         ntrial = sampler.flatchain.shape[0]
         id = np.random.random_integers(0,ntrial-1,nsamp)
-        yL = [ self.MA(sampler.flatchain[i],self.t) for i in id ] 
-        self.fits = np.vstack(yL) 
-            
+
+        f = lambda i : self.MA( self.pL2pdict(sampler.flatchain[i]),self.t)
+        self.fits = np.vstack( map(f,id) )         
+
     def __call__(self,pL):
         """
         Used for emcee MCMC routine
+        
+        pL : list of parameters used in the current MCMC trial
         """
         loglike = -self.chi2(pL)
-        if self.useprior:
-            loglike -= self.prior(pL)
-
-        print "%.2f %.2f %.2f" % (pL[1],pL[2],loglike)
         return loglike
 
     def prior(self,pL):
@@ -1007,29 +1012,62 @@ running MCMC
         return penalty
 
     def chi2(self,pL):
-        y_model = self.MA(pL,self.tm)
-        resid   = (self.ym - y_model)/self.errm
+        pdict   = self.pL2pdict(pL)
+        f_model = self.MA(pdict,self.t)
+        resid   = (self.f - f_model)/self.ferr
         X2 = (resid**2).sum()
+        if (pdict['tau'] < 0) or (pdict['tau'] > 2 ) :
+            X2=np.inf
+        if abs(pdict['b'])>1:
+            X2=np.inf
+        if abs(pdict['p'])<0.:
+            X2=np.inf
+
         return X2
+
+    def pL2pdict(self,pL):
+        """
+        Covert a list of floating parameters to the standard parameter
+        dictionary.
+        """
+        pdict = {}
+        i = 0 
+        for k in self.pdict.keys():
+            if self.fixdict[k]:
+                pdict[k]=self.pdict[k]
+            else:
+                pdict[k]=pL[i]
+                i+=1
+
+        return pdict
+
+    def pdict2pL(self,pdict):
+        """
+        Create a list of the floating parameters
+        """
+        pL = []
+        for k in self.pdict.keys():
+            if self.fixdict[k] is False:
+                pL += [ pdict[k] ]
+
+        return pL
     
-    def MA(self,pL,t):
+    def MA(self,pdict,t):
         """
         Mandel Agol Model.
+
+        Four free parameters taken from current pdict
+
 
         pL can either have
            3 parameters : p,tau,b
            2 parameters : p,tau (b is taken from self.fixb)
         """
-        if self.fixb != None:
-            pL = np.hstack( [pL, self.fixb] )
-            
-        res = keptoy.MA(pL, self.climb, t-self.dt, usamp=5)
-        if pL[2] > 1:
-            res += 1
-
+        pMA3 = [ pdict[k] for k in 'p,tau,b'.split(',') ] 
+        res = keptoy.MA(pMA3, self.climb, t - pdict['dt'], usamp=5)
         return res
 
-def TM_read_h5(h5,fixb=None):
+def TM_read_h5(h5):
     """
     Read in the information from h5 dataset and return TransitModel
     Instance.
@@ -1037,45 +1075,40 @@ def TM_read_h5(h5,fixb=None):
     attrs = dict(h5.attrs)
 
     if attrs['P'] < 50:
-        bPF = h5['blc10PF0'][:]
-        t   = bPF['tb']
-        y   = bPF['med']
-        err = bPF['std'] / np.sqrt( bPF['count'] )
-        b1  = bPF['count'] == 1 # for 1 value std ==0 which is bad
-        err[b1] = ma.median(ma.masked_invalid(bPF['std']))
+        bPF  = h5['blc10PF0'][:]
+        t    = bPF['tb']
+        f    = bPF['med']
+        ferr = bPF['std'] / np.sqrt( bPF['count'] )
+        b1   = bPF['count']==1 # for 1 value std ==0 which is bad
+        ferr[b1] = ma.median(ma.masked_invalid(bPF['std']))
     else:
-        lc = h5['lcPF0'][:]
-        t  = lc['tPF']
-        y  = lc['f']
-        err = np.ones(lc.size)
+        lc   = h5['lcPF0'][:]
+        t    = lc['tPF']
+        f    = lc['f']
+        ferr = np.std( (f[1:]-f[:-1])*np.sqrt(2))
+        ferr = np.ones(lc.size)*ferr
     try:
         p0 = np.sqrt(1e-6*attrs['df'])
     except:
         p0 = np.sqrt(attrs['mean'])
 
     # Initial guess for MA parameters.
-    pL0 = [ p0, attrs['tdur']/2. ,.3  ]
-
+    pdict=dict(p=p0,tau= attrs['tdur']/2.,b=.3,dt=0.) 
     # Find global best fit value
-    trans = TransitModel(t,y,err,attrs['climb'],pL0,fixb=fixb,dt=0)
+    trans = TransitModel(t,f,ferr,attrs['climb'],pdict)
     return trans
 
-def TM_to_h5(trans,fitgrp):
+def TM_to_h5(trans,h5):
     """
     Save results from the fit into an h5 group.
     """
-    fitgrp['fit'] = trans.MA(trans.pL,trans.t)
-    fitgrp['f']   = trans.y
-    
+    fitgrp = h5.create_group('fit')
+    fitgrp['fit'] = trans.MA(trans.pdict,trans.t)
 
-    fitgrp.attrs['pL0']  = trans.pL
-    fitgrp.attrs['dt_0'] = trans.dt
-    atL = 'upL0,X2_0'.split(',')
-    for at in atL:
-        if hasattr(trans,at):
-            fitgrp.attrs[at] = getattr(trans,at)
+    fitgrp.create_group('pdict')
+    h5.dict2group('fit/pdict',trans.pdict)
 
-    dsL = 't,f,chain,fits'.split(',')
+    dsL = 't,f,ferr,uncert,chain,fits'.split(',')
     for ds in dsL:
         if hasattr(trans,ds):
             fitgrp[ds]  = getattr(trans,ds)

@@ -8,8 +8,6 @@ from h5py import File as h5F
 
 import numpy as np
 import glob
-
-
 import prepro
 import tfind
 import tval
@@ -25,6 +23,15 @@ deltaPcad = 10
 #######################
 # Top Level Functions #
 #######################
+
+def h5F(par):
+    """
+    If the update kw is set, open h5 file as a h5plus object.
+    """
+    if par['update']:
+        return h5plus.File(par['outfile'])
+    else:
+        return h5py.File(par['outfile'])
 
 def pp(par):
     """
@@ -73,7 +80,7 @@ def pp(par):
     terra.pp(dict(nt.ix[0]))
     """
 
-    print "creating %(outfile)s" %par
+    print "creating %(outfile)s" % par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
     with h5F(par['outfile']) as h5:
@@ -198,20 +205,7 @@ def dv(par):
     """
     print "Running dv on %s" % par['outfile'].split('/')[-1]
 
-    with h5F(par['outfile']) as h5:
-        if par.has_key('mode'):
-            if par['mode']=='c':
-                l = 'SES,blc10PF0,blc30PF0,bx1,bx5,by1,by5,corr,fit,fmed,'+\
-                    'lag,lcPF0,lcPF180,tPF,tRegLbl'
-                l = l.split(',')
-
-                import sys
-                for i in l:
-                    try:
-                        del h5[i]
-                    except:
-                        print sys.exc_info()[1]
-
+    with h5F(par) as h5:
 
         if dict(h5.attrs).has_key('climb') == False:
             climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
@@ -243,7 +237,7 @@ def dv(par):
             tval.at_binPhaseFold(h5,0,10)
             tval.at_binPhaseFold(h5,0,30)
 
-            tval.at_fit(h5,runmcmc=True)
+            tval.at_fit(h5)
             tval.at_med_filt(h5)
             tval.at_s2ncut(h5)
             tval.at_rSNR(h5)
@@ -258,6 +252,7 @@ def plot_switch(h5,par):
             if par[k]:
                 from matplotlib import pylab as plt
                 import kplot
+                s = "kplot.%s(h5)" % k
                 exec(s)
                 figpath = par['outfile'].replace('.h5','.%s.png' % ext[k])
                 plt.gcf().savefig(figpath)

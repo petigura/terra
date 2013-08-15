@@ -7,12 +7,13 @@ matplotlib.use('Agg')
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('args',nargs='+',type=str,help='file[s] function keywords')
 parser.add_argument('--multi',type=int,default=1,help='')
+parser.add_argument('--update',action='store_true',help='Set to use h5plus objects')
 args  = parser.parse_args()
 
 index = args.args[-1]
 files = args.args[:-1]
 multi = args.multi
-
+    
 dL = []
 for f in files:
     df = pandas.read_csv(f,index_col=0)
@@ -21,7 +22,8 @@ for f in files:
         d = dict(df.ix[index])
     else:
         d = dict(df.ix[ int(index) ])
-        
+
+    d['update'] = args.update
     dL.append(d)
 
 def last2(s):
@@ -37,7 +39,6 @@ if multi > 1:
         outfile = outfile0
 
     newoutfile = outfile0.replace('grid','grid%i'  % multi)
-
 
     print "copying %s to %s" %  tuple( map(last2,[outfile,newoutfile]) )
     terra.multiCopyCut( outfile , newoutfile )
