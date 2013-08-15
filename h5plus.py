@@ -35,6 +35,22 @@ class File(h5py.File):
          group = h5py.File.create_group(self,name)
       return group
 
+   def group2dict(self,name):
+      """
+      Retrive scalar datasets in a group.
+      """
+      d = {}
+      for n in self[name].keys():
+         d[n] = self[name][n][()]
+      return d
+
+   def dict2group(self,name,d):
+      """
+      Take all the values in a dictionary and shove them into a group
+      """
+      for n in d.keys():
+         self[name][n] = d[n]
+
 def add_attrs(h5,d):
    """
    Add elements of a dictionary as attributes to h5 file.
@@ -102,8 +118,6 @@ def atpy2h5(files,out,diff='all',name='ds'):
    h5.create_dataset('KIC',data=kicL)
    print "%i files failed" % nFail
    h5.close()
-
-
 
 def diffDS(name,dtype,shape,h5,diff='all'):
    """
