@@ -375,7 +375,6 @@ def at_binPhaseFold(h5,ph,bwmin):
     for k in d.keys():
         h5[ name ].attrs[k] = d[k]
 
-
 def at_fit(h5):
     """
     Attach Fit
@@ -851,10 +850,10 @@ class TransitModel:
         fix   : Same keys as above, determines which parameters to fix
         """
         # Protect input arrays 
-        self.t     = t.copy()
-        self.f     = f.copy()
-        self.ferr  = ferr.copy()
-        self.climb = climb
+        self.t       = t.copy()
+        self.f       = f.copy()
+        self.ferr    = ferr.copy()
+        self.climb   = climb
         self.pdict   = pdict
         self.fixdict = fixdict
 
@@ -989,27 +988,6 @@ running MCMC
         loglike = -self.chi2(pL)
         return loglike
 
-    def prior(self,pL):
-        """
-        Impact Parameter Prior
-
-        MCMC routine will sometimes sample values of the impact
-        parameter that are much larger than unity. Once this happens,
-        chi2 is constant so b can wander away from [0,1] indefinately.
-
-        """
-        b = abs(pL[2])
-        tau = pL[1]
-
-        penalty = 0.
-
-        if b > 1:
-            penalty += b * 100 * self.X2_0
-
-        penalty += ((pL[1] - self.pL[1])/0.01)**2
-        penalty += ((pL[0] - self.pL[0])/0.04)**2
-
-        return penalty
 
     def chi2(self,pL):
         pdict   = self.pL2pdict(pL)
@@ -1018,11 +996,10 @@ running MCMC
         X2 = (resid**2).sum()
         if (pdict['tau'] < 0) or (pdict['tau'] > 2 ) :
             X2=np.inf
-        if abs(pdict['b'])>1:
+        if (pdict['b'] > 1) or (pdict['b'] < 0):
             X2=np.inf
         if abs(pdict['p'])<0.:
             X2=np.inf
-
         return X2
 
     def pL2pdict(self,pL):
@@ -1112,3 +1089,18 @@ def TM_to_h5(trans,h5):
     for ds in dsL:
         if hasattr(trans,ds):
             fitgrp[ds]  = getattr(trans,ds)
+
+def scrapeTrans(h5):
+    """
+    Pull all the transit fit parameters and return dictionary
+    """
+    d = {}
+
+    topkeys = 'P,t0,climb'.split(',')
+    for k in topkeys:
+        d[k] = h5.attrs[k]
+        
+    
+    return d
+
+
