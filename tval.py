@@ -1090,17 +1090,50 @@ def TM_to_h5(trans,h5):
         if hasattr(trans,ds):
             fitgrp[ds]  = getattr(trans,ds)
 
-def scrapeTrans(h5):
+def TM_getMCMCdict(h5):
     """
-    Pull all the transit fit parameters and return dictionary
+    Returns a dictionary with the best fit MCMC parameters.
     """
-    d = {}
-
-    topkeys = 'P,t0,climb'.split(',')
-    for k in topkeys:
-        d[k] = h5.attrs[k]
-        
+    keys = 'p,tau,b'.split(',')
+    ucrt = pd.DataFrame(h5['fit/uncert'][:],index=['15','50','85'])[keys].T
+    ucrt['med'] = ucrt['50']
+    ucrt['sig'] = (ucrt['85']-ucrt['15'])/2
     
+    if ucrt.ix['b','85']-ucrt.ix['b','50'] > ucrt.ix['b','15']:
+        ucrt.ix['b','sig'] =None
+        ucrt.ix['b','med'] =ucrt.ix['b','85']
+
+    d = {}
+    for k in keys:
+        d[k]     = ucrt.ix[k,'med']
+        d['u'+k] = ucrt.ix[k,'sig']
     return d
 
+def TM_unitsMCMCdict(d0):
+    """
+    tau e[day] -> tau[hrs]
+    p [frac] -> p [percent]
+    """
+    d = copy.copy(d0)
+    
+    d['p']    *= 100.
+    d['up']   *= 100.
+    d['tau']  *= 24.
+    d['utau'] *= 24.
+    return d 
 
+def TM_stringMCMCdict(d0):
+    """
+    Convert MCMC parameter output to string
+    """
+    d = copy.copy(d0) 
+    keys = 'p,tau,b'.split(',')    
+    for k in keys:
+        for k1 in [k,'u'+k]:
+            d[k1] = "%.2f" % d0[k1]
+
+    if np.isnan(d0['ub']):
+        d['b']  = "<%(b)s" % d
+        d['ub'] = ""
+
+    return d
