@@ -349,7 +349,7 @@ def handelKeyError(func):
     return handelProblems
 
 def wrapHelp(h5,x,ym,d):
-    df = h5['fit'].attrs['pL0'][0]**2
+    df = h5['fit/pdict/p'][()]**2
     d['step'] = 3*df*1e6
     d['P']    = h5.attrs['P']
     d['t0']   = h5.attrs['t0']

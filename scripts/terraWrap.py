@@ -7,6 +7,10 @@ matplotlib.use('Agg')
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('args',nargs='+',type=str,help='file[s] function keywords')
 parser.add_argument('--multi',type=int,default=1,help='')
+parser.add_argument('--P'   ,type=float,default=-1,help='Period to cut')
+parser.add_argument('--t0'  ,type=float,default=-1,help='epoch to cut')
+parser.add_argument('--tdur',type=float,default=-1,help='duration to cut')
+
 parser.add_argument('--update',action='store_true',help='Set to use h5plus objects')
 args  = parser.parse_args()
 
@@ -41,7 +45,9 @@ if multi > 1:
     newoutfile = outfile0.replace('grid','grid%i'  % multi)
 
     print "copying %s to %s" %  tuple( map(last2,[outfile,newoutfile]) )
-    terra.multiCopyCut( outfile , newoutfile )
+    if args.P > 0:
+        pdict = dict(P=args.P,t0=args.t0,tdur=args.tdur)
+    terra.multiCopyCut( outfile , newoutfile,pdict=pdict)
     for d in dL:
         d['outfile'] = newoutfile
 
