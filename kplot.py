@@ -174,11 +174,9 @@ def MC_diag(h5):
     plot_bp_covar(h5)
     ytickspercen()
 
-    d  = tval.TM_getMCMC(h5)
+    d  = tval.TM_getMCMCdict(h5)
     d  = tval.TM_unitsMCMCdict(d)
     sd = tval.TM_stringMCMCdict(d)
-    for k in 'skic,P,t0'.split(','):   
-        sd[k] = h5.attrs[k]
 
     s = """\
 kic %(skic)09d
@@ -369,7 +367,11 @@ def handelKeyError(func):
     return handelProblems
 
 def wrapHelp(h5,x,ym,d):
-    df = h5['fit/pdict/p'][()]**2
+    try: 
+        df = h5['fit/pdict/p'][()]**2
+    except:
+        df = h5.attrs['mean']
+
     d['step'] = 3*df*1e6
     d['P']    = h5.attrs['P']
     d['t0']   = h5.attrs['t0']
