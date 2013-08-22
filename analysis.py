@@ -399,6 +399,13 @@ def read_stellar(cat,sub=None):
     stellar = stellar[cols]
     stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
 
+    cat     = '%s/kic_stellar.db' % stellardir
+    con     = sqlite3.Connection(cat)
+    query   = 'SELECT kic,kic_kepmag FROM kic'
+    mags    = sql.read_frame(query,con)
+    mags    = mags.convert_objects(convert_numeric=True)
+    stellar = pd.merge(stellar,mags)
+
     if sub is not None:
         sub = pd.DataFrame(sub,columns=['kic'])
         stellar = pd.merge(sub,stellar) 
@@ -524,25 +531,7 @@ def pmap(f,panel):
             df.ix[imi,ima] = f(panel.major_xs(ima).ix[imi])
     return df
 
-def texp(vmag,expmeter,iod=False):
-    """
-    Exposure Time
 
-    Estimate exposure time based on scaling.
-
-    expmeter : 250 = 250k
-               10  = 10k (CKS)
-    iod      : iodine cell in or out. If out, throughput is higher by 30%
-    """
-    
-    t1 = 110.
-    v1 = 8.
-    
-    tbase = t1*10.**(0.4*(vmag-v1))
-    tbase *= expmeter / 250.
-    if iod==False:
-        tbase *= 0.7
-    return tbase
 import copy
 
 class TERRA():
@@ -796,6 +785,49 @@ class TPS(TERRA):
         xlim(5,500)
         ylim(0.5,16)
 
+    def getHiresSum(self,obsm):
+        """
+        Get summary of HIRES observations
+        
+        Observation summary structure. 
+        obsm = kbcUtils.loadKepObsm()
+        """
+        ekoi = self.geteKOI()
+        ekoi = pd.merge(ekoi,self.stellar[['kic','kic_kepmag']])
+        ekoi = pd.merge(ekoi,obsm,left_on='kic',right_index=True,how='left')
+        ekoi = ekoi.fillna({'ntemp':0,'niod':0})
+        return ekoi
+
+    def plotHiresSum(self,obsm):
+        """
+        Produce a plot showing graphically which stars have HIRES observations:
+        """
+        ekoi = self.getHiresSum(obsm)
+        kw = dict(ms=3,mew=1)
+
+        # Plot the Candidates
+        cut = ekoi[~ekoi.notplanet]
+        plot(cut.P,cut.Rp,'s',mfc='none',mec='Tomato',**kw)
+        cut = cut[cut.ntemp > 0]
+        plot(cut.P,cut.Rp,'s',mfc='Tomato',mec='Tomato',**kw)
+
+        # Plot the FPs
+        cut = ekoi[ekoi.notplanet]
+        plot(cut.P,cut.Rp,'s',mfc='none',mec='RoyalBlue',**kw)
+        cut = cut[cut.ntemp > 0]
+        plot(cut.P,cut.Rp,'s',mfc='RoyalBlue',mec='RoyalBlue',**kw)
+
+        def tt(x):
+            s = "%(kic)i\n%(kic_kepmag).1f (%(ntemp)i,%(niod)i)" % x
+            text(x['P'],x['Rp'],s,size=3)
+
+        xlabel('Period [days]')
+        ylabel('Rp [Earth-radii]')
+
+        xl  = xlim()
+        ekoi[ekoi.P.between(*xl)].apply(tt ,axis=1)
+
+
 class Occur():
     def __init__(self,tps,mc):
         self.tps = tps
@@ -911,15 +943,16 @@ def read_res(file,**kwargs):
     res = res.rename(columns={'skic':'kic'})
     return res
 
-def read_pngtree(path):
+def read_pngtree(path,centroid=False):
     df = pd.read_table(path,names=['path'])
     df['dir1'] = df.path.apply(lambda x :x.split('/')[1])
-    df['kic']  = df.path.apply(lambda x :int(x.split('/')[-1][:-7]))
-    df.index=df.kic
+    
+    if not centroid:
+        df['kic']  = df.path.apply(lambda x :int(x.split('/')[-1][:-7]))
+    else:
+        df['kic']  = df.path.apply(lambda x :int(x.split('/')[-1][4:13]))
 
-    tce  = df[df.dir1=='TCE']
-    tce['TCE'] = True
-    tce = tce[['TCE']]
+    df.index=df.kic
 
     eKOI = df[df.dir1=='eKOI']
     eKOI['eKOI'] = True
@@ -929,19 +962,32 @@ def read_pngtree(path):
     notplanet['notplanet'] = True
     notplanet['notplanetdes']  = notplanet.path.apply(lambda x: x.split('/')[2][2:])
     notplanet = notplanet[['notplanet','notplanetdes']]
-    tce = pd.concat([tce,eKOI,notplanet],axis=1)
-    tce = tce.fillna(False)
+    
+    if not centroid:
+        tce  = df[df.dir1=='TCE']
+        tce['TCE'] = True
+        tce = tce[['TCE']]
 
-    tce['eKOI']      = tce.eKOI.astype(bool)
-    tce['notplanet'] = tce.notplanet.astype(bool)
+        tce = pd.concat([tce,eKOI,notplanet],axis=1)
+        tce = tce.fillna(False)
 
-    print """\
+        tce['eKOI']      = tce.eKOI.astype(bool)
+        tce['notplanet'] = tce.notplanet.astype(bool)
+
+        print """\
 %6i stars designated TCE   
 %6i stars designated eKOI  
 %6i stars look like EBs    
 """ %  (len(tce) , len(tce[tce.eKOI]) , len( tce[tce.eKOI & tce.notplanet] ))
 
-    return tce
+        return tce
+    else:
+        ekoi = pd.concat([eKOI,notplanet],axis=1)
+        ekoi = ekoi.fillna(False)
+
+        ekoi['eKOI']      = ekoi.eKOI.astype(bool)
+        ekoi['notplanet'] = ekoi.notplanet.astype(bool)
+        return ekoi
 
 def read_triage(path):
     """
@@ -1000,4 +1046,22 @@ from         %s
 
     df[basename] = True
     return df
+  
+from astropy.io import fits
+    
+def read_SMEatVandy(path):
+    """
+    Read SME-at-Vandy fits tables
+    """
+    
+    tab = fits.open(path)[1].data
+    names = tab.dtype.names
+
+    d = {}
+    for n in names:
+        d[n] = tab[n][0]
+    
+    return pd.DataFrame(d)
         
+    
+    

@@ -375,7 +375,6 @@ def at_binPhaseFold(h5,ph,bwmin):
     for k in d.keys():
         h5[ name ].attrs[k] = d[k]
 
-
 def at_fit(h5):
     """
     Attach Fit
@@ -851,10 +850,10 @@ class TransitModel:
         fix   : Same keys as above, determines which parameters to fix
         """
         # Protect input arrays 
-        self.t     = t.copy()
-        self.f     = f.copy()
-        self.ferr  = ferr.copy()
-        self.climb = climb
+        self.t       = t.copy()
+        self.f       = f.copy()
+        self.ferr    = ferr.copy()
+        self.climb   = climb
         self.pdict   = pdict
         self.fixdict = fixdict
 
@@ -989,27 +988,6 @@ running MCMC
         loglike = -self.chi2(pL)
         return loglike
 
-    def prior(self,pL):
-        """
-        Impact Parameter Prior
-
-        MCMC routine will sometimes sample values of the impact
-        parameter that are much larger than unity. Once this happens,
-        chi2 is constant so b can wander away from [0,1] indefinately.
-
-        """
-        b = abs(pL[2])
-        tau = pL[1]
-
-        penalty = 0.
-
-        if b > 1:
-            penalty += b * 100 * self.X2_0
-
-        penalty += ((pL[1] - self.pL[1])/0.01)**2
-        penalty += ((pL[0] - self.pL[0])/0.04)**2
-
-        return penalty
 
     def chi2(self,pL):
         pdict   = self.pL2pdict(pL)
@@ -1018,11 +996,10 @@ running MCMC
         X2 = (resid**2).sum()
         if (pdict['tau'] < 0) or (pdict['tau'] > 2 ) :
             X2=np.inf
-        if abs(pdict['b'])>1:
+        if (pdict['b'] > 1) or (pdict['b'] < 0):
             X2=np.inf
         if abs(pdict['p'])<0.:
             X2=np.inf
-
         return X2
 
     def pL2pdict(self,pL):
@@ -1112,3 +1089,51 @@ def TM_to_h5(trans,h5):
     for ds in dsL:
         if hasattr(trans,ds):
             fitgrp[ds]  = getattr(trans,ds)
+
+def TM_getMCMCdict(h5):
+    """
+    Returns a dictionary with the best fit MCMC parameters.
+    """
+    keys = 'p,tau,b'.split(',')
+    ucrt = pd.DataFrame(h5['fit/uncert'][:],index=['15','50','85'])[keys].T
+    ucrt['med'] = ucrt['50']
+    ucrt['sig'] = (ucrt['85']-ucrt['15'])/2
+    
+    if ucrt.ix['b','85']-ucrt.ix['b','50'] > ucrt.ix['b','15']:
+        ucrt.ix['b','sig'] =None
+        ucrt.ix['b','med'] =ucrt.ix['b','85']
+
+    d = {}
+    for k in keys:
+        d[k]     = ucrt.ix[k,'med']
+        d['u'+k] = ucrt.ix[k,'sig']
+    return d
+
+def TM_unitsMCMCdict(d0):
+    """
+    tau e[day] -> tau[hrs]
+    p [frac] -> p [percent]
+    """
+    d = copy.copy(d0)
+    
+    d['p']    *= 100.
+    d['up']   *= 100.
+    d['tau']  *= 24.
+    d['utau'] *= 24.
+    return d 
+
+def TM_stringMCMCdict(d0):
+    """
+    Convert MCMC parameter output to string
+    """
+    d = copy.copy(d0) 
+    keys = 'p,tau,b'.split(',')    
+    for k in keys:
+        for k1 in [k,'u'+k]:
+            d[k1] = "%.2f" % d0[k1]
+
+    if np.isnan(d0['ub']):
+        d['b']  = "<%(b)s" % d
+        d['ub'] = ""
+
+    return d

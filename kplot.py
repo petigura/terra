@@ -140,12 +140,12 @@ def plotSec(h5):
     cax.add_artist(at)
 
 def MC_diag(h5):
-    fig = figure(figsize=(8,6))
-    gs = GridSpec(8,2)
+    fig = figure(figsize=(10,6))
+    gs = GridSpec(8,5)
 
-    axFitResid = fig.add_subplot(gs[0,0])
-    axFitClean = fig.add_subplot(gs[1:4,0])
-    axFitFull   = fig.add_subplot(gs[4:,0],sharex=axFitClean)
+    axFitResid = fig.add_subplot(gs[0,0:2])
+    axFitClean = fig.add_subplot(gs[1:4,0:2])
+    axFitFull   = fig.add_subplot(gs[4:,0:2],sharex=axFitClean)
 
     plotfitchain(h5,axFitResid,axFitClean)
 
@@ -161,7 +161,7 @@ def MC_diag(h5):
         ax.xaxis.set_visible(False)
     
 
-    axbp = fig.add_subplot(gs[:4,1])
+    axbp = fig.add_subplot(gs[:4,2:4])
     sca(axbp)
     gca().xaxis.set_visible(False)
     plot_bp_covar(h5)
@@ -169,10 +169,30 @@ def MC_diag(h5):
     xlim(0,1)
     ytickspercen()
     
-    axbpzoom = fig.add_subplot(gs[4:,1])
+    axbpzoom = fig.add_subplot(gs[4:,2:4])
     sca(axbpzoom)
     plot_bp_covar(h5)
     ytickspercen()
+
+    d  = tval.TM_getMCMC(h5)
+    d  = tval.TM_unitsMCMCdict(d)
+    sd = tval.TM_stringMCMCdict(d)
+    for k in 'skic,P,t0'.split(','):   
+        sd[k] = h5.attrs[k]
+
+    s = """\
+kic %(skic)09d
+P   %(P).3f
+t0  %(t0).2f
+
+p   %(p)s +/- %(up)s %%
+tau %(tau)s +/- %(utau)s hrs
+b   %(b)s +/- %(ub)s
+""" % sd
+
+
+    text(1.1,0,s,transform=axbpzoom.transAxes,family='monospace',size='large')
+    tight_layout()
     fig.subplots_adjust(hspace=0.0001)
 
 def plotfitchain(h5,ax1,ax2):
