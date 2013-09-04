@@ -2,27 +2,14 @@ import pandas as pd
 import numpy as np
 from numpy import histogram2d as h2d
 import scipy.stats
-import sqlite3
-from pandas.io import sql
 import glob
 import os
 from matplotlib.pylab import *
 
+from cStringIO import StringIO
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
-
-def pngs2txt(path):
-    """
-    List all the .png files in a directory and create a flat ascii of
-    all the basenames.
-    """
-    fL = glob.glob('%s/*.png' %path)
-    print "reading pngs from %s" %path
-    df = pd.DataFrame(fL,columns=['file'])
-    df['skic'] = df.file.apply(lambda x : x.split('/')[-1].split('.')[0])
-    outfile = '%s.txt' % path
-    print "writing skic to %s" % outfile
-    df.skic.to_csv(outfile,index=False)
-
+from astropy.io import fits
+import copy
 
 def upoisson(Np):
     """
@@ -41,13 +28,6 @@ def upoisson(Np):
     hi = (hi-Np) / Np
     return lo,hi
 
-def getbins(panel):
-    lua = lambda x : list(np.unique(np.array(x)))
-    Rpb = lua(panel.Rp1) + [ lua(panel.Rp2)[-1] ]
-    Pb  = lua(panel.P1)  + [ lua(panel.P2)[-1]  ]
-    bins = Pb,Rpb
-    return bins
-
 comp_ness_flds = 'inj_P,inj_Rp,comp'.split(',')
 def completeness(panel,df_mc):
     """
@@ -63,11 +43,11 @@ def completeness(panel,df_mc):
     for k in comp_ness_flds:
         assert list(df_mc.columns).count(k) == 1,'Missing %s' % k
 
-    bins = getbins(panel)
+    bins = getpanelbins(panel)
     
     df_comp       = df_mc[ df_mc['comp'] ]
     nPass , xe,ye = h2d(df_comp.inj_P , df_comp.inj_Rp , bins=bins)
-    nTot ,  xe,ye = h2d(df_mc.inj_P   , df_mc.inj_Rp   , bins=bins)
+    nTot ,  xe,ye = h2d(df_mc.inj_P   , df_mc.inj_Rp   , bins=bins)         
 
     panel['nPass'] = nPass
     panel['nTot']  = nTot
@@ -165,60 +145,49 @@ def zerosPanel(Pb, Rpb, items='Rp1,Rp2,Rpc,P1,P2'.split(',') ):
     panel.minor_axis.name='Rp'
     return panel
 
-def margP(panel):
+def addpcols(df0,lables):
     """
-    Marginalize over period
+    Given a list of columns, add in a percentage column
+    fcell -> pfcell
     """
-    print "summing up occurrence from P = 5-50 days"
-    dfRp = pd.DataFrame(index=panel.minor_axis,columns=panel.items)
-
-    # Add the following columns over bins in P
-    for k in 'fcell,fcellRaw,fcellAdd,Np'.split(','):
-        dfRp[k] = panel[k].sum()
-
-
-    # Add the fractional errors on ufcell in quadrature
-    dfRp['ufcell1'] = np.sqrt(((panel['fuNp1']*panel['fcell'])**2).sum()) 
-    dfRp['ufcell2'] = np.sqrt(((panel['fuNp2']*panel['fcell'])**2).sum()) 
-
-    # The following are constant across P
-    for k in 'Rp1,Rp2,Rpc'.split(','):
-        dfRp[k] = panel[k].mean()
-
-    return dfRp
-
-import copy
+    df = df0.copy()
+    for l in lables:
+        pl = 'p%s' % l 
+        df[pl] = 100 * df[l]
+    return df
 
 def marg(panel,maxis):
     """
     Marginalize over a given axis
     """
+
     axes = panel.axes
     if maxis=='P':
         maxis=1
-        kaxis=2
         firstcols = 'Rp1,Rp2,Rpc'.split(',')
     elif maxis=='Rp':
         maxis=2
-        kaxis=1
         firstcols = 'P1,P2,Pc'.split(',')
+        panel = panel.swapaxes(1,2)
 
-    sumcols     = 'fcell,fcellRaw,fcellAdd,Np'.split(',') 
+    sumcols     = 'fcell,fcellRaw,fcellAdd,Np,NpAdd'.split(',') 
     sumquadcols = 'ufcell1,ufcell2'.split(',') 
-    allcols     = firstcols + sumcols +sumquadcols
-    
+    allcols     = firstcols + sumcols + sumquadcols
+
+    iaxes = [1,2]      # Keep the axis that we're not moving
+    iaxes.remove(maxis)
+    kaxis = iaxes[0]
+
     df = pd.DataFrame(index=axes[kaxis] , columns=allcols )
 
     for k in allcols:
-        arr3d = np.array(panel.ix[[k] , : ,:])
-        arr3d = arr3d.swapaxes(1,maxis) # we're getting rid of first axis
-        arr2d = arr3d[0]
+        table = panel.loc[k]
         if sumcols.count(k)==1:
-            df.ix[:,k] = np.sum(arr2d, axis=0)
+            df.ix[:,k] = table.sum()
         elif firstcols.count(k)==1:
-            df.ix[:,k] = arr2d[0,:]
+            df.ix[:,k] = table.iloc[0]
         elif sumquadcols.count(k)==1:
-            df.ix[:,k] = np.sqrt( np.sum(arr2d**2,axis=0) )
+            df.ix[:,k] = np.sqrt( (table**2).sum() )
 
     return df
 
@@ -347,92 +316,6 @@ def found(df):
     df['found']  = (dP <.1) & (dt0 < .1) 
     return df
 
-stellardir = '/Users/petigura/Marcy/Kepler/files/stellar/'
-import sqlite3
-from pandas.io import sql
-def read_stellar(cat,sub=None):
-    """
-    Read Stellar
-
-    Unified way to read in stellar parameters:
-    
-    cat : str; one of the following:
-          - 'kepstellar' : Kepler stellar parameters from Exoplanet Archive
-          - 'kic'        : Kepler Input Catalog
-          - 'ah'         : Andrew Howard's YY corrected paramters
-         
-    Note
-    ---- 
-    Mstar is a derived parameter from Rstar and logg.
-
-    Future Work
-    -----------
-    Add an attribute to DataFrame returned that keeps track of the prov.
-    """
-
-    cols = 'kic,teff,logg,prov,Rstar'.split(',')
-    if cat=='kepstellar':
-        cat     = '%s/keplerstellar.csv' % stellardir
-        stellar = pd.read_csv(cat,skiprows=25)
-        namemap = {'kepid':'kic','radius':'Rstar','prov_prim':'prov'}
-        stellar = stellar.rename(columns=namemap)
-    elif cat=='kic':
-        cat     = '%s/kic_stellar.db' % stellardir
-        con     = sqlite3.Connection(cat)
-        query = 'SELECT kic,kic_teff,kic_logg,kic_radius FROM kic'
-        stellar = sql.read_frame(query,con)
-        namemap = {'kic_radius':'Rstar','kic_teff':'teff','kic_logg':'logg'}
-        stellar = stellar.rename(columns=namemap)
-        stellar = stellar.convert_objects(convert_numeric=True)
-        stellar['prov'] = 'kic'
-    elif cat == 'ah':
-        cat     = '%s/ah_par_strip.h5' % stellardir
-        store   = pd.HDFStore(cat)
-        stellar = store['kic']
-        namemap = {'KICID':'kic','YY_RADIUS':'Rstar','YY_LOGG':'logg',
-                   'YY_TEFF':'teff'}
-        stellar = stellar.rename(columns=namemap)
-        stellar['prov'] = 'ah'
-    else:
-        print "invalid catalog"
-        return None
-    stellar = stellar[cols]
-    stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
-
-    cat     = '%s/kic_stellar.db' % stellardir
-    con     = sqlite3.Connection(cat)
-    query   = 'SELECT kic,kic_kepmag FROM kic'
-    mags    = sql.read_frame(query,con)
-    mags    = mags.convert_objects(convert_numeric=True)
-    stellar = pd.merge(stellar,mags)
-
-    if sub is not None:
-        sub = pd.DataFrame(sub,columns=['kic'])
-        stellar = pd.merge(sub,stellar) 
-    return stellar
-
-def query_kic(*args):
-    """
-    Query KIC
-   
-    Connect to Kepler kic sqlite database and return PANDAS dataframe
-    """
-    cnx = sqlite3.connect(os.environ['KEPBASE']+'/files/db/kic_ct.db')
-    if len(args)==0:
-        query  = "SELECT * FROM KIC WHERE kic=8435766"
-        print "enter an sqlite query, columns include:"
-        print sql.read_frame(query,cnx).T        
-        return None
-    
-    query = args[0]
-    if len(args)==2:
-        kic = args[1]
-        kic = tuple( list(kic) )
-        query += ' WHERE kic IN %s' % str( kic ) 
-
-    df = sql.read_frame(query,cnx)
-    return df
-
 def MC(pp,res,cuts,stellar):
     pp = pp.drop('skic',axis=1)
 
@@ -455,19 +338,6 @@ def MC(pp,res,cuts,stellar):
 
     DV = wrap(DV)
     return DV
-
-# Nice logticks
-xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
-      [ 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
-      [ 10, 20, 30, 40, 50, 60, 70, 80, 90] +\
-      [ 100, 200, 300, 400, 500, 600, 700, 800, 900]
-
-sxt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  '',  '',  '',  ''] + \
-       [ 1, 2, 3, 4, 5, '', '', '', ''] +\
-       [ 10, 20, 30, 40, 50, '', '', '', ''] +\
-       [ 100, 200, 300, 400, 500, '', '', '', '']  
-
-
 
 def plotWhyFailDV(DV,cuts,s2n=True):
     """
@@ -538,27 +408,25 @@ class TERRA():
     """
     TERRA results class
     """
-    def __init__(self,pp,res,cat):
+    def __init__(self,pp,res,stellar):
         """
         Injection and recovery obejct:
 
-        pp   : DataFrame of Injected parameters
-        res  : DataFrame of DV output
-        cuts : DataFrame listing the cuts.
+        pp      : DataFrame of Injected parameters
+        res     : DataFrame of DV output
+        stellar : DataFrame of stellar properies
         """
-        
-
-        stellar       = read_stellar(cat,sub=pp)
 
         self.res      = res
-        self.cat      = cat
         self.pp       = pp
         self.stellar  = stellar
-        self.cuts     = None
 
+        self.cuts     = None
         self.nlc     = self.pp.__len__()
         self.ngrid   = self.res.P.dropna().__len__()
         self.nfit    = self.res.p0.dropna().__len__()
+        self.Pb     = None
+        self.Rpb    = None
 
     def __repr__(self):
         """
@@ -647,17 +515,21 @@ nTCE = %i
         return DV
 
     def setGrid(self,gridName):
-        if gridName is 'terra1yr':
+        if gridName =='terra1yr':
             self.Pb   = array([6.25,12.5,25,50.0,100,200,400])
             self.Rpb  = array([0.5, 1.0, 2,4.0,8.0,16.])        
-        elif gridName is 'terra50d':
+        elif gridName == 'terra1yr-fine':
+            self.Pb   = array([6.25, 8.84, 12.5, 17.7, 25, 35.4,
+                               50.0, 70.7, 100, 141, 200, 283, 400])
+            self.Rpb  = array([0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0,
+                               5.66, 8.0, 11.6, 16.])        
+        elif gridName =='terra50d':
             self.Pb   = array([5,10.8,23.2,50])
             self.Rpb  = array([0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.])        
 
 class MC(TERRA):
     def __init__(self,pp,res,cat):
         TERRA.__init__(self,pp,res,cat)
-        self.setGrid('terra50d')
 
     def subsamp(self,stars):
         stars = pd.DataFrame(stars,columns=['kic'])
@@ -675,14 +547,30 @@ class MC(TERRA):
         DV['comp'] = DV.found & DV.bDV
         return DV
 
-    def plotDV(self):
-        plotDV( self.getDV() )
+    def plotDV(self,**kwargs):
+        plotDV( self.getDV(),**kwargs )
+        labelPRp()
    
     def getPanel(self):
         """Return panel with completeness"""
         cPnl = zerosPanel(self.Pb,self.Rpb)
         cPnl = completeness( cPnl , self.getDV() )
         return cPnl
+
+    def plotCompPanel(self):
+        """
+        Lay down a colored checker borad showing the completeness.
+        """
+        cPnl    = self.getPanel()
+        colors  = array( floor(cPnl['comp']*10)/10 +.05 ).T
+
+        pcolor(self.Pb, self.Rpb, colors, cmap='RdBu',
+               vmin=-.3,vmax=1.3,edgecolors='white',lw=1)
+
+        f = lambda x : text(x['P1'],x['Rp1'],x['scomp'],size='x-small')
+        cPnl['scomp'] = (cPnl['comp'] * 100).astype(int).astype(str) + '%' 
+        cPnl.to_frame().apply(f,axis=1)
+
 
 
 class TPS(TERRA):
@@ -754,33 +642,75 @@ class TPS(TERRA):
         softto_csv(self.cuts,cutpath)
         
     def read_triage(self,path):
-        self.tce  = read_pngtree('%s/pngtree.txt' % path)
+        """
+        Attach list of TCEs.
+        - Read in eKOI list
+        - Read in my designations
+        - Read in Kepler team centroiding designations
+        """
+        self.tce = read_pngtree('%s/me/pngtree.txt' % path)
+        tce = self.tce[['eKOI']]
+        tce['dsg'] = ''
+        dsg = tce['dsg']
+        
+        ekoi      = self.geteKOI()
+        dsg.ix[ekoi[ekoi.Rp > self.maxRpPlanet].index] = 'Rp'
+
+        # My own FP assessment
+        myFP = self.tce[self.tce.eKOI]['notplanetdes']
+        for field in 'eclipse,vardepth,ttv,Vshape'.split(','):
+            dsg = add_triage(dsg,myFP,field)
+
+        centFP = read_pngtree('%s/centroid/pngtree.txt' % path,centroid=True)
+        centFP = centFP['notplanetdes']
+        for field in 'offset-star,offset-no-star'.split(','):
+            dsg = add_triage(dsg,centFP,field)
+
+        tce['dsg'] = dsg
+        tce['myFP']   = myFP
+        tce['centFP'] = centFP
+        self.tce = tce
+
+    def getFPtab(self):
         ekoi = self.geteKOI()
-        ekoi.index = ekoi.kic
-        kicEB = ekoi[~ekoi.notplanet & (ekoi.Rp > 20)].kic
-        print "%6i more FPs due to Rp > %i Re" % (len(kicEB),self.maxRpPlanet)
-        self.tce.ix[kicEB,'notplanet'] = True
-        self.tce.ix[kicEB,'notplanetdes'] = 'radius'
-                
+        
+        FPcode = """
+Rp             R
+eclipse        SE
+vardepth       VD
+ttv            TTV
+Vshape         V
+offset-no-star C
+offset-star    C
+"""
+        FPcode = StringIO(FPcode)
+        FPcode = pd.read_table(FPcode,sep='\s*',squeeze=True,index_col=0)
+        dsg = ekoi.dsg
+        dsg = dsg.replace( dict(FPcode) )
+        dsg = dsg.replace('','plnt')
+        return dsg
+        
     def geteKOI(self):
-        ekoi = self.tce[self.tce.eKOI]
+        ekoi    = self.tce[self.tce.eKOI]
         addcols = 'P,Rp,kic,a/Rstar'.split(',')
-        DV = self.getDV()[addcols]
-        return pd.merge(ekoi,DV,left_index=True,right_on='kic')
+        DV      = self.getDV()[addcols]
+        ekoi    = pd.merge(ekoi,DV,left_index=True,right_on='kic')
+        ekoi.index = ekoi.kic
+        return ekoi
 
     def ploteKOI(self):
         loglog()        
         ekoi = self.geteKOI()
-        cut = ekoi[~ekoi.notplanet]
+        ekoi['dsg'] = self.getFPtab()
+        cut = ekoi[ekoi.dsg=='plnt']
         plot(cut.P,cut.Rp,'.',mew=0,ms=5,label='Candidate')
-        cut = ekoi[ekoi.notplanet]
+        cut = ekoi[ekoi.dsg!='plnt']
         plot(cut.P,cut.Rp,'x',ms=3,mew=1,label='FP')
         
         legend()
         xticks(xt,sxt)
         yticks(xt,sxt)
-        xlabel('Period [days]')
-        ylabel('Rp [Earth-radii]')
+        labelPRp()
 
         xlim(5,500)
         ylim(0.5,16)
@@ -821,24 +751,41 @@ class TPS(TERRA):
             s = "%(kic)i\n%(kic_kepmag).1f (%(ntemp)i,%(niod)i)" % x
             text(x['P'],x['Rp'],s,size=3)
 
-        xlabel('Period [days]')
-        ylabel('Rp [Earth-radii]')
+        labelPRp()
 
         xl  = xlim()
         ekoi[ekoi.P.between(*xl)].apply(tt ,axis=1)
+
+def add_triage(dsg0,sel,field):
+    """
+    Add triage string.
+    
+    dsg : Series containing the current designations or empty strings
+    
+    Loops over all the indecies in the sel series. If `field` is present in
+    `sel` and still '' in dsg, fill in the empty string
+    """
+    dsg = dsg0.copy()
+    for i in sel.index:
+        if (dsg.ix[i] == '') & (sel.ix[i]==field):
+            dsg.ix[i] = field
+    return dsg
 
 
 class Occur():
     def __init__(self,tps,mc):
         self.tps = tps
         self.mc  = mc
-        self.mc.setGrid('terra50d')
 
     def OccurPanel(self):
         cPnl = self.mc.getPanel()
         ekoi = self.tps.geteKOI()
         plnt = ekoi[~ekoi.notplanet]
-        return occurrence(plnt,cPnl,self.tps.nlc)
+        occur = occurrence(plnt,cPnl,self.tps.nlc)
+        occur['pcomp']  = occur['comp']  * 100
+        occur['pfcell'] = occur['fcell'] * 100
+        occur['pflogA'] = occur['flogA'] * 100
+        return occur
     
     def occurAnn(self):
         occur = self.OccurPanel()
@@ -851,8 +798,97 @@ class Occur():
 
         occur.to_frame().apply(anntext,axis=1)
 
+def plotOccur2D(occur,Pb,Rpb,plnt):
+    """
+    Draw 2D occurrence distribution
+    """
+
+    plot(plnt.P,plnt.Rp,'s',color='Tomato',mew=0,mec='Tomato',ms=3)
+
+
+    def f(x):
+        offset = 1.01
+        s = """\
+%(Np)i (%(NpAug).1f)
+%(pcomp)i%%""" % x
+        text(x['P1']*offset,x['Rp1']*offset,s,size='x-small',ha='left')
+
+        s = """\
+%(pfcell).2f%%
+%(pflogA).2f%%""" % x
+        text(x['P2']/offset,x['Rp1']*offset,s,size='x-small',ha='right')
+
+    occur.to_frame().apply(f,axis=1)
+
+    step  = 0.01
+
+    occur['colors'] = occur['fcell']
+    colors = ma.masked_array( occur['colors'] , occur['comp'] < .25 ).T
+    maxco = np.ceil( colors.max()/step ) * step
+
+    pcolor(Pb,Rpb,colors,cmap='YlGn',vmin=0,vmax=maxco*1.5,
+           edgecolors='LightGrey',lw=1)
+    boundaries=linspace(0,maxco,maxco/step + 1)
+    cb = colorbar(drawedges=False,boundaries=boundaries,shrink=.5)
+    cb.set_label('Planet Occurrence',size='small')
+
+def getbins(df,name):
+    bins = list(df[name+'1']) + list(df[name+'2'])
+    bins = list(set(bins))
+    bins.sort()
+    return bins
+
+def getpanelbins(panel):
+    lua = lambda x : list(np.unique(np.array(x)))
+    Rpb = lua(panel.Rp1) + [ lua(panel.Rp2)[-1] ]
+    Pb  = lua(panel.P1)  + [ lua(panel.P2)[-1]  ]
+    bins = Pb,Rpb
+    return bins
+
+def plotOccur1D(dfMarg,name):
+    """
+    Plot one dimensional occurrence distribution
+
+    name : 'P' or 'Rp'
+    """
+    sbinc = name+'c'
+    binc = list(dfMarg[sbinc])
+    bins = getbins(dfMarg,name)
+
+    hist([binc]*2, bins=bins, 
+         weights=[dfMarg.fcellRaw,dfMarg.fcellAdd],
+         color=['DarkGrey','Tomato'],
+         label=['Raw occurrence','Correction for\n missed planets'],
+         histtype='barstacked',rwidth=.98,edgecolor='w')
+    
+    yerr = vstack([dfMarg.ufcell1,dfMarg.ufcell2])
+    errorbar(dfMarg[sbinc],dfMarg.fcell,yerr=yerr,fmt='o',ms=4,color='k')
+    
+    ax = gca()
+    trans = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    
+    def f(x):
+        s = "%(pfcell).1f %%" % x
+        y = x['fcell'] + x['ufcell2']+0.002
+        text(x[sbinc],y,s,ha='center')
+    dfMarg.apply(f,axis=1)
+
+
+    def f2(x):
+        kw = dict(size='x-small',ha='center',va='center',color='w')
+
+        y  = x['fcellRaw'] / 2 
+        s  = '%(Np)i' % x
+        text(x[sbinc],y,s,**kw)
+
+        y  = x['fcell'] - x['fcellAdd'] / 2 
+        s  = '%(NpAdd).1f' % x
+        text(x[sbinc],y,s,**kw)
+    dfMarg.apply(f2,axis=1)        
+
+
 def addlines(panel):
-    Pb,Rpb = getbins(panel)
+    Pb,Rpb = getpanelbins(panel)
     Pb,Rpb = np.array(Pb) , np.array(Rpb)
     colors = np.zeros(panel.fcell.T.shape)
     pcolor(Pb,Rpb, colors, edgecolors='LightGrey',lw=1,cmap=cm.gray_r)
@@ -874,7 +910,7 @@ def occurrence(df_tps,cPnl,nstars):
     """
 
     panel = cPnl.copy()
-    bins  = getbins(cPnl)
+    bins  = getpanelbins(cPnl)
 
     def countPlanets(**kw):
         return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
@@ -886,6 +922,8 @@ def occurrence(df_tps,cPnl,nstars):
     panel['fcellRaw'] = panel['NpAug']    / nstars
     panel['fcell']    = panel['fcellRaw'] / panel['comp']
     panel['fcellAdd'] = panel['fcell'] - panel['fcellRaw']
+    panel['NpAdd']    = panel['Np'] * panel['fcellAdd'] / panel['fcell']
+
 
     panel['ufcell1'] = panel['fcell'] * panel['fuNp1']
     panel['ufcell2'] = panel['fcell'] * panel['fuNp2']
@@ -901,37 +939,46 @@ def addpercen(panel):
     panel['flogAp']  = 100*panel['flogA']
     return panel
     
-
-
-
-def plotDV(DV):
+def plotDV(DV,cases=2):
     """
     Displays results from injection and recovery.
-    """
-    b = DV.found & DV.bDV
-    loglog(DV[b].inj_P,DV[b].inj_Rp,'s',ms=1,mew=.5,color='RoyalBlue',
-           label='found/DV - Y/Y',mec='RoyalBlue',mfc='none')
-
-    b = DV.found & ~DV.bDV
-    loglog(DV[b].inj_P,DV[b].inj_Rp,'x',ms=2.5,mew=0.75,color='RoyalBlue',
-           label='found/DV - Y/N')
-
-    b = ~DV.found & DV.bDV
-    loglog(DV[b].inj_P,DV[b].inj_Rp,'x',ms=2.5,mew=0.75,color='Tomato',
-           label='found/DV - N/Y')
-
-    b = ~DV.found & ~DV.bDV
-    loglog(DV[b].inj_P,DV[b].inj_Rp,'s',ms=1,mew=.5,color='Tomato',
-           label='found/DV - N/N',mec='Tomato',mfc='none')
-
-    legend()
-    xticks(xt,xt,rotation=45)
     
-    ylim(0.5,64)
-    xlim(5,400)
+    Parameters
+    ----------
+    DV - Data Validation frame. Must contain
+         - found
+         - bDV
+         - inj_P
+         - inj_Rp
 
-    xlabel('Period [days]')
-    ylabel('Planet Size [Re]')
+    cases - Number of different outcomes to plot
+    """
+    def cplot(b,*args,**kwargs):
+        plot(DV[b].inj_P,DV[b].inj_Rp,*args,**kwargs)
+
+    if cases==4:
+        b  = DV.found & DV.bDV
+        cplot(b,'s',ms=1,mew=.5,color='RoyalBlue',
+              label='found/DV - Y/Y',mec='RoyalBlue',mfc='none')  
+
+        b = DV.found & ~DV.bDV
+        cplot(b,'x',ms=2.5,mew=0.75,color='RoyalBlue',
+               label='found/DV - Y/N')
+
+        b = ~DV.found & DV.bDV
+        cplot(b,'x',ms=2.5,mew=0.75,color='Tomato',
+               label='found/DV - N/Y')
+
+        b = ~DV.found & ~DV.bDV
+        cplot(b,'s',ms=1,mew=.5,color='Tomato',
+               label='found/DV - N/N',mec='Tomato',mfc='none')
+
+    elif cases==2:
+        b = DV.found & DV.bDV
+        cplot(b,'s',ms=2,mfc='RoyalBlue',mew=0,lw=0,mec='RoyalBlue')
+        b = ~(DV.found & DV.bDV)
+        cplot(b,'s',ms=2,mfc='Tomato',mew=0,lw=0,mec='Tomato')
+
 
 def read_pp(file):
     pp     = pd.read_csv(file,index_col=0)
@@ -960,7 +1007,9 @@ def read_pngtree(path,centroid=False):
 
     notplanet = df[df.dir1=='notplanet']
     notplanet['notplanet'] = True
-    notplanet['notplanetdes']  = notplanet.path.apply(lambda x: x.split('/')[2][2:])
+    
+    path2notplanetdes  = lambda x: x.split('/')[2][2:]
+    notplanet['notplanetdes'] = notplanet.path.apply(path2notplanetdes)
     notplanet = notplanet[['notplanet','notplanetdes']]
     
     if not centroid:
@@ -974,11 +1023,18 @@ def read_pngtree(path,centroid=False):
         tce['eKOI']      = tce.eKOI.astype(bool)
         tce['notplanet'] = tce.notplanet.astype(bool)
 
+        d = {'ntce' : tce.TCE,
+             'neKOI': tce.eKOI,
+             'nEB'  : tce.notplanet & (tce.notplanetdes!='ttv'),
+             'nTTV' : tce.notplanet & (tce.notplanetdes=='ttv')}
+
+        for k in d.keys():
+            d[k] = d[k].sum()
+        
         print """\
-%6i stars designated TCE   
-%6i stars designated eKOI  
-%6i stars look like EBs    
-""" %  (len(tce) , len(tce[tce.eKOI]) , len( tce[tce.eKOI & tce.notplanet] ))
+%(ntce)6i stars designated TCE   
+%(neKOI)6i stars designated eKOI  
+""" %  d
 
         return tce
     else:
@@ -989,79 +1045,62 @@ def read_pngtree(path,centroid=False):
         ekoi['notplanet'] = ekoi.notplanet.astype(bool)
         return ekoi
 
-def read_triage(path):
+
+
+
+
+
+
+
+
+
+
+
+def labelPRp():
+    xlabel('Orbital Period [days]')
+    ylabel('Planet Size [Earth-radii]')
+
+# Nice logticks
+xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
+      [ 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
+      [ 10, 20, 30, 40, 50, 60, 70, 80, 90] +\
+      [ 100, 200, 300, 400, 500, 600, 700, 800, 900]
+
+sxt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  '',  '',  '',  ''] + \
+       [ 1, 2, 3, 4, 5, '', '', '', ''] +\
+       [ 10, 20, 30, 40, 50, '', '', '', ''] +\
+       [ 100, 200, 300, 400, 500, '', '', '', '']  
+
+def getlogticks(xl):
     """
-    Read Triage Directory
-    
-    Looks for TCE.txt, eKOI.txt, notplanet.txt. If these files don't
-    exist, we make them from the list of pngs in the TCE/, eKOI/, and
-    notplanet/ folders
-    """
-
-    # TCEs
-    tce = txtpng('triage/TCE')
-    # eKOIs
-    ekoi = txtpng('triage/eKOI')
-    tce  = pd.merge(tce,ekoi,how='left')
-
-    # EBs
-    notplanet = txtpng('triage/notplanet')
-    tce = pd.merge(tce,notplanet,how='left')
-    tce = tce.fillna(False)
-
-    tce['eKOI']      = tce.eKOI.astype(bool)
-    tce['notplanet'] = tce.notplanet.astype(bool)
-
-    print """\
-%6i stars designated TCE   
-%6i stars designated eKOI  
-%6i stars look like EBs    
-""" %  (len(tce) , len(tce[tce.eKOI]) , len( tce[tce.eKOI & tce.notplanet] ))
-    return tce
-
-def txtpng(path):
-    """
-    Given a path to the dircetory e.g.:
-    
-       ./TCE/
-
-    look for ./TCE.txt and read and return DataFrame. If the file does
-    not exist, build it out of all png files in TCE/
+    Returns log ticks for [0.1,0.2,0.3,0.4,0.4,0.5,1,2,3,4,5]
     """
     
-    basename = path.split('/')[-1]
-    pathtxt = '%s.txt' % path
-    pathpngs ='%s/*.png' % path
+    xl = log10(np.array(xl))
+    xl[0] = floor(xl[0])
+    xl[1] = ceil(xl[1])
+    xl = xl.astype(int)
 
-    try:
-        with open(pathtxt) as f:
-            df = pd.read_table(f,sep='\s*',names=['bname'])
-    except IOError:
-        print """\
-Constructing %s.txt
-from         %s
-""" % (path,pathpngs)
-        df = files2bname(pathpngs)
-        df.bname.to_csv(pathtxt,index=False)
+    ticks  = []
+    sticks = []
+    for i in range(*xl):
+        for j in range(1,10):
+            t = 10**i * j
 
-    df[basename] = True
-    return df
-  
-from astropy.io import fits
-    
-def read_SMEatVandy(path):
-    """
-    Read SME-at-Vandy fits tables
-    """
-    
-    tab = fits.open(path)[1].data
-    names = tab.dtype.names
+            # Take care of the float rounding
+            if i < 0:
+                s = '%s' % float('%.1g' % t)
+            else:
+                s = '%s' % t 
 
-    d = {}
-    for n in names:
-        d[n] = tab[n][0]
-    
-    return pd.DataFrame(d)
-        
-    
+            if j>5:
+                s = ''
+
+            ticks += [t]
+            sticks += [s]
+    return ticks,sticks
+
+def xylogticks():
+    xticks(*getlogticks( xlim() ) )
+    yticks(*getlogticks( ylim() ) ) 
     
