@@ -83,7 +83,7 @@ def pp(par):
     print "creating %(outfile)s" % par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
-    with h5F(par['outfile']) as h5:
+    with h5F(par) as h5:
         h5dir = '/global/project/projectdirs/m1669/Kepler/h5files/'
         fL    = glob.glob(h5dir+'*.h5')
 
@@ -179,7 +179,7 @@ def grid(par):
     print df.to_string()
 
     parL = [dict(df.ix[i]) for i in df.index]
-    with h5F(par['outfile']) as h5:     
+    with h5F(par) as h5:     
         h5.attrs['fluxField']  = par['fluxField']
         h5.attrs['fluxMask']   = par['fluxMask']
 
@@ -259,21 +259,29 @@ def plot_switch(h5,par):
                 plt.close() 
                 print "created %s" % figpath
 
-def multiCopyCut(file0,file1):
+def multiCopyCut(file0,file1,pdict=None):
     """
     Multi Planet Copy Cut
 
     Copys the calibrated light curve to file1. Cuts the transit out.
     """
-    with h5F(file0) as h5, h5F(file1) as h5new:
+
+    with h5py.File(file0) as h5, h5py.File(file1) as h5new:
         h5new.create_group('pp')
         h5new.copy(h5['/pp/mqcal'],'/pp/mqcal')
-
         lc   = h5['/pp/mqcal'][:]
-        lcPF = h5['lcPF0'][:]
-        j = mlab.rec_join('t',lc,lcPF,jointype='leftouter')
 
-        lc['fmask'] = lc['fmask'] |  (j['tPF']!=0)
+        if pdict is None:
+            print "Cutting out transit (using lcPF0)"
+            lcPF = h5['lcPF0'][:]
+            j    = mlab.rec_join('t',lc,lcPF,jointype='leftouter')
+            addmask = j['tPF']!=0
+        else:
+            print "Cutting out transit %s " % pdict
+            tlbl = tval.transLabel(lc['t'],pdict['P'],pdict['t0'],pdict['tdur'])
+            addmask = tlbl['tRegLbl'] >=0
+
+        lc['fmask'] = lc['fmask'] | addmask
         h5new['/pp/mqcal'][:] = lc
 
 ####################

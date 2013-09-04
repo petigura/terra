@@ -1107,6 +1107,9 @@ def TM_getMCMCdict(h5):
     for k in keys:
         d[k]     = ucrt.ix[k,'med']
         d['u'+k] = ucrt.ix[k,'sig']
+
+    for k in 'skic,P,t0'.split(','):   
+        d[k] = h5.attrs[k]
     return d
 
 def TM_unitsMCMCdict(d0):
