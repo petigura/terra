@@ -107,6 +107,7 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
     tcom = pd.merge(cat20,tcom,on=['kic','P_cat2'],how='outer')
     tcom['in_cat1'] = ~tcom.P_cat1.isnull()
     tcom['in_cat2'] = ~tcom.P_cat2.isnull()
+    tcom['kic'] = tcom.kic.astype(int)
 
     col0 = tcom.columns
     for c in col0:
@@ -114,6 +115,7 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
             tcom = tcom.rename( columns={ c:c.replace('cat1',suffixes[0]) } )
         elif c.find('cat2') != -1:
             tcom = tcom.rename( columns={ c:c.replace('cat2',suffixes[1]) } )
+
 
     return tcom
 
@@ -410,9 +412,11 @@ class TERRA():
     """
     def __init__(self,pp,res,stellar):
         """
-        Injection and recovery obejct:
+        Base class for TERRA results (both inj/rec and TPS)
 
-        pp      : DataFrame of Injected parameters
+        Parameters
+        ----------
+        pp      : DataFrame of Inputs to TERRA
         res     : DataFrame of DV output
         stellar : DataFrame of stellar properies
         """
@@ -425,8 +429,8 @@ class TERRA():
         self.nlc     = self.pp.__len__()
         self.ngrid   = self.res.P.dropna().__len__()
         self.nfit    = self.res.p0.dropna().__len__()
-        self.Pb     = None
-        self.Rpb    = None
+        self.Pb      = None
+        self.Rpb     = None
 
     def __repr__(self):
         """
@@ -446,12 +450,20 @@ Pipeline Summary
 
         return s
 
-    def subsamp_args(self,stars):
-        stars = pd.DataFrame(stars,columns=['kic'])
-        pp    = pd.merge(stars,self.pp)
-        res   = pd.merge(stars,self.res)
-        return pp,res,self.cat
-            
+    def subsamp(self,stars):
+        """
+        Return a new TERRA instance with only only the subset of stars
+        """
+
+        args0 = (self.pp,self.res,self.stellar)
+        args1 = []
+        for a in args0:
+            a.index = a.kic
+            args1.append( a.ix[stars] )
+        args1 = tuple(args1)
+
+        return TERRA(*args1)
+
     def smry(self):
         smry = self.cuts.copy()
         DV      = self.getDV()
@@ -528,13 +540,12 @@ nTCE = %i
             self.Rpb  = array([0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.])        
 
 class MC(TERRA):
-    def __init__(self,pp,res,cat):
-        TERRA.__init__(self,pp,res,cat)
+    def __init__(self,pp,res,stellar):
+        TERRA.__init__(self,pp,res,stellar)
 
     def subsamp(self,stars):
-        stars = pd.DataFrame(stars,columns=['kic'])
-        pp,res,cat = self.subsamp_args(stars)
-        mc  = MC(pp,res,cat)
+        mc = TERRA.subsamp(self,stars) 
+        mc.__class__ = MC
         mc.cuts = self.cuts
         return mc
 
@@ -571,16 +582,15 @@ class MC(TERRA):
         cPnl['scomp'] = (cPnl['comp'] * 100).astype(int).astype(str) + '%' 
         cPnl.to_frame().apply(f,axis=1)
 
-
+maxRpPlanet = 20 # Objects larger than 20 Re, will
 
 class TPS(TERRA):
     """
     Transiting Planet Search object
     """
-    def __init__(self,pp,res,cat):
-        TERRA.__init__(self,pp,res,cat)
+    def __init__(self,pp,res,stellar):
+        TERRA.__init__(self,pp,res,stellar)
         self.tce = None
-        self.maxRpPlanet = 20 # Objects larger than 20 Re, will
                                 # automatically be considered EBs
 
     def __add__(self,tps2):
@@ -596,51 +606,33 @@ class TPS(TERRA):
         return tps
 
     def subsamp(self,stars):
-        stars = pd.DataFrame(stars,columns=['kic'])
-        pp,res,cat = self.subsamp_args(stars)
-        tps  = TPS(pp,res,cat)
-        tps.tce  = pd.merge(stars,self.tce,left_on='kic',right_index=True)
-        tps.cuts = self.cuts
+        tps = TERRA.subsamp(self,stars) 
+        tps.__class__ = TPS
+        tps.cuts = self.cuts        
+        tps.tce  = self.tce.ix[stars].dropna(how='all')
+
         return tps
 
-    def make_triage(self,path):
+    def getTCE(self):
         """
-        Make Triage Directories makes the following folders.
-
-        path/TCE
-        path/eKOI
-        path/notplanet
-        path/tce.txt
-        path/cuts.txt
+        Return a list of TCEs for manual vetting.
         """
-
-        def softmkdir(path):
-            try: 
-                os.mkdir(path)
-            except OSError:
-                print path+" exists"
-                pass
-
-        def softto_csv(df,path,**kwargs):
-            if ~os.path.exists(path):
-                df.to_csv(path,**kwargs)                
-            else:
-                print path+" exists"
-            
-        softmkdir("%s/" %path)
-        softmkdir("%s/TCE" %path)
-        softmkdir("%s/eKOI"%path)
-
-        tcepath = "%s/TCE.txt"  % path
-        cutpath = "%s/cuts.csv" % path
-
         DV = self.getDV()
-        file2skic = lambda x : x.split('/')[-1].split('.')[0]
-        skic = DV[DV.bDV].outfile.apply(file2skic)
+        tce = DV[DV.bDV]
 
-        softto_csv(skic,tcepath,index=False)
-        softto_csv(self.cuts,cutpath)
-        
+        keys = []
+        for k in self.cuts.index:
+            keys += [k,'b'+k] 
+
+
+        file2skic = lambda x : x.split('/')[-1].split('.')[0]
+        tce['skic'] = tce.outfile.apply(file2skic)
+        tce.index = tce.kic
+
+        keys += ['bDV','skic']
+        tce = tce[keys]
+        return tce
+
     def read_triage(self,path):
         """
         Attach list of TCEs.
@@ -654,7 +646,7 @@ class TPS(TERRA):
         dsg = tce['dsg']
         
         ekoi      = self.geteKOI()
-        dsg.ix[ekoi[ekoi.Rp > self.maxRpPlanet].index] = 'Rp'
+        dsg.ix[ekoi[ekoi.Rp > maxRpPlanet].index] = 'Rp'
 
         # My own FP assessment
         myFP = self.tce[self.tce.eKOI]['notplanetdes']
@@ -780,7 +772,8 @@ class Occur():
     def OccurPanel(self):
         cPnl = self.mc.getPanel()
         ekoi = self.tps.geteKOI()
-        plnt = ekoi[~ekoi.notplanet]
+        ekoi['dsg'] = self.tps.getFPtab()
+        plnt = ekoi[ekoi.dsg=='plnt']
         occur = occurrence(plnt,cPnl,self.tps.nlc)
         occur['pcomp']  = occur['comp']  * 100
         occur['pfcell'] = occur['fcell'] * 100
@@ -789,7 +782,6 @@ class Occur():
     
     def occurAnn(self):
         occur = self.OccurPanel()
-        occur = addpercen(occur)
         addlines(occur)
 
         def anntext(x):
@@ -798,7 +790,7 @@ class Occur():
 
         occur.to_frame().apply(anntext,axis=1)
 
-def plotOccur2D(occur,Pb,Rpb,plnt):
+def plotOccur2D(occur,Pb,Rpb,plnt,compThresh=0.25):
     """
     Draw 2D occurrence distribution
     """
@@ -823,7 +815,7 @@ def plotOccur2D(occur,Pb,Rpb,plnt):
     step  = 0.01
 
     occur['colors'] = occur['fcell']
-    colors = ma.masked_array( occur['colors'] , occur['comp'] < .25 ).T
+    colors = ma.masked_array( occur['colors'] , occur['comp'] < compThresh ).T
     maxco = np.ceil( colors.max()/step ) * step
 
     pcolor(Pb,Rpb,colors,cmap='YlGn',vmin=0,vmax=maxco*1.5,
@@ -933,11 +925,6 @@ def occurrence(df_tps,cPnl,nstars):
     panel['flogA']    = panel['fcell'] / (panel['log10Rp'] * panel['log10P'])
     return panel
 
-def addpercen(panel):
-    panel['fcellp']  = 100*panel['fcell']
-    panel['compp']   = 100*panel['comp']
-    panel['flogAp']  = 100*panel['flogA']
-    return panel
     
 def plotDV(DV,cases=2):
     """
@@ -979,7 +966,6 @@ def plotDV(DV,cases=2):
         b = ~(DV.found & DV.bDV)
         cplot(b,'s',ms=2,mfc='Tomato',mew=0,lw=0,mec='Tomato')
 
-
 def read_pp(file):
     pp     = pd.read_csv(file,index_col=0)
     pp     = pp.rename(columns={'skic':'kic'})
@@ -988,6 +974,8 @@ def read_pp(file):
 def read_res(file,**kwargs):
     res = pd.read_csv(file,**kwargs)
     res = res.rename(columns={'skic':'kic'})
+    res = res[res.kic.notnull()]
+    res['kic'] = res.kic.astype(int)
     return res
 
 def read_pngtree(path,centroid=False):
@@ -1100,7 +1088,11 @@ def getlogticks(xl):
             sticks += [s]
     return ticks,sticks
 
-def xylogticks():
-    xticks(*getlogticks( xlim() ) )
-    yticks(*getlogticks( ylim() ) ) 
-    
+def logticks(axis):
+    if axis=='both':
+        xticks(*getlogticks( xlim() ) )
+        yticks(*getlogticks( ylim() ) ) 
+    elif axis=='x':
+        xticks(*getlogticks( xlim() ) )
+    elif axis=='y':
+        yticks(*getlogticks( ylim() ) ) 
