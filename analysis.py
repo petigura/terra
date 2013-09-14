@@ -10,23 +10,74 @@ from cStringIO import StringIO
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 from astropy.io import fits
 import copy
+import tfind
+import h5py
+import keptoy
 
-koilistdir = '/Users/petigura/Marcy/Kepler/files/koilists/'
-def loadKOI(cat):
+koilistdir = os.environ['KFILES']+'koilists/'
+def loadKOI(cat,short=True):
     if cat=='CB':
-        cat = pd.read_table('%s/koi_Burke_20dec2012.tab' % koilistdir,sep='|')
+        path = '%s/koi_Burke_20dec2012.tab'
+        cat = pd.read_table(path % koilistdir,sep='|')
         namemap = {' keplerId ':'kic',' koi_disposition ':'disp',
                    ' koi_period ':'P','KOI       ':'koi',' koi_prad ':'Rp'}
-        cat = cat.rename(columns=namemap)[namemap.values()]
+
         cat['disp'] = cat.disp.apply(lambda x : x.strip())
     elif cat=='Q12':
         namemap = {'kepid':'kic','kepoi_name':'koi',
                    'koi_pdisposition':'disp',
                    'koi_period':'P','koi_depth':'df',
-                   'koi_duration':'tdur','koi_prad':'Rp'}
+                   'koi_duration':'tdur','koi_prad':'Rp',
+                   'koi_time0bk':'t0'}
         path = koilistdir+'cumul_2013sep13.csv'
-        cat = pd.read_csv(path,skiprows=74).rename(columns=namemap)[namemap.values()]        
+        cat = pd.read_csv(path,skiprows=74)
+
+    cat = cat.rename(columns=namemap)
+    if short:
+        cat = cat[namemap.values()]
     return cat
+def kois2n(koi,par):
+    """
+    Calculate the terra SNR folding the KOI on the right ephemeris
+
+    koi - name of the KOI used to index pandas dataframe
+    par - dictionary of parameters from grid.csv. Must contain
+          - P1 lower bound of period domain
+          - P2 upper bound of period domain
+          - tbase time baseline used to calculate transit widths
+          - outfile where to find the h5 file
+    """
+
+    q12 = loadKOI('Q12')
+    q12.index = q12.koi
+    tpar = q12.ix[koi] # transit parameters
+
+    # Get the range of trial transit durations used
+    parL   = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
+    names  = 'P1,P2,Pcad1,Pcad2,delT1,delT2,twdG'.split(',')
+    df     = pd.DataFrame(parL,columns=names)
+    gpar  = df[(df.P1 < tpar['P']) & (df.P2 > tpar['P'])].iloc[0]
+    twdG = gpar['twdG']
+
+    with h5py.File(par['outfile']) as h5:
+        lc = h5['pp/mqcal'][:]
+        fm = ma.masked_array(lc['fcal'],lc['fmask'])
+        t  = lc['t']
+    
+    s2nL = []
+    for twd in twdG:
+        Pcad0 = int(tpar['P'] / keptoy.lc)
+        dM = tfind.mtd(t,fm,twd)
+        noise = ma.median(ma.abs(dM))
+
+        t0cad,Pcad,meanF,countF = tfind.fold(dM,Pcad0)
+        t0cad = int(mod(tpar['t0']-t[0],tpar['P'])/keptoy.lc)
+        t0slice = mod(arange(t0cad-10,t0cad+10),Pcad0)
+    
+        s2n  = np.max(meanF[:,t0slice] / noise * sqrt(countF[:,t0slice]))
+        s2nL += [s2n]
+    return max(s2nL)
+
 
 def upoisson(Np):
     """
