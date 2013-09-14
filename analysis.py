@@ -8,7 +8,6 @@ from matplotlib.pylab import *
 
 from cStringIO import StringIO
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
-from astropy.io import fits
 import copy
 import tfind
 import h5py

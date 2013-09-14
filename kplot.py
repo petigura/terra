@@ -56,6 +56,7 @@ def plot_diag(h5,tpar=False):
            noise 
            s2n
     """
+
     tval.read_dv(h5,tpar=tpar)
 
     try:
