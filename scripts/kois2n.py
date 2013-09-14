@@ -1,6 +1,7 @@
 import pandas as pd
 import h5py
 import tval
+import analysis
 from argparse import ArgumentParser as ArgPar
 import sys
 
@@ -17,4 +18,4 @@ grid['kic'] = grid.outfile.apply(lambda x : x.split('/')[-1][:9]).astype(int)
 grid.index = grid.kic
 par = grid.ix[kic]
 s2n = analysis.kois2n(args.koi,par)
-print koi,s2n
+print args.koi,s2n

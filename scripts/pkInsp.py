@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import matplotlib
 from argparse import ArgumentParser
 prsr = ArgumentParser()

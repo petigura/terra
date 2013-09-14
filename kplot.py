@@ -46,6 +46,8 @@ def plot_diag(h5):
     tval.read_dv(h5)
     del h5['SES']
     del h5['tRegLbl']
+
+
     tval.at_SES(h5)
 
     fig = figure(figsize=(20,12))
