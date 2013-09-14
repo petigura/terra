@@ -11,6 +11,23 @@ from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 from astropy.io import fits
 import copy
 
+koilistdir = '/Users/petigura/Marcy/Kepler/files/koilists/'
+def loadKOI(cat):
+    if cat=='CB':
+        cat = pd.read_table('%s/koi_Burke_20dec2012.tab' % koilistdir,sep='|')
+        namemap = {' keplerId ':'kic',' koi_disposition ':'disp',
+                   ' koi_period ':'P','KOI       ':'koi',' koi_prad ':'Rp'}
+        cat = cat.rename(columns=namemap)[namemap.values()]
+        cat['disp'] = cat.disp.apply(lambda x : x.strip())
+    elif cat=='Q12':
+        namemap = {'kepid':'kic','kepoi_name':'koi',
+                   'koi_pdisposition':'disp',
+                   'koi_period':'P','koi_depth':'df',
+                   'koi_duration':'tdur','koi_prad':'Rp'}
+        path = koilistdir+'cumul_2013sep13.csv'
+        cat = pd.read_csv(path,skiprows=74).rename(columns=namemap)[namemap.values()]        
+    return cat
+
 def upoisson(Np):
     """
     Poisson Uncertanty
@@ -52,18 +69,18 @@ def completeness(panel,df_mc):
     panel['nPass'] = nPass
     panel['nTot']  = nTot
     panel['comp'] = nPass/nTot
-    panel['comp'][np.isnan(panel)] = 0 
+    panel['comp'] = panel.comp.fillna(0)
     return panel
 
 
-def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
+def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2'],Pthresh=0.1):
     """
     Compare Catalogs
     
     Determine which planets appear in both catalogs. Candidates are
     considered equal if:
 
-    |P_cat1 - P_cat2| < 0.01 days
+    |P_cat1 - P_cat2| < 0.1 days
 
     I believe the SQL equivalent is:
     
@@ -73,6 +90,7 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
     ----------
     cat1 : my catalog. Must contain `kic` and `P` fields
     cat2 : other catalog. Must contain `kic` and `P` fields
+    Pthresh : periods must be within 0.1 days to agree
 
     Note
     ----
@@ -102,7 +120,7 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2']):
 
     # Outer join is the union of the entries in me,cat, and both
     tcom = pd.merge(cat1,cat2,on='kic',how='outer')
-    tcom = tcom[ np.abs( tcom.P_cat1 - tcom.P_cat2 ) < .1 ]
+    tcom = tcom[ np.abs( tcom.P_cat1 - tcom.P_cat2 ) < Pthresh ]
     tcom = pd.merge(cat10,tcom,on=['kic','P_cat1'],how='outer')
     tcom = pd.merge(cat20,tcom,on=['kic','P_cat2'],how='outer')
     tcom['in_cat1'] = ~tcom.P_cat1.isnull()
@@ -527,17 +545,30 @@ nTCE = %i
         return DV
 
     def setGrid(self,gridName):
-        if gridName =='terra1yr':
-            self.Pb   = array([6.25,12.5,25,50.0,100,200,400])
-            self.Rpb  = array([0.5, 1.0, 2,4.0,8.0,16.])        
-        elif gridName == 'terra1yr-fine':
-            self.Pb   = array([6.25, 8.84, 12.5, 17.7, 25, 35.4,
-                               50.0, 70.7, 100, 141, 200, 283, 400])
-            self.Rpb  = array([0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0,
-                               5.66, 8.0, 11.6, 16.])        
-        elif gridName =='terra50d':
-            self.Pb   = array([5,10.8,23.2,50])
-            self.Rpb  = array([0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.])        
+        Pb,Rpb = gridDict[gridName]
+        self.Pb = Pb
+        self.Rpb = Rpb
+
+gridDict = {
+    'terra1yr':(
+        [6.25,12.5,25,50.0,100,200,400], # Pb
+        [0.5, 1.0, 2,4.0,8.0,16.]        # Rpb 
+        ),
+    'terra1yr-fine':(
+        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
+         70.7, 100, 141, 200, 283, 400],
+        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
+        ),
+    'terra50d':(
+        [5,10.8,23.2,50],
+        [0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.]
+        )
+    }
+
+for k in gridDict:
+    Pb,Rpb = gridDict[k]
+    gridDict[k] = (np.array(Pb),np.array(Rpb) )
+
 
 class MC(TERRA):
     def __init__(self,pp,res,stellar):
@@ -596,8 +627,8 @@ class TPS(TERRA):
     def __add__(self,tps2):
         pp_comb  = pd.concat( [self.pp,tps2.pp] )
         res_comb = pd.concat( [self.res,tps2.res] )
-        assert self.cat==tps2.cat,"two catalogs must be equal"
-        tps = TPS(pp_comb,res_comb,self.cat)
+        assert self.stellar is tps2.stellar,"Use the same stellar parameters"
+        tps = TPS(pp_comb,res_comb,self.stellar)
 
         tps.cuts = self.cuts
         if self.tce is not None:
@@ -901,29 +932,28 @@ def occurrence(df_tps,cPnl,nstars):
 
     """
 
-    panel = cPnl.copy()
-    bins  = getpanelbins(cPnl)
+    pnl = cPnl.copy()
+    bins = getpanelbins(cPnl)
 
     def countPlanets(**kw):
         return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
 
-    panel['Np']       = countPlanets(weights=ones(len(df_tps)))
-    panel             = addPoisson(panel)
-    panel['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
+    pnl['Np']       = countPlanets(weights=ones(len(df_tps)))
+    pnl             = addPoisson(pnl)
+    pnl['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
 
-    panel['fcellRaw'] = panel['NpAug']    / nstars
-    panel['fcell']    = panel['fcellRaw'] / panel['comp']
-    panel['fcellAdd'] = panel['fcell'] - panel['fcellRaw']
-    panel['NpAdd']    = panel['Np'] * panel['fcellAdd'] / panel['fcell']
+    pnl['fcellRaw'] = pnl['NpAug']    / nstars
+    pnl['fcell']    = pnl['fcellRaw'] / pnl['comp']
+    pnl['fcellAdd'] = pnl['fcell'] - pnl['fcellRaw']
+    pnl['NpAdd']    = pnl['Np'] * ( 1/pnl['comp'] - 1 )
 
+    pnl['ufcell1'] = pnl['fcell'] * pnl['fuNp1']
+    pnl['ufcell2'] = pnl['fcell'] * pnl['fuNp2']
 
-    panel['ufcell1'] = panel['fcell'] * panel['fuNp1']
-    panel['ufcell2'] = panel['fcell'] * panel['fuNp2']
-
-    panel['log10Rp']  = np.log10(panel['Rp2']/panel['Rp1'])
-    panel['log10P']   = np.log10(panel['P2']/panel['P1'])
-    panel['flogA']    = panel['fcell'] / (panel['log10Rp'] * panel['log10P'])
-    return panel
+    pnl['log10Rp']  = np.log10(pnl['Rp2']/pnl['Rp1'])
+    pnl['log10P']   = np.log10(pnl['P2']/pnl['P1'])
+    pnl['flogA']    = pnl['fcell'] / (pnl['log10Rp'] * pnl['log10P'])
+    return pnl
 
     
 def plotDV(DV,cases=2):

@@ -1,16 +1,17 @@
 """
 Module dealing with stellar parameters
 """
-
 stellardir = '/Users/petigura/Marcy/Kepler/files/stellar/'
+import os
+from cStringIO import StringIO 
+
 import sqlite3
 import pandas as pd
 from pandas.io import sql
-import kbcUtils 
 from scipy.io.idl import readsav
-from cStringIO import StringIO 
-from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
+import kbcUtils 
+from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
 def read_cat(cat,sub=None):
     """
@@ -101,6 +102,18 @@ UR    uRstar"""
     return stellar
 
 
+def read_subsamp(cat):
+    """
+    Return a DataFrame with Kepler subsample.
+    """
+    if cat=='b12k':
+        return pd.read_csv(stellardir+'b12k.csv')
+    elif cat=='b42k':
+        namemap = {'kepid':'kic'}
+        cat = pd.read_csv(stellardir+'b42k.csv')
+        cat = cat.rename(columns=namemap)[namemap.values()]
+        return cat
+
 def update_cat(cat1,cat2):
     """
     Default to the parameters in cat2.
@@ -116,7 +129,7 @@ def update_cat(cat1,cat2):
     return cat_single
 
 def query_kic(*args):
-    """
+    """         
     Query KIC
    
     Connect to Kepler kic sqlite database and return PANDAS dataframe
