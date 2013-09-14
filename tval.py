@@ -270,20 +270,28 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
 # tdur
 # climb
 
-def read_dv(h5):
+def read_dv(h5,tpar=False):
     """
     Read h5 file for data validation
 
     1. Finds the highest SNR peak
     2. Adds oft-used variables to top level
-    """
 
+    Parameters
+    ----------
+    h5   : h5 file (post grid-search)
+    tpar : alternative transit ephemeris dictionary with the following keys
+           t0 Pcad twd mean s2n noise
+    """
     h5.lc  = h5['/pp/mqcal'][:] # Convenience
     h5.RES = h5['/it0/RES'][:]
 
     id  = np.argmax(h5.RES['s2n'])        
-    for k in ['t0','Pcad','twd','mean','s2n','noise']:
-        h5.attrs[k]  =  h5.RES[k][id]
+    for k in 't0 Pcad twd mean s2n noise'.split():
+        if tpar==False:
+            h5.attrs[k] = h5.RES[k][id]
+        else:
+            h5.attrs[k] = tpar[k] 
 
     h5.attrs['tdur'] = h5.attrs['twd']*config.lc
     h5.attrs['P']    = h5.attrs['Pcad']*config.lc
@@ -375,7 +383,7 @@ def at_binPhaseFold(h5,ph,bwmin):
     for k in d.keys():
         h5[ name ].attrs[k] = d[k]
 
-def at_fit(h5):
+def at_fit(h5,runmcmc=True):
     """
     Attach Fit
 
@@ -416,7 +424,8 @@ def at_fit(h5):
     trans = TM_read_h5(h5)
     trans.register()
     trans.pdict = trans.fit()[0]
-    trans.MCMC()
+    if runmcmc:
+        trans.MCMC()
     TM_to_h5(trans,h5)
 
 def at_med_filt(h5):

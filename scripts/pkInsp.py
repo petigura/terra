@@ -16,8 +16,8 @@ from matplotlib.pylab import plt
 
 with h5py.File(args.inp) as h5:
     exec('kplot.%s(h5)' % args.func)  
-    if args.o is not None:
-        plt.gcf().savefig(args.o)
-    else:
-        plt.show()
-    
+
+if args.o is not None:
+    plt.gcf().savefig(args.o)
+else:
+    plt.show()

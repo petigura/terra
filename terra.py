@@ -7,6 +7,7 @@ import h5py
 from h5py import File as h5F 
 
 import numpy as np
+from numpy import ma
 import glob
 import prepro
 import tfind
@@ -192,14 +193,31 @@ def dv(par):
     Parameters
     ----------
     par : dictionary with the following keys
+          - LDT_deg : polynomial degree of local detrender
+          - cfrac   : size of continuum region multiple of tranist durtaion
+          - cpad    : size of padding between in/egress and start of
+                      continuum region
+          - nCont   : minimum number of continuum points to use transit
+          - a[1-4]  : limb-darkening coeffs
+          - outfile : which h5 file to read
+          - skic    : star
+          - update  : If True, we can modify the h5 file.
+
+          optional keys
+          - P    : Alternative period to fold on
+          - t0   : Alt epoch. BJD - 2454833 days. 
+                   t=0 <->  12:00 on Jan 1, 2009 UTC
+          - tdur : transit durtaion (days)
 
     Example
     -------
 
     >>> import terra
-    >>> ddv {'LDT_deg': 3,'cfrac': 3, 'cpad': 0.5, 'nCont': 4,
-    'a1': 0.773,'a2': -0.679,'a3': 1.140, 'a4': -0.416,
-    'outfile': 'temp.grid.h5','skic': 7831530}    
+    >>> ddv = {'LDT_deg': 3,'cfrac': 3, 'cpad': 0.5, 'nCont': 4, 
+              'a1': 0.773,'a2': -0.679,'a3': 1.140, 'a4': -0.416, 
+              'outfile':'temp.grid.h5','skic': 7831530 }
+
+
     >>> terra.dv(ddv)
 
     """
@@ -225,8 +243,9 @@ def dv(par):
 
         # Attach attributes
         tval.read_dv(h5)
-        tval.at_grass(h5) # How many nearby SNR peaks are there?
 
+
+        tval.at_grass(h5) # How many nearby SNR peaks are there?
         tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
 

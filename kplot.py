@@ -37,16 +37,47 @@ annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light'
 rc('axes',color_cycle=['RoyalBlue','Tomato'])
 rc('font',size=8)
 
-def plot_diag(h5):
+def plot_diag(h5,tpar=False):
     """
     Print a 1-page diagnostic plot of a given h5.
     
-    Right now, we recompute the single transit statistics on the fly.
+    Right now, we recompute the single transit statistics on the
+    fly. By default, we show the highest SNR event. We can fold on
+    arbitrary ephmeris by setting the tpar keyword.
+
+    Parameters
+    ----------
+    h5   : h5 file after going through terra.dv
+    tpar : Dictionary with alternate ephemeris specified by:
+           Pcad - Period [cadences] (float)
+           t0   - transit epoch [days] (float)
+           twd  - width of transit [cadences]
+           mean - depth of transit [float]
+           noise 
+           s2n
     """
-    tval.read_dv(h5)
-    del h5['SES']
-    del h5['tRegLbl']
+    tval.read_dv(h5,tpar=tpar)
+
+    try:
+        del h5['SES']
+        del h5['tRegLbl']
+    except:
+        pass
+
     tval.at_SES(h5)
+
+    if (tpar!=False) & (h5.attrs['num_trans'] >=2):
+        tval.at_phaseFold(h5,0)
+        tval.at_phaseFold(h5,180)
+
+        tval.at_binPhaseFold(h5,0,10)
+        tval.at_binPhaseFold(h5,0,30)
+        
+        tval.at_fit(h5,runmcmc=False)
+        tval.at_med_filt(h5)
+        tval.at_s2ncut(h5)
+        tval.at_rSNR(h5)
+        tval.at_autocorr(h5)
 
     fig = figure(figsize=(20,12))
     gs = GridSpec(8,10)
@@ -109,17 +140,21 @@ def plot_diag(h5):
         plotCalWrap(h5)
 
     # Info
-    h5.noPrintRE = '.*?file|climb|skic|.*?folder'
-    h5.noDiagRE  = \
-        '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-    h5.noDBRE    = 'climb'
-    s = pd.Series(tval.flatten(h5,h5.noDiagRE))
-    s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
+    if tpar==False:
+        h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+        h5.noDiagRE  = \
+            '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+        h5.noDBRE    = 'climb'
+        s = pd.Series(tval.flatten(h5,h5.noDiagRE))
+        s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
+    else:
+        s='%i\n-------\n' % h5.attrs['skic']
+        for k in 'P t0 tdur mean s2n noise twd'.split():
+            s += '%s %s\n' % (k,h5.attrs[k])
+
     bbkw = dict(visible=True,fc='white',alpha=0.5)
     axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
                       transform=axStack.transAxes)
-
-
     tight_layout()
 
 def plotSec(h5):
