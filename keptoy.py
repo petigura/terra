@@ -5,7 +5,7 @@ from numpy.polynomial import Legendre
 import copy
 import occultsmall
 
-from config import Rsun,Msun,G,AU,lc
+from config import Rsun,Msun,G,AU,lc,stefan_boltzmann
 
 def a2tdur(a0,Rstar=1.,Mstar=1.):
     """
@@ -31,18 +31,47 @@ def a2tdur(a0,Rstar=1.,Mstar=1.):
 
 def P2a(P0,Mstar=1):
     """
-    Given the period of planet (days) what is its semimajor axis assuming:
+    Period to Semi-major axis. Kepler's 3rd law.
 
-    - Solar mass
+    Parameters 
+    ----------
+    P0    : orbital period [days]
+    Mstar : Stellar mass [solar masses]
+    
+    Returns
+    -------
+    a : semi-major axis [AU]
     """
+
     P0 = array(P0)
-    P = P0.copy()
-    P *= 3600*24 # seconds
+    P  = P0.copy()
+    P  *= 3600*24 # seconds
 
     M = Mstar*Msun
     a = (G*M / (4*pi**2) * P**2)**(1/3.) # cm
     a /= AU # [AU]
     return a
+
+def IncidentFlux(Rstar0,teff,a0):
+    """
+    Incident Flux
+    
+    Parameters
+    ----------
+    
+    Rstar : Stellar radius [Rsun]
+    teff  : Effective temperature [K]
+    a     : Semi-major axis [AU]
+    """
+    # Convert into cgs
+    Rstar = array(Rstar0).copy()
+    Rstar *= Rsun # Radius in cm
+
+    a = array(a0).copy()
+    a *= AU # distance in cm
+
+    Fp = Rstar**2 * stefan_boltzmann * teff**4 * a**-2
+    return Fp
 
 def ntpts(P,tdur,tbase,cad):
     # Compute number of points in transit
@@ -263,8 +292,6 @@ def genSynLC(darr):
         
     return tl,fl
 
-
-
 def occultsmall_py(p,c1,c2,c3,c4,z):
     """
     Mandel Agol light curve (small planet approx).
@@ -275,18 +302,18 @@ def occultsmall_py(p,c1,c2,c3,c4,z):
 
     Parameters
     ----------
-    p       : ratio of planet radius to stellar radius                                
-    c1-c4   : non-linear limb-darkening coefficients                                  
+    p       : ratio of planet radius to stellar radius       
+    c1-c4   : non-linear limb-darkening coefficients                  
     z       : impact parameters (normalized to stellar radius)
 
     Returns
     -------
-    mu      : flux relative to unobscured source for each z                           
+    mu      : flux relative to unobscured source for each z 
     
     Notes
     -----
     Translation of IDL routine
-    """                                                                                  
+    """
 
     nb=z.size
     mu=np.ones(nb)
@@ -299,8 +326,10 @@ def occultsmall_py(p,c1,c2,c3,c4,z):
     sig  = np.sqrt( np.sqrt( 1. - (1.-p)**2 ) )
     x    = 1.-(z[bedge]-p)**2
 
-    tmp  = (1.-c1*(1.-4./5.*x**0.25) - c2*(1.-2./3.*x**0.5) - c3*(1.-4./7.*x**0.75)-c4*(1.-4./8.*x))
-    mu[bedge] = 1. - tmp*(p**2*np.arccos((z[bedge]-1.)/p)-(z[bedge]-1.)*np.sqrt(p**2-(z[bedge]-1.)**2))/norm
+    tmp  = (1.-c1*(1.-4./5.*x**0.25) - c2*(1.-2./3.*x**0.5) - \
+            c3*(1.-4./7.*x**0.75)-c4*(1.-4./8.*x))
+
+    mu[bedge] = 1. - tmp *(p**2*np.arccos((z[bedge]-1.)/p) - (z[bedge]-1.)*np.sqrt(p**2-(z[bedge]-1.)**2))/norm
 
     # inside disk
     bin =  (z < 1.-p) & (z != 0.) 
@@ -311,7 +340,6 @@ def occultsmall_py(p,c1,c2,c3,c4,z):
     mu[b0] =1. - np.pi*p**2/norm
     return mu
 
-
 def iofr(c1,c2,c3,c4,r,p):
     """
     Helper function to occult small
@@ -319,9 +347,11 @@ def iofr(c1,c2,c3,c4,r,p):
     sig1=np.sqrt(np.sqrt(1.-(r-p)**2))
     sig2=np.sqrt(np.sqrt(1.-(r+p)**2))
     
-    res = 1.-c1*(1.+(sig2**5-sig1**5)/5./p/r) - c2*(1.+(sig2**6-sig1**6)/6./p/r) -  c3*(1.+(sig2**7-sig1**7)/7./p/r) - c4*(p**2+r**2)
+    res = 1.-c1*(1.+(sig2**5-sig1**5)/5./p/r) - \
+        c2*(1.+(sig2**6-sig1**6)/6./p/r) - \
+        c3*(1.+(sig2**7-sig1**7)/7./p/r) - \
+        c4*(p**2+r**2)
     return res
-
 
 def occultsmallt_py(t,p,c1,c2,c3,c4,tau,b):
     z =  np.sqrt( (t/tau)**2 + b**2 )
@@ -361,7 +391,6 @@ def MA(pL,climb,t,usamp=11,occultsmallt=occultsmallt_fort):
     t     : time t0 = 0 
     occultsmallt : Which version of occultsmallt to call. Python or fortran.
     
-
     Returns
     -------
     fmod : Mandel Agol model convolved with the Kepler observing cadence.

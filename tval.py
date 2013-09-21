@@ -1084,6 +1084,8 @@ def TM_read_h5(h5):
     trans = TransitModel(t,f,ferr,attrs['climb'],pdict)
     return trans
 
+
+
 def TM_to_h5(trans,h5):
     """
     Save results from the fit into an h5 group.
@@ -1092,7 +1094,7 @@ def TM_to_h5(trans,h5):
     fitgrp['fit'] = trans.MA(trans.pdict,trans.t)
 
     fitgrp.create_group('pdict')
-    h5.dict2group('fit/pdict',trans.pdict)
+    dict2group(h5,'fit/pdict',trans.pdict)
 
     dsL = 't,f,ferr,uncert,chain,fits'.split(',')
     for ds in dsL:

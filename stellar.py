@@ -13,7 +13,7 @@ from scipy.io.idl import readsav
 import kbcUtils 
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
-def read_cat(cat,sub=None):
+def read_cat(cat,short=True):
     """
     Read Stellar Catalog
 
@@ -34,7 +34,6 @@ def read_cat(cat,sub=None):
     Add an attribute to DataFrame returned that keeps track of the prov.
     """
 
-    cols = 'kic,teff,logg,prov,Rstar'.split(',')
     if cat=='kepstellar':
         cat     = '%s/keplerstellar.csv' % stellardir
         stellar = pd.read_csv(cat,skiprows=25)
@@ -86,7 +85,11 @@ UR    uRstar"""
     else:
         print "invalid catalog"
         return None
-    stellar = stellar[cols]
+
+    shortcols = 'kic teff logg prov Rstar'.split()
+    if short:
+        stellar = stellar[shortcols]
+
     stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
 
     cat     = '%s/kic_stellar.db' % stellardir
@@ -96,9 +99,6 @@ UR    uRstar"""
     mags    = mags.convert_objects(convert_numeric=True)
     stellar = pd.merge(stellar,mags)
 
-    if sub is not None:
-        sub = pd.DataFrame(sub,columns=['kic'])
-        stellar = pd.merge(sub,stellar) 
     return stellar
 
 

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from numpy import histogram2d as h2d
 import scipy.stats
+from scipy.stats import binom
 import glob
 import os
 from matplotlib.pylab import *
@@ -23,6 +24,7 @@ def loadKOI(cat,short=True):
 
         cat['disp'] = cat.disp.apply(lambda x : x.strip())
     elif cat=='Q12':
+        print "loading cumulative candidate list from Sep 13 2013"
         namemap = {'kepid':'kic','kepoi_name':'koi',
                    'koi_pdisposition':'disp',
                    'koi_period':'P','koi_depth':'df',
@@ -34,6 +36,8 @@ def loadKOI(cat,short=True):
     cat = cat.rename(columns=namemap)
     if short:
         cat = cat[namemap.values()]
+
+    cat.index=cat.koi
     return cat
 def kois2n(koi,par):
     """
@@ -78,22 +82,6 @@ def kois2n(koi,par):
     return max(s2nL)
 
 
-def upoisson(Np):
-    """
-    Poisson Uncertanty
-
-    Returns fractional uncertanty (asymetric)
-    """
-    x  = np.arange(100)
-    cdf = scipy.stats.poisson.cdf(x,Np)
-
-    xi = np.linspace(0,x[-1],1000)
-    yi = np.interp(xi,x,cdf)
-    lo = xi[np.argmin(np.abs(yi-.159))]
-    hi = xi[np.argmin(np.abs(yi-.841))]
-    lo = (Np-lo) / Np
-    hi = (hi-Np) / Np
-    return lo,hi
 
 comp_ness_flds = 'inj_P,inj_Rp,comp'.split(',')
 def completeness(panel,df_mc):
@@ -123,7 +111,7 @@ def completeness(panel,df_mc):
     return panel
 
 
-def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2'],Pthresh=0.1):
+def compareCatalogs(cat1,cat2,suffixes=['_cat1','_cat2'],Pthresh=0.1):
     """
     Compare Catalogs
     
@@ -159,8 +147,10 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2'],Pthresh=0.1):
            in_cat1  : convienience, tcom.in_cat1 ~tcom.P_cat1.isnull()
            in_cat2 : same
     """
-    cat1 = cat1.rename(columns={'P':'P_cat1'})
-    cat2 = cat2.rename(columns={'P':'P_cat2'})
+
+    for c in  (cat1.columns & cat2.columns).drop('kic'):
+        cat1 = cat1.rename(columns={c:c+'_cat1'})
+        cat2 = cat2.rename(columns={c:c+'_cat2'})
 
     cat10 = cat1.copy()
     cat20 = cat2.copy()
@@ -179,11 +169,10 @@ def compareCatalogs(cat1,cat2,suffixes=['cat1','cat2'],Pthresh=0.1):
 
     col0 = tcom.columns
     for c in col0:
-        if c.find('cat1') != -1:
-            tcom = tcom.rename( columns={ c:c.replace('cat1',suffixes[0]) } )
-        elif c.find('cat2') != -1:
-            tcom = tcom.rename( columns={ c:c.replace('cat2',suffixes[1]) } )
-
+        if c.find('_cat1') != -1:
+            tcom = tcom.rename( columns={ c:c.replace('_cat1',suffixes[0]) } )
+        elif c.find('_cat2') != -1:
+            tcom = tcom.rename( columns={ c:c.replace('_cat2',suffixes[1]) } )
 
     return tcom
 
@@ -231,6 +220,7 @@ def marg(panel,maxis):
     Marginalize over a given axis
     """
 
+
     axes = panel.axes
     if maxis=='P':
         maxis=1
@@ -240,9 +230,11 @@ def marg(panel,maxis):
         firstcols = 'P1,P2,Pc'.split(',')
         panel = panel.swapaxes(1,2)
 
-    sumcols     = 'fcell,fcellRaw,fcellAdd,Np,NpAdd'.split(',') 
+
+    sumcols     = 'fcell,fcellRaw,fcellAdd,NstarEff,Np,NpAdd'.split(',') 
     sumquadcols = 'ufcell1,ufcell2'.split(',') 
     allcols     = firstcols + sumcols + sumquadcols
+
 
     iaxes = [1,2]      # Keep the axis that we're not moving
     iaxes.remove(maxis)
@@ -288,13 +280,6 @@ def addpdf(a,b):
     ib = random_integers(0,a.size-1,a.size)
     return a[ia] + b[ib]
 
-
-def addPoisson(panel):
-    dfshape = panel.shape[1],panel.shape[2]
-    res = map(upoisson,np.array(panel['Np']).flatten())
-    panel['fuNp1']    = np.array([r[0] for r in res]).reshape(dfshape)
-    panel['fuNp2']    = np.array([r[1] for r in res]).reshape(dfshape)
-    return panel
 
 #######################################################################
 def addFeat(df,ver=False):
@@ -510,7 +495,7 @@ Pipeline Summary
 ----------------
 %6i Light curves submitted
 %6i completed TERRA-grid
-%6i completed TERRA-DV\
+%6i completed TERRA-DV
 """ % (self.nlc , self.ngrid, self.nfit)
         
         if self.cuts is not None:
@@ -609,6 +594,15 @@ gridDict = {
          70.7, 100, 141, 200, 283, 400],
         [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
         ),
+    'terra1yr-fineRp':(
+        [6.25,12.5,25,50.0,100,200,400],
+        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
+        ),
+    'terra1yr-fineP':(
+        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
+         70.7, 100, 141, 200, 283, 400],
+        [0.5, 1.0, 2,4.0,8.0,16.]  
+        ),
     'terra50d':(
         [5,10.8,23.2,50],
         [0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.]
@@ -662,6 +656,30 @@ class MC(TERRA):
         f = lambda x : text(x['P1'],x['Rp1'],x['scomp'],size='x-small')
         cPnl['scomp'] = (cPnl['comp'] * 100).astype(int).astype(str) + '%' 
         cPnl.to_frame().apply(f,axis=1)
+
+def plotcomp2panel(mc):
+    cPnl = mc.getPanel()
+    cPnl.comp.T.sort(ascending=False)*100
+
+    fig,axL = subplots(ncols=2,figsize=(12,5),sharex=True,sharey=True)
+
+    sca(axL[0])
+    loglog()
+    mc.plotDV()
+    logticks('both')
+    title('Results from 10^4 Injection and Recovery Experiements')
+
+    sca(axL[1])
+    loglog()
+    mc.plotCompPanel()
+
+    logticks('both')
+    xlim(5,500)
+    ylim(0.4,20)
+    labelPRp()
+    title('TERRA Completeness Best42k')
+    tight_layout()
+
 
 maxRpPlanet = 20 # Objects larger than 20 Re, will
 
@@ -742,8 +760,9 @@ class TPS(TERRA):
         tce['dsg'] = dsg
         tce['myFP']   = myFP
         tce['centFP'] = centFP
-        self.tce = tce
-
+        return tce
+    
+        
     def getFPtab(self):
         ekoi = self.geteKOI()
         
@@ -846,16 +865,14 @@ def add_triage(dsg0,sel,field):
 
 
 class Occur():
-    def __init__(self,tps,mc):
-        self.tps = tps
-        self.mc  = mc
+    def __init__(self,plnt,mc,nlc):
+        self.mc   = mc
+        self.plnt = plnt
+        self.nlc  = nlc
 
     def OccurPanel(self):
         cPnl = self.mc.getPanel()
-        ekoi = self.tps.geteKOI()
-        ekoi['dsg'] = self.tps.getFPtab()
-        plnt = ekoi[ekoi.dsg=='plnt']
-        occur = occurrence(plnt,cPnl,self.tps.nlc)
+        occur = occurrence(self.plnt,cPnl,self.nlc)
         occur['pcomp']  = occur['comp']  * 100
         occur['pfcell'] = occur['fcell'] * 100
         occur['pflogA'] = occur['flogA'] * 100
@@ -871,39 +888,39 @@ class Occur():
 
         occur.to_frame().apply(anntext,axis=1)
 
-def plotOccur2D(occur,Pb,Rpb,plnt,compThresh=0.25):
-    """
-    Draw 2D occurrence distribution
-    """
 
-    plot(plnt.P,plnt.Rp,'s',color='Tomato',mew=0,mec='Tomato',ms=3)
-
-
-    def f(x):
-        offset = 1.01
-        s = """\
-%(Np)i (%(NpAug).1f)
-%(pcomp)i%%""" % x
-        text(x['P1']*offset,x['Rp1']*offset,s,size='x-small',ha='left')
-
-        s = """\
-%(pfcell).2f%%
-%(pflogA).2f%%""" % x
-        text(x['P2']/offset,x['Rp1']*offset,s,size='x-small',ha='right')
-
-    occur.to_frame().apply(f,axis=1)
-
+def plotOccur2DChecker(occur,compThresh=0.25,cbar=True):
+    Pb,Rpb = getpanelbins(occur,as_array=True)
     step  = 0.01
-
     occur['colors'] = occur['fcell']
-    colors = ma.masked_array( occur['colors'] , occur['comp'] < compThresh ).T
+    colors = ma.masked_array( occur['colors'],occur['comp'] < compThresh ).T
     maxco = np.ceil( colors.max()/step ) * step
 
     pcolor(Pb,Rpb,colors,cmap='YlGn',vmin=0,vmax=maxco*1.5,
            edgecolors='LightGrey',lw=1)
-    boundaries=linspace(0,maxco,maxco/step + 1)
-    cb = colorbar(drawedges=False,boundaries=boundaries,shrink=.5)
-    cb.set_label('Planet Occurrence',size='small')
+    if cbar:
+        boundaries=linspace(0,maxco,maxco/step + 1)    
+        cb = colorbar(drawedges=False,boundaries=boundaries,shrink=.5)
+        cb.set_label('Planet Occurrence',size='small')
+
+def annOccur2D(occur,plnt,compThresh=0.25):
+    """
+    Draw 2D occurrence distribution
+    """
+    def f(x):
+        offset = 1.01
+        s = """\
+%(Np)i
+%(pcomp)i%%""" % x
+        text(x['P1']*offset,x['Rp1']*offset,s,size='x-small',ha='left')
+
+        s = """\
+%.1f
+%.1f%%""" % (x['NpAug']/100,x['pfcell'])
+        text(x['P2']/offset,x['Rp1']*offset,s,size='x-small',ha='right')
+
+    occur.to_frame().apply(f,axis=1)
+
 
 def getbins(df,name):
     bins = list(df[name+'1']) + list(df[name+'2'])
@@ -911,11 +928,14 @@ def getbins(df,name):
     bins.sort()
     return bins
 
-def getpanelbins(panel):
+def getpanelbins(panel,as_array=False):
     lua = lambda x : list(np.unique(np.array(x)))
     Rpb = lua(panel.Rp1) + [ lua(panel.Rp2)[-1] ]
     Pb  = lua(panel.P1)  + [ lua(panel.P2)[-1]  ]
-    bins = Pb,Rpb
+    if as_array:
+        bins = np.array(Pb),np.array(Rpb)
+    else:
+        bins = Pb,Rpb
     return bins
 
 def plotOccur1D(dfMarg,name):
@@ -989,20 +1009,38 @@ def occurrence(df_tps,cPnl,nstars):
         return h2d(df_tps['P'],df_tps['Rp'],bins=bins,**kw)[0]
 
     pnl['Np']       = countPlanets(weights=ones(len(df_tps)))
-    pnl             = addPoisson(pnl)
-    pnl['NpAug']    = countPlanets( weights=df_tps['a/Rstar'] )
+    pnl['NpAug']    = countPlanets(weights=df_tps['a/Rstar'] )
 
-    pnl['fcellRaw'] = pnl['NpAug']    / nstars
-    pnl['fcell']    = pnl['fcellRaw'] / pnl['comp']
-    pnl['fcellAdd'] = pnl['fcell'] - pnl['fcellRaw']
-    pnl['NpAdd']    = pnl['Np'] * ( 1/pnl['comp'] - 1 )
 
-    pnl['ufcell1'] = pnl['fcell'] * pnl['fuNp1']
-    pnl['ufcell2'] = pnl['fcell'] * pnl['fuNp2']
+    # Add in planet occurrence
+    pnl['fcellRaw'] = pnl.NpAug  / nstars
+    pnl['fcell']    = pnl.fcellRaw / pnl.comp
+    pnl['fcellAdd'] = pnl.fcell - pnl.fcellRaw
+    pnl['NpAdd']    = pnl.Np * ( 1/pnl.comp - 1 )
 
-    pnl['log10Rp']  = np.log10(pnl['Rp2']/pnl['Rp1'])
-    pnl['log10P']   = np.log10(pnl['P2']/pnl['P1'])
-    pnl['flogA']    = pnl['fcell'] / (pnl['log10Rp'] * pnl['log10P'])
+    # Add in uncertanties Treat occurrence uncertanties as binomial
+    # distributed values Np planets are drown from NstarEff stars. Is
+    # the expected number of stars that have a planet in a certain
+    # size bin, have low enough noise levels to permit detection of
+    # said planet, and where the planet transits
+    
+    pnl['NstarEff'] = pnl.Np / pnl.fcell
+
+    df = pnl.to_frame(filter_observations=False)
+    def getBinomPercen(p):
+        f = lambda x : binom(x['NstarEff'],x['fcell']).ppf(p)
+        return df.apply(f,axis=1)
+
+    df['uNp1'] = df['Np'] - getBinomPercen(.15)
+    df['uNp2'] = getBinomPercen(.85) - df['Np']
+    pnl = df.to_panel()
+    
+    for lim in ['1','2']:
+        pnl['ufcell'+lim] = pnl.fcell * pnl['uNp'+lim ] / pnl.Np
+
+    log10Rp  = np.log10(pnl.Rp2/pnl.Rp1)
+    log10P   = np.log10(pnl.P2/pnl.P1)
+    pnl['flogA']    = pnl['fcell'] / (log10Rp * log10P)
     return pnl
 
     
@@ -1113,15 +1151,60 @@ def read_pngtree(path,centroid=False):
         ekoi['notplanet'] = ekoi.notplanet.astype(bool)
         return ekoi
 
+def plawval(p,x):
+    """
+    evaluate p[0]*x**p[1]
+    """
+    return p[0]*x**p[1]
 
+def obj(p,x,y,yerr,func):
+    """
+    Objective function for power-law fit
+    """
+    model = func(p,x)
+    resid = (y-model)/yerr
+    return np.sum(resid**2)
 
+def sclBinomRv(scl,n,p,ndraws=100):
+    """
+    Scaled binomial random variable
+    """
+    rv = binom(n,p)
+    draws = rv.rvs(ndraws)
+    return scl*draws / (n*p)
 
+def sclBinomReal(scl,n,p):
+    """
+    Scaled Binomial Realization
+    
+    y : mean value
+    n : number of trials
+    p : probability of sucess
+    """
+    nel = len(scl)
+    res = np.zeros(nel)
+    for i in range(nel):
+        res[i] = sclBinomRv(scl[i],n[i],p[i],ndraws=1)
+    return res
 
+from scipy.optimize import fmin
 
+def fitplaw(x,y,yerr):
+    npts = len(x)
+    nfit = 100 
+    parr = np.zeros((nfit,2))
+    for i in range(100):
+        yreal = np.zeros(npts)
+        for j in range(len(x)):
+            yreal[j] = y[j] + yerr[j]*np.random.randn()
 
+        p1 = fmin(obj,[1,1],args=(x,yreal,yerr,plawval),disp=0)
+        parr[i,:] = p1
+    
+    return parr
+        
 
-
-
+# Plotting help
 
 
 def labelPRp():

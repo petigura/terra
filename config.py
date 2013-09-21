@@ -15,6 +15,7 @@ Rearth     = 6.378e8  # cm
 Msun       = 1.989e33 # [g]
 AU         = 1.496e13 # [cm]
 sec_in_day = 86400.
+stefan_boltzmann = 5.6704e-5 # [erg cm^-2 s^-1 K^-4]
 
 # sim
 blockSize = 1000
