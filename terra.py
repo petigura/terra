@@ -222,6 +222,7 @@ def dv(par):
 
     """
     print "Running dv on %s" % par['outfile'].split('/')[-1]
+    par['update'] = True  # need to use h5plus for MCMC
 
     with h5F(par) as h5:
 
