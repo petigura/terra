@@ -217,9 +217,8 @@ def addpcols(df0,lables):
 
 def marg(panel,maxis):
     """
-    Marginalize over a given axis
+    Marginalize over a given axis uses cell by cell occurrence
     """
-
 
     axes = panel.axes
     if maxis=='P':
@@ -252,6 +251,47 @@ def marg(panel,maxis):
             df.ix[:,k] = np.sqrt( (table**2).sum() )
 
     return df
+
+def marglocal(plnt,bins,mcol):
+    """
+    Marginalize 
+    """
+    
+    print "marginalizing over %s" % mcol
+    if mcol=='P':
+        kcol = 'Rp'
+        pnl = zerosPanel(array([-1,-1]),bins)
+        df = pnl.iloc[:,0,:]
+        df = df.drop('P1 P2 Pc'.split(),axis=1)
+    elif mcol=='Rp':
+        kcol = 'P'
+        pnl = zerosPanel(bins,array([-1,-1]))
+        df = pnl.iloc[:,:,0]
+        df = df.drop('Rp1 Rp2 Rpc'.split(),axis=1)
+
+
+    def h1d(*args,**kw):
+        return histogram(*args,bins=bins,**kw)[0]
+
+    df['Np']       = h1d(plnt[kcol])
+    df['fcell']    = h1d(plnt[kcol],weights=plnt.f)
+    df['fcellRaw'] = h1d(plnt[kcol],weights=plnt.fraw)
+    df['fcellAdd'] = df['fcell'] - df['fcellRaw']
+    df['NpAdd']    = df.Np * df['fcellAdd'] / df['fcellRaw'] 
+    df['NstarEff'] = df.Np / df.fcell
+
+    def getBinomPercen(p):
+        f = lambda x : binom(x['NstarEff'],x['fcell']).ppf(p)
+        return df.apply(f,axis=1)
+
+    df['uNp1'] = df['Np'] - getBinomPercen(.15)
+    df['uNp2'] = getBinomPercen(.85) - df['Np']
+
+    for lim in ['1','2']:
+        df['ufcell'+lim] = df.fcell * df['uNp'+lim ] / df.Np
+    df = addpcols(df,['fcell'])
+    return df
+
 
 def calcufcell(x):
     """
@@ -393,6 +433,51 @@ def MC(pp,res,cuts,stellar):
 
     DV = wrap(DV)
     return DV
+
+
+def CompSurface(DV):
+    """
+    Completeness Surface
+
+    Evaluate the completeness over an entire domain in P,Rp. At each
+    point (Pc,Rpc) draw a box 
+
+    """
+
+    Plim  = (0.5,400)
+    Rplim = (0.5,20)
+
+    nPG  = 100
+    nRpG = 100 
+
+    def getslice(lim,nsamp):
+        return slice( log(lim[0]) , log(lim[1]) , nsamp*1j )
+
+    PG,RpG  = exp(mgrid[ getslice(Plim,nPG), getslice(Rplim,nRpG) ] )
+    nTot  = np.zeros(PG.shape)
+    nPass = np.zeros(PG.shape)
+    
+    for i in range(nPG):
+        for j in range(nRpG):
+            Pc  = PG[i,j]  # 
+            Rpc = RpG[i,j]
+
+            nTot[i,j],nPass[i,j] = getcomp(DV,Pc,Rpc)
+
+    comp = nPass/nTot
+    return PG,RpG,comp,nTot
+
+def getcomp(DV,xc,yc,xs='inj_P',ys='inj_Rp',xw=1.4,yw=1.2):
+    """
+    Evaluate completeness over a small box
+    """
+    xlim = xc/xw,xc*xw
+    ylim = yc/yw,yc*yw
+
+    b = DV[xs].between(*xlim) & DV[ys].between(*ylim)
+    nTot = b.sum()
+    nPass = (DV.found & DV.bDV & b).sum()
+    return nTot,nPass
 
 def plotWhyFailDV(DV,cuts,s2n=True):
     """
@@ -980,16 +1065,21 @@ def plotOccur1D(dfMarg,name):
     dfMarg.apply(f2,axis=1)        
 
 
-def addlines(panel):
-    Pb,Rpb = getpanelbins(panel)
-    Pb,Rpb = np.array(Pb) , np.array(Rpb)
-    colors = np.zeros(panel.fcell.T.shape)
-    pcolor(Pb,Rpb, colors, edgecolors='LightGrey',lw=1,cmap=cm.gray_r)
 
+
+def addlines(Pb,Rpb,**kw):
+    colors = np.zeros((Pb.size-1,Rpb.size-1)).T
+    pcolor(Pb,Rpb, colors, edgecolors='LightGrey',lw=1,cmap=cm.gray_r,**kw)
 
 def occurrence(df_tps,cPnl,nstars):
     """
+    Planet Occurrence Average Completeness
 
+    Break region up into bins. Count planets per bin as a/Rstar. Then
+    augment that number by the average completeness in a bin. This
+    method gives biased results when the bins do not have uniformly
+    distributed planets.
+    
     Parameters
     ----------
     Pb     : bins in period
@@ -1043,7 +1133,53 @@ def occurrence(df_tps,cPnl,nstars):
     pnl['flogA']    = pnl['fcell'] / (log10Rp * log10P)
     return pnl
 
+def addLocalOccurrence(plnt,DV,nlc):
+    plnt['nTot'] = 0.
+    plnt['nPass'] = 0.
+    for i in plnt.index:
+        nTot,nPass = getcomp(DV,plnt.ix[i,'P'],plnt.ix[i,'Rp'])
+        plnt.ix[i,'nTot'] = nTot
+        plnt.ix[i,'nPass'] = nPass
+    plnt['C']        = 1.*plnt['nPass'] / plnt['nTot']
+    plnt['nPlntRaw'] = plnt['a/Rstar']
+    plnt['nPlntTot'] = plnt['a/Rstar'] / plnt['C']
+    plnt['fraw']     = plnt['nPlntRaw']  / nlc
+    plnt['f']        = plnt['nPlntTot']  / nlc
+    return plnt
+
+def LocalOccurrencePanel(plnt,Pb,Rpb):
+    pnl = zerosPanel(Pb, Rpb)
+    bins = (Pb,Rpb)
+
+    def countPlanets(**kw):
+        return h2d(plnt.P,plnt.Rp,bins=bins,**kw)[0]
+
+    pnl['Np']    = countPlanets()
+    pnl['fcell'] = countPlanets(weights=plnt.f)
+    pnl['NstarEff'] = pnl.Np / pnl.fcell
+
+    df = pnl.to_frame(filter_observations=False)
+    def getBinomPercen(p):
+        f = lambda x : binom(x['NstarEff'],x['fcell']).ppf(p)
+        return df.apply(f,axis=1)
+
+    df['uNp1'] = df['Np'] - getBinomPercen(.15)
+    df['uNp2'] = getBinomPercen(.85) - df['Np']
+    pnl = df.to_panel()
     
+    for lim in ['1','2']:
+        pnl['ufcell'+lim] = pnl.fcell * pnl['uNp'+lim ] / pnl.Np
+
+    return pnl
+
+
+
+
+
+
+
+
+
 def plotDV(DV,cases=2):
     """
     Displays results from injection and recovery.
@@ -1080,9 +1216,12 @@ def plotDV(DV,cases=2):
 
     elif cases==2:
         b = DV.found & DV.bDV
-        cplot(b,'s',ms=2,mfc='RoyalBlue',mew=0,lw=0,mec='RoyalBlue')
+        kw = dict(ms=1.5,mfc='RoyalBlue',mew=0,lw=0,mec='RoyalBlue',rasterized=True)
+        cplot(b,'s',label='Recovered',**kw)
         b = ~(DV.found & DV.bDV)
-        cplot(b,'s',ms=2,mfc='Tomato',mew=0,lw=0,mec='Tomato')
+        kw['mec'] = kw['mfc']  = 'Tomato'
+        kw['alpha'] = 0.7
+        cplot(b,'s',label='Missed',**kw)
 
 def read_pp(file):
     pp     = pd.read_csv(file,index_col=0)

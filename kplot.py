@@ -37,6 +37,10 @@ annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light'
 rc('axes',color_cycle=['RoyalBlue','Tomato'])
 rc('font',size=8)
 
+def AddAnchored(*args,**kwargs):
+    at = AnchoredText(*args,**kwargs)
+    gca().add_artist(at)
+
 def plot_diag(h5,tpar=False):
     """
     Print a 1-page diagnostic plot of a given h5.
@@ -85,27 +89,56 @@ def plot_diag(h5,tpar=False):
 
     # Top row
     axPeriodogram  = fig.add_subplot(gs[0,0:8])
-    axSingSES      = fig.add_subplot(gs[0,-2])
-    axSeason       = fig.add_subplot(gs[0,-1])
+    axAutoCorr = fig.add_subplot(gs[0,8])
 
     # Second row
     axPF       = fig.add_subplot(gs[1,0:2])
     axPFzoom   = fig.add_subplot(gs[1,2:4],sharex=axPF,)
     axPF180    = fig.add_subplot(gs[1,4:6],sharex=axPF)
     axPFSec    = fig.add_subplot(gs[1,6:8],sharex=axPF)
-    axScar     = fig.add_subplot(gs[1,8])
-    axAutoCorr = fig.add_subplot(gs[1,9])
+    axSingSES      = fig.add_subplot(gs[1,-2])
+    axSeason       = fig.add_subplot(gs[1,-1])
 
     # Last row
     axStack        = fig.add_subplot(gs[2:8 ,0:8])
     axStackZoom    = fig.add_subplot(gs[2:8 ,8:])
 
-    tight_layout()
-    gcf().subplots_adjust(hspace=0.01,wspace=0.01)
-
     # Top row
     sca(axPeriodogram)
     plotPeriodogram(h5)
+
+    sca(axAutoCorr)
+    plotAutoCorr(h5)
+    AddAnchored("ACF",prop=tprop,frameon=True,loc=2)    
+
+    d = dict(h5.attrs)
+    s = """
+KIC-%(skic)i
+
+P     %(P).3f 
+t0    %(t0).2f 
+tdur  %(tdur).2f 
+SNR   %(s2n).2f
+grass %(grass).2f""" % d
+    text(1.2,0,s,family='monospace',size='large',transform=gca().transAxes)
+
+    # Second row
+    sca(axPF)
+    plotPF(h5,0,diag=True)
+    ylabel('Flux')
+    AddAnchored("Phased",prop=tprop,frameon=True,loc=3)
+
+    sca(axPFzoom)
+    plotPF(h5,0,diag=True,zoom=True)
+    AddAnchored("Phased Zoom",prop=tprop,frameon=True,loc=3)
+
+    sca(axPF180)
+    plotPF(h5,180,diag=True)
+    AddAnchored("Phased 180",prop=tprop,frameon=True,loc=3)
+
+    sca(axPFSec)
+    plotSec(h5)
+    AddAnchored("Secondary\nEclipse",prop=tprop,frameon=True,loc=3)
 
     sca(axSingSES)
     plotSingSES(h5)
@@ -113,34 +146,24 @@ def plot_diag(h5,tpar=False):
     sca(axSeason)
     plotSeason(h5)
 
-    # Second row
-    sca(axPF)
-    plotPF(h5,0,diag=True)
-
-    sca(axPFzoom)
-    plotPF(h5,0,diag=True,zoom=True)
-
-    sca(axPF180)
-    plotPF(h5,180,diag=True)
-
-    sca(axPFSec)
-    plotSec(h5)
-
-    sca(axScar)
-    plotScar(h5)
-
-    sca(axAutoCorr)
-    plotAutoCorr(h5)
 
     # Bottom row
     sca(axStack)
     plotSES(h5)
-    
-    if h5.attrs['num_trans'] < 20: 
-        sca(axStackZoom)
-        plotCalWrap(h5)
+    xlabel('Phase')
+    AddAnchored("SES Stack",prop=tprop,frameon=True,loc=2)
 
-    # Info
+    sca(axStackZoom)
+    if h5.attrs['num_trans'] < 20: 
+        plotCalWrap(h5)
+        xlabel('t-t0')
+        AddAnchored("Transit Stack",prop=tprop,frameon=True,loc=2)
+    else:
+        AddAnchored("Transit Stack\nToo Many Transits",prop=tprop,frameon=True,loc=2)
+        gca().xaxis.set_visible(False)
+        gca().yaxis.set_visible(False)
+        pass
+
     if tpar==False:
         h5.noPrintRE = '.*?file|climb|skic|.*?folder'
         h5.noDiagRE  = \
@@ -154,9 +177,12 @@ def plot_diag(h5,tpar=False):
             s += '%s %s\n' % (k,h5.attrs[k])
 
     bbkw = dict(visible=True,fc='white',alpha=0.5)
-    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
-                      transform=axStack.transAxes)
+#    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
+#                      transform=axStack.transAxes)
+
     tight_layout()
+    gcf().subplots_adjust(hspace=0.4)
+
 
 def plotSec(h5):
     """
@@ -169,11 +195,13 @@ def plotSec(h5):
     rPF = tval.PF(h5.t,h5.fm,at['P'],at['s2ncut_t0'],at['tdur'])
     plot(rPF['tPF'],rPF['f'])
 
-    title = 'ph = %.1f' % ((at['t0'] - at['s2ncut_t0']) / at['P'] * 360.)
-    cax = gca()
-    cax.xaxis.set_visible(False)        
-    at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
-    cax.add_artist(at)
+    t0shft = at['t0'] - at['s2ncut_t0']
+    ph = t0shft / at['P'] * 360
+
+    title = 'ph = %.1f' % ph
+    AddAnchored(title,prop=tprop, frameon=False,loc=4)
+    xl   ='t - (t0 + %.1f) [days]' % t0shft
+    xlabel(xl)
 
 def MC_diag(h5):
     fig = figure(figsize=(10,6))
@@ -228,6 +256,13 @@ b   %(b)s +/- %(ub)s
     text(1.1,0,s,transform=axbpzoom.transAxes,family='monospace',size='large')
     tight_layout()
     fig.subplots_adjust(hspace=0.0001)
+
+def plot_PF_paper(h5):
+    """
+    
+    """
+    plotPF(h5,0)
+
 
 def plotfitchain(h5,ax1,ax2):
     """
@@ -288,7 +323,6 @@ def ytickspercen():
     """
     yt = yticks()[0]
     yt = (yt*1e2)
-#    yt = np.round(yt,)
     yticks(yt/1e2,yt)
 
 def plotSingSES(h5):    
@@ -296,19 +330,21 @@ def plotSingSES(h5):
     rses = h5['SES']
     plot(rses['tnum'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
-    at = AnchoredText('Transit SES',prop=tprop, frameon=False,loc=2)
-    cax.add_artist(at)
+    AddAnchored('Transit SES',prop=tprop, frameon=False,loc=3)
     xl = xlim()
     xlim(xl[0]-1,xl[-1]+1)
+    yl = ylim()
+    ylim(-100,yl[1])
 
 def plotSeason(h5):
     cax = gca()
     rses = h5['SES']
     cax.plot(rses['season'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
-    at = AnchoredText('Season SES',prop=tprop, frameon=False,loc=2)
-    cax.add_artist(at)
+    AddAnchored('Season SES',prop=tprop,  frameon=False,loc=3)
     xlim(-1,4)
+    yl = ylim()
+    ylim(-100,yl[1])
 
 def plotScar(h5):
     """
@@ -349,15 +385,15 @@ def plotAutoCorr(pk):
 def plotPF(h5,ph,diag=False,zoom=False):
     PF = h5['lcPF%i' % ph]
     x  = PF['tPF']
-    
+
     @handelKeyError
     def plot_phase_folded():
         if zoom==False:
-            plot(x,PF['f'],',',color='k')
+            plot(x,PF['f'],'.',ms=2,color='k')
         bPF = h5['blc30PF%i' % ph][:]
         t   = bPF['tb']
         f   = bPF['med']
-        plot(t,f,'+',ms=5,mew=3,color='Chartreuse')
+        plot(t,f,'+',ms=5,mew=1.5,color='Chartreuse')
 
     @handelKeyError
     def plot_fit():
@@ -365,15 +401,16 @@ def plotPF(h5,ph,diag=False,zoom=False):
         t    = fitgrp['t']
         f    = fitgrp['f']
         ffit = fitgrp['fit'][:]
-        plot(t,ffit,'r--',lw=3,alpha=0.7)
+        plot(t,ffit,'--',color='Tomato',lw=3,alpha=1)
 
     plot_phase_folded()
     if ph==0:
         plot_fit()
         title='ph = 0'
+        xl   ='t - t0 [days]'
     else:
         title='ph = 180'
-
+        xl   ='t - (t0 + P/2) [days]'
     
     depth = h5.attrs['mean']
     if depth < 1e-4:
@@ -381,15 +418,11 @@ def plotPF(h5,ph,diag=False,zoom=False):
 
     if zoom==True:
         autoscale(axis='y')
-
     if diag:
-        cax = gca()
-        cax.xaxis.set_visible(False)        
-        at = AnchoredText(title,prop=tprop,frameon=False,loc=4)
-        cax.add_artist(at)
+        AddAnchored(title,prop=tprop,frameon=False,loc=4)
     
-    autoscale('x')
-    xlabel('t - t0 [days]')
+    autoscale('x')    
+    xlabel(xl)
 
 def handelKeyError(func):
     """
@@ -463,8 +496,10 @@ def plotPeriodogram(h5):
     xticks(xt,xt)
     at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
     cax.add_artist(at)
+    ylabel('SNR')
     cax.xaxis.set_ticks_position('top')
-    ylabel('MES')
+    cax.xaxis.set_label_position('top') 
+    xlabel('Period [days]')
     
     plot(x,y)
     id = np.argsort( np.abs(x - h5.attrs['P']) )[0]
@@ -892,7 +927,7 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
         ax.annotate('%.1f ' % x['tmid'], xy=xy, xytext=(10, 10),**annkw)
 
     df.apply(plot,axis=1)
-
+    return df
 class TransitModel(tval.TransitModel):
     """
     Simple plotting extension of the normal TransitModel class:
