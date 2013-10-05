@@ -61,7 +61,7 @@ class TransitModel:
         pdict0 = copy.copy(self.pdict)
         tau0   = pdict0['fdur']
 
-        dt_per_lc = 3   # Number trial t0 per grid point
+        dt_per_lc = 10   # Number trial t0 per grid point
         dtarr = np.linspace(-2*tau0,2*tau0,4*tau0/keptoy.lc*dt_per_lc)
 
         def f(dt):
@@ -97,13 +97,15 @@ class TransitModel:
         f_model = self.trap(pdict,self.t)
         resid   = (self.f - f_model)/self.ferr
         X2 = (resid**2).sum()
-        if abs(pdict['df'])<0.:
+        if pdict['df']<1e-5:
             X2=np.inf            
         if (pdict['fdur'] < 0) or (pdict['fdur'] > 1 ) :
             X2=np.inf
         if (pdict['wdur'] > 2) or (pdict['wdur'] < 0):
             X2=np.inf
-
+        if ((pdict['wdur'] + pdict['fdur']) < 0.02):
+            X2=np.inf
+        
         return X2
 
     def pL2pdict(self,pL):
