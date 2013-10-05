@@ -329,6 +329,8 @@ def rqmask(r0):
          - isStep
          - isOutlier
          - isBadReg
+         - desat
+         - atTwk
     """
     r = r0.copy()
     

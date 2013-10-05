@@ -44,7 +44,7 @@ def pp(par):
           - rawfile 
           - outfile
           - type = mc/tps
-          
+          - update : Overwrite exsiting files? True/False
           - inj_P,inj_phase,inj_p,inj_tau,inj_b      <-- only for mc
           - a1,a2,a3,a4 limb darkening coefficients  <-- inj/rec runs
 
@@ -55,9 +55,10 @@ def pp(par):
     >>> import terra
     >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
                'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132,
-               'inj_phase': 0.583,'inj_tau': 0.178, 'outfile':
-               'temp.grid.h5', 'skic': 7831530, 'svd_folder':
-               '/global/project/projectdirs/m1669/Kepler/svd/',
+               'inj_phase': 0.583,'inj_tau': 0.178, 
+               'outfile':'temp.grid.h5', 
+               'skic': 7831530, 
+               'svd_folder':'/global/project/projectdirs/m1669/Kepler/svd/',
                'type': 'mc', 'plot_lc':True}
     >>> terra.pp(dpp)
 
@@ -165,13 +166,16 @@ def grid(par):
     -------
 
     >>> import terra
-    >>> dgrid = {'P1_FFA': 2000,'P2_FFA': 2200,
-    'fluxField': 'fcal','fluxMask': 'fmask',
-    'outfile' : 'temp.grid.h5'}
+    >>> dgrid = {'P1': 0.5,'P2': 400,
+                 'fluxField': 'fcal','fluxMask': 'fmask',
+                 'tbase':1440,'update':True,
+                 'outfile':'koi351_comp.h5'}
+    >>> dgrid['P1_FFA'] = int(dgrid['P1'] / keptoy.lc)
+    >>> dgrid['P2_FFA'] = int(dgrid['P2'] / keptoy.lc)
     >>> terra.grid(dgrid)    
-
+    
     """
-    names = 'P1,P2,Pcad1,Pcad2,delT1,delT2,twdG'.split(',')
+    names = 'P1 P2 Pcad1 Pcad2 delT1 delT2 twdG'.split()
 
     parL = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
     df = pandas.DataFrame(parL,columns=names)

@@ -886,6 +886,7 @@ class TransitModel:
         grid that spans twice the transit duration. At each trial t0,
         we find the best fitting MA model. We adopt the displacement
         with the minimum overall Chi2.
+
         """
         # For the starting value to the optimization, use the current
         # parameter vector.
@@ -1049,7 +1050,7 @@ running MCMC
            3 parameters : p,tau,b
            2 parameters : p,tau (b is taken from self.fixb)
         """
-        pMA3 = [ pdict[k] for k in 'p,tau,b'.split(',') ] 
+        pMA3 = [ pdict[k] for k in 'p tau b'.split() ] 
         res = keptoy.MA(pMA3, self.climb, t - pdict['dt'], usamp=5)
         return res
 

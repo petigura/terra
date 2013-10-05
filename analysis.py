@@ -1036,7 +1036,7 @@ def plotOccur1D(dfMarg,name):
     hist([binc]*2, bins=bins, 
          weights=[dfMarg.fcellRaw,dfMarg.fcellAdd],
          color=['DarkGrey','Tomato'],
-         label=['Raw occurrence','Correction for\n missed planets'],
+         label=['Raw occurrence','Correction for\nmissed planets'],
          histtype='barstacked',rwidth=.98,edgecolor='w')
     
     yerr = vstack([dfMarg.ufcell1,dfMarg.ufcell2])
@@ -1044,13 +1044,26 @@ def plotOccur1D(dfMarg,name):
     
     ax = gca()
     trans = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
-    
-    def f(x):
-        s = "%(pfcell).1f %%" % x
-        y = x['fcell'] + x['ufcell2']+0.002
-        text(x[sbinc],y,s,ha='center')
-    dfMarg.apply(f,axis=1)
 
+
+def ann1dbin(x,**kw):
+    text(x['x'],x['yfcellAdd'],"%(NpAdd).1f" % x,**kw)
+    text(x['x'],x['yfcellRaw'],"%(Np)i" % x,**kw)
+
+def ann1dtop(x,**kw):
+    text(x['x'],x['yerrtop'],"%(pfcell).1f %%\n" % x,**kw)
+
+def annErr(x):
+    """
+    Annotate the top of the error bar with string value contained in 's' field 
+    """
+
+    s = "%(pfcell).1f %%" % x
+    y = x['fcell'] + x['ufcell2']+0.002
+    text(x[sbinc],y,s,ha='center')
+
+
+    dfMarg.apply(f,axis=1)
 
     def f2(x):
         kw = dict(size='x-small',ha='center',va='center',color='w')
@@ -1347,8 +1360,8 @@ def fitplaw(x,y,yerr):
 
 
 def labelPRp():
-    xlabel('Orbital Period [days]')
-    ylabel('Planet Size [Earth-radii]')
+    xlabel('Orbital period (days)')
+    ylabel('Planet size (Earth-radii)')
 
 # Nice logticks
 xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \

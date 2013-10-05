@@ -193,10 +193,22 @@ def box(p,t):
 
 
 def trap(p,t):
+    """
+    Trapezoid transit model
+
+    Parameters
+    ----------
+
+    p : list of transit paramters
+        p[0] - depth
+        p[1] - duration of flat bottom
+        p[2] - duration of the sloping wings
+
+    t : time 
+    """
     df   = p[0]
     fdur = p[1] # Flat duration
     wdur = p[2] # Wing duration
-    df   = 1e-6*df
     f    = np.zeros(t.size)
     abst = np.abs(t)
     bw   = (abst > fdur/2) & ( abst < fdur/2 + wdur)
@@ -329,7 +341,8 @@ def occultsmall_py(p,c1,c2,c3,c4,z):
     tmp  = (1.-c1*(1.-4./5.*x**0.25) - c2*(1.-2./3.*x**0.5) - \
             c3*(1.-4./7.*x**0.75)-c4*(1.-4./8.*x))
 
-    mu[bedge] = 1. - tmp *(p**2*np.arccos((z[bedge]-1.)/p) - (z[bedge]-1.)*np.sqrt(p**2-(z[bedge]-1.)**2))/norm
+    mu[bedge] = 1. - tmp*(p**2*np.arccos((z[bedge]-1.)/p) - 
+                          (z[bedge]-1.)*np.sqrt(p**2-(z[bedge]-1.)**2))/norm
 
     # inside disk
     bin =  (z < 1.-p) & (z != 0.) 
