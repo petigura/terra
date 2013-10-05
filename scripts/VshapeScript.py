@@ -10,6 +10,7 @@ from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 parser = ArgPar(description='Grab the MCMC parameters, stick in csv')
 parser.add_argument('infile',type=str,help='list of files to scrape')
+parser.add_argument('outfile',type=str,help='list of files to scrape')
 args  = parser.parse_args()
 
 h5 = h5py.File(args.infile)
@@ -34,4 +35,4 @@ dt   %(dt).3f""" % trans.pdict
 print args.infile.split('/')[-1][:9] + \
     " %(df).2e %(fdur).3f %(wdur).3f %(dt).3f" % trans.pdict
 at = AnchoredText(s,4,prop=dict(family='monospace'));gca().add_artist(at)
-gcf().savefig(args.infile.replace('h5','vs.png'))
+gcf().savefig(args.outfile)
