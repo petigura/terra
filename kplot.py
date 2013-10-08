@@ -321,9 +321,11 @@ def ytickspercen():
     """
     Convienence function to convert fractional flux to ppm.
     """
-    yt = yticks()[0]
-    yt = (yt*1e2)
-    yticks(yt/1e2,yt)
+    yt  = yticks()[0]
+    yt  = np.round(yt*1e2).astype(int)
+    syt = ["%i%%" %  i for i in yt]
+    yticks(yt/1e2,syt)
+
 
 def plotSingSES(h5):    
     cax = gca()
