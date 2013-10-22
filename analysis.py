@@ -14,7 +14,38 @@ import tfind
 import h5py
 import keptoy
 
+gridDict = {
+    'terra1yr':(
+        [6.25,12.5,25,50.0,100,200,400], # Pb
+        [0.5, 1.0, 2,4.0,8.0,16.]        # Rpb 
+        ),
+    'terra1yr-fine':(
+        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
+         70.7, 100, 141, 200, 283, 400],
+        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
+        ),
+    'terra1yr-fineRp':(
+        [6.25,12.5,25,50.0,100,200,400],
+        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
+        ),
+    'terra1yr-fineP':(
+        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
+         70.7, 100, 141, 200, 283, 400],
+        [0.5, 1.0, 2,4.0,8.0,16.]  
+        ),
+    'terra50d':(
+        [5,10.8,23.2,50],
+        [0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.]
+        )
+    }
+
+for k in gridDict:
+    Pb,Rpb = gridDict[k]
+    gridDict[k] = (np.array(Pb),np.array(Rpb) )
+
+
 koilistdir = os.environ['KFILES']+'koilists/'
+
 def loadKOI(cat,short=True):
     if cat=='CB':
         path = '%s/koi_Burke_20dec2012.tab'
@@ -80,8 +111,6 @@ def kois2n(koi,par):
         s2n  = np.max(meanF[:,t0slice] / noise * sqrt(countF[:,t0slice]))
         s2nL += [s2n]
     return max(s2nL)
-
-
 
 comp_ness_flds = 'inj_P,inj_Rp,comp'.split(',')
 def completeness(panel,df_mc):
@@ -219,21 +248,18 @@ def marg(panel,maxis):
     """
     Marginalize over a given axis uses cell by cell occurrence
     """
-
     axes = panel.axes
     if maxis=='P':
         maxis=1
-        firstcols = 'Rp1,Rp2,Rpc'.split(',')
+        firstcols = 'Rp1 Rp2 Rpc'.split()
     elif maxis=='Rp':
         maxis=2
-        firstcols = 'P1,P2,Pc'.split(',')
+        firstcols = 'P1 P2 Pc'.split()
         panel = panel.swapaxes(1,2)
 
-
-    sumcols     = 'fcell,fcellRaw,fcellAdd,NstarEff,Np,NpAdd'.split(',') 
-    sumquadcols = 'ufcell1,ufcell2'.split(',') 
+    sumcols     = 'fcell fcellRaw fcellAdd NstarEff Np NpAdd'.split() 
+    sumquadcols = 'ufcell1 ufcell2'.split() 
     allcols     = firstcols + sumcols + sumquadcols
-
 
     iaxes = [1,2]      # Keep the axis that we're not moving
     iaxes.remove(maxis)
@@ -276,20 +302,22 @@ def marglocal(plnt,bins,mcol):
     df['Np']       = h1d(plnt[kcol])
     df['fcell']    = h1d(plnt[kcol],weights=plnt.f)
     df['fcellRaw'] = h1d(plnt[kcol],weights=plnt.fraw)
+
     df['fcellAdd'] = df['fcell'] - df['fcellRaw']
     df['NpAdd']    = df.Np * df['fcellAdd'] / df['fcellRaw'] 
     df['NstarEff'] = df.Np / df.fcell
 
-    def getBinomPercen(p):
-        f = lambda x : binom(x['NstarEff'],x['fcell']).ppf(p)
-        return df.apply(f,axis=1)
-
-    df['uNp1'] = df['Np'] - getBinomPercen(.15)
-    df['uNp2'] = getBinomPercen(.85) - df['Np']
-
-    for lim in ['1','2']:
-        df['ufcell'+lim] = df.fcell * df['uNp'+lim ] / df.Np
-    df = addpcols(df,['fcell'])
+#
+#    def getBinomPercen(p):
+#        f = lambda x : binom(x['NstarEff'],x['fcell']).ppf(p)
+#        return df.apply(f,axis=1)
+#
+#    df['uNp1'] = df['Np'] - getBinomPercen(.15)
+#    df['uNp2'] = getBinomPercen(.85) - df['Np']
+#
+#    for lim in ['1','2']:
+#        df['ufcell'+lim] = df.fcell * df['uNp'+lim ] / df.Np
+#    df = addpcols(df,['fcell'])
     return df
 
 
@@ -664,39 +692,16 @@ nTCE = %i
         self.cutkeys = applyCuts(DV,self.cuts)
         return DV
 
-    def setGrid(self,gridName):
-        Pb,Rpb = gridDict[gridName]
+    def setGrid(self,*args):
+        if len(args)==1:
+            Pb,Rpb = gridDict[gridName]
+        else:
+            Pb  = args[0]
+            Rpb = args[1]
+
         self.Pb = Pb
         self.Rpb = Rpb
 
-gridDict = {
-    'terra1yr':(
-        [6.25,12.5,25,50.0,100,200,400], # Pb
-        [0.5, 1.0, 2,4.0,8.0,16.]        # Rpb 
-        ),
-    'terra1yr-fine':(
-        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
-         70.7, 100, 141, 200, 283, 400],
-        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
-        ),
-    'terra1yr-fineRp':(
-        [6.25,12.5,25,50.0,100,200,400],
-        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
-        ),
-    'terra1yr-fineP':(
-        [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
-         70.7, 100, 141, 200, 283, 400],
-        [0.5, 1.0, 2,4.0,8.0,16.]  
-        ),
-    'terra50d':(
-        [5,10.8,23.2,50],
-        [0.5,0.7,1.0,1.4,2,2.8,4.0,5.6,8.0,11.6,16.]
-        )
-    }
-
-for k in gridDict:
-    Pb,Rpb = gridDict[k]
-    gridDict[k] = (np.array(Pb),np.array(Rpb) )
 
 
 class MC(TERRA):
@@ -1354,9 +1359,54 @@ def fitplaw(x,y,yerr):
         parr[i,:] = p1
     
     return parr
-        
 
-# Plotting help
+def ecdffitstraight(x,ecdf,xr):
+    """
+    Fit a straight line to an empirical cumulative distriubtion function.
+    """
+
+    b = (x > xr[0]) & (x < xr[1])
+    ecdf = ecdf[b]
+    x = x[b]
+
+    p1 = polyfit(x,ecdf,1)
+    return x,ecdf,p1
+
+
+def ecdflogUfit(x,ecdf,xr):
+    """
+    Fit an empirical cumulative distribution function with a
+    log-uniform distribution.
+    """
+    
+    x = log2(x)
+    xr = [log2(i) for i in xr]
+    xfit,ecdffit,p1 = ecdffitstraight(x,ecdf,xr)
+    
+    ptp = xr[1] - xr[0] # width of interval (in log units)
+    fac = 1 #ptp / 2       # Use half the sample
+    nreal = 100
+
+    xrarr = linspace(xr[0],xr[0]+fac,nreal)
+    p1arr = np.zeros((nreal,2))
+    for i in range(nreal):
+        res = ecdffitstraight(x,ecdf,xr=[xrarr[i],xrarr[i]+fac])
+        p1arr[i,:] = res[2]
+
+    per = percentile(p1arr[:,0],[15,50,85])
+    
+    res = dict(f=p1[0],uf1=p1[0]-per[0],uf2=per[2]-p1[0])
+    print "Occurrence per octave..."
+    print "%(f).4f +/- %(uf2).4f/%(uf1).4f" % res
+
+    res['ecdffit'] = ecdffit
+    res['xfit'] = 2**xfit
+    res['p1'] = p1
+    res['per'] = per
+    res['p1arr'] = p1arr
+    return res
+
+### Plotting help
 
 
 def labelPRp():
