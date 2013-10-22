@@ -177,9 +177,6 @@ grass %(grass).2f""" % d
             s += '%s %s\n' % (k,h5.attrs[k])
 
     bbkw = dict(visible=True,fc='white',alpha=0.5)
-#    axStack.text( 0.87, 0.01, s, name='monospace',bbox=bbkw, \
-#                      transform=axStack.transAxes)
-
     tight_layout()
     gcf().subplots_adjust(hspace=0.4)
 
