@@ -5,6 +5,44 @@ Functions that supplement matplotlib.
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.widgets as widgets
+
+def one2one(*args,**kwargs):
+    """
+    Plot the one to one line
+    """
+    xl = plt.xlim()
+    yl = plt.ylim()
+    x = np.linspace(xl[0],xl[1],10)
+    y = np.linspace(xl[0],xl[1],10)
+    plt.plot(x,y,*args,**kwargs)
+    
+
+def adjust_spines(ax,spines,pad=10,smart_bounds=False):
+    for loc, spine in ax.spines.items():
+        if loc in spines:            
+            if type(pad)==dict:
+                spine.set_position(('outward',pad[loc]))
+            else:
+                spine.set_position(('outward',pad)) # outward by 10 points
+
+            spine.set_smart_bounds(smart_bounds)
+        else:
+            spine.set_color('none') # don't draw spine
+            
+    # turn off ticks where there is no spine
+    if 'left' in spines:
+        ax.yaxis.set_ticks_position('left')
+    else:
+        # no yaxis ticks
+        ax.yaxis.set_ticks([])
+
+    if 'bottom' in spines:
+        ax.xaxis.set_ticks_position('bottom')
+    else:
+        # no xaxis ticks
+        ax.xaxis.set_ticks([])
+
 
 def appendAxes(axlist,nplots,plotidx):
     """
@@ -94,3 +132,37 @@ def errptTest(**kwargs):
     ax = plt.subplot(111)
     xerr = yerr = np.array([[.1],[.2]])
     ax = errpt(ax,(.2,.2),xerr=xerr,yerr=yerr,**kwargs)
+
+
+
+def recMask():
+    
+    ax = plt.gca()
+    lines = ax.get_lines()
+    assert len(lines) == 1
+    lines = lines[0]
+
+    x,y = lines.get_data()
+
+    def on_rectangle_select(event_press, event_release):
+        'args the press and release events'
+        x1, y1 = event_press.xdata, event_press.ydata
+        x2, y2 = event_release.xdata, event_release.ydata
+        print "RECT: (%3.2f, %3.2f) --> (%3.2f, %3.2f)" % (x1, y1, x2, y2)
+
+        if x1>x2: 
+            x1, x2 = x2, x1
+
+        if y1>y2:
+            y1, y2 = y2, y1
+
+        mask = (x>=x1) & (x<=x2) & (y>=y1) & (y<=y2) 
+        return mask
+
+    rect_select = widgets.RectangleSelector(
+        ax, on_rectangle_select, drawtype='box', useblit=True,
+        button=[1,], # use left button
+        minspanx=5, minspany=5, spancoords='pixels', 
+        # ignore rects that are too small
+        );
+
