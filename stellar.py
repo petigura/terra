@@ -9,9 +9,20 @@ import sqlite3
 import pandas as pd
 from pandas.io import sql
 from scipy.io.idl import readsav
-
+import numpy as np
 import kbcUtils 
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
+
+def LittleEndian(r):
+    names = r.dtype.names
+    data = {}
+    for n in names:
+        if r[n].dtype.byteorder=='>':
+            data[n] = r[n].byteswap().newbyteorder() 
+        else:
+            data[n] = r[n] 
+    q = pd.DataFrame(data,columns=names)
+    return np.array(q.to_records(index=False))
 
 def read_cat(cat,short=True):
     """
@@ -57,10 +68,11 @@ def read_cat(cat,short=True):
         stellar = stellar.rename(columns=namemap)
         stellar['prov'] = 'ah'
     elif cat == 'sm':
-        cat = '/Users/petigura/Marcy/SpecMatch/sm_scrape_1423.sav'
+        cat = '/Users/petigura/Marcy/SpecMatch/sm_scrape_1480.sav'
         sm = readsav(cat)['str_arr']
+        sm = LittleEndian(sm)
         sm = pd.DataFrame(sm)
-        sm.to_hdf('/var/tmp/temp.h5','temp')
+
         namemap = """
 OBNM  obs
 TEFF  teff
@@ -75,8 +87,8 @@ R     Rstar
 UR    uRstar"""
         namemap = StringIO(namemap)
         namemap = pd.read_table(namemap,sep='\s*',squeeze=True,index_col=0)
-        stellar = pd.read_hdf('/var/tmp/temp.h5','temp')
-        stellar = stellar.rename(columns=namemap)[namemap.values]
+
+        stellar = sm.rename(columns=namemap)[namemap.values]
         stellar['prov']  = 'sm'
     
         kep = kbcUtils.loadkep()[['kic','obs']].dropna()

@@ -28,6 +28,10 @@ gridDict = {
         [6.25,12.5,25,50.0,100,200,400],
         [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.6, 16.]
         ),
+    'terra1yr-fineRp2':(
+        [6.25,12.5,25,50.0,100,200,400],
+        [0.5, 0.71, 1.0, 1.41, 2, 2.82, 4.0, 5.66, 8.0, 11.3, 16.]
+        ),
     'terra1yr-fineP':(
         [6.25, 8.84, 12.5, 17.7, 25, 35.4, 50.0, 
          70.7, 100, 141, 200, 283, 400],
@@ -463,7 +467,11 @@ def MC(pp,res,cuts,stellar):
     return DV
 
 
-def CompSurface(DV):
+def CompSurface(DV, 
+                xlim=(0.5,400), ylim=(0.5,20), 
+                xs='inj_P',ys='inj_Rp',
+                xw=1.4, yw=1.2,
+                nxG=100,nyG=100):
     """
     Completeness Surface
 
@@ -472,28 +480,21 @@ def CompSurface(DV):
 
     """
 
-    Plim  = (0.5,400)
-    Rplim = (0.5,20)
-
-    nPG  = 100
-    nRpG = 100 
-
     def getslice(lim,nsamp):
         return slice( log(lim[0]) , log(lim[1]) , nsamp*1j )
 
-    PG,RpG  = exp(mgrid[ getslice(Plim,nPG), getslice(Rplim,nRpG) ] )
-    nTot  = np.zeros(PG.shape)
-    nPass = np.zeros(PG.shape)
+    xG,yG  = exp(mgrid[ getslice(xlim,nxG), getslice(ylim,nyG) ] )
+    nTot   = np.zeros(xG.shape)
+    nPass  = np.zeros(xG.shape)
     
-    for i in range(nPG):
-        for j in range(nRpG):
-            Pc  = PG[i,j]  # 
-            Rpc = RpG[i,j]
-
-            nTot[i,j],nPass[i,j] = getcomp(DV,Pc,Rpc)
+    for i in range(nxG):
+        for j in range(nyG):
+            xc = xG[i,j] 
+            yc = yG[i,j]
+            nTot[i,j],nPass[i,j] = getcomp(DV,xc,yc,xs=xs,ys=ys,xw=xw,yw=yw)
 
     comp = nPass/nTot
-    return PG,RpG,comp,nTot
+    return xG,yG,comp,nTot
 
 def getcomp(DV,xc,yc,xs='inj_P',ys='inj_Rp',xw=1.4,yw=1.2):
     """
@@ -1051,6 +1052,26 @@ def plotOccur1D(dfMarg,name):
     trans = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
 
 
+def plotOccur1Dsimple(dfMarg,name):
+    """
+    Plot one dimensional occurrence distribution
+
+    name : 'P' or 'Rp'
+    """
+    sbinc = name+'c'
+    binc = list(dfMarg[sbinc])
+    bins = getbins(dfMarg,name)
+
+    hist(binc, bins=bins, weights=dfMarg.fcell,color='DarkGrey',
+         label='Planet occurrence',rwidth=.98,edgecolor='w')
+    
+    yerr = vstack([dfMarg.ufcell1,dfMarg.ufcell2])
+    errorbar(dfMarg[sbinc],dfMarg.fcell,yerr=yerr,fmt='o',ms=4,color='k')
+    
+    ax = gca()
+    trans = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+
+
 def ann1dbin(x,**kw):
     text(x['x'],x['yfcellAdd'],"%(NpAdd).1f" % x,**kw)
     text(x['x'],x['yfcellRaw'],"%(Np)i" % x,**kw)
@@ -1413,6 +1434,10 @@ def labelPRp():
     xlabel('Orbital period (days)')
     ylabel('Planet size (Earth-radii)')
 
+def labelFpRp():
+    ylabel('Planet size (Earth-radii)')
+    xlabel('Stellar Light Intensity (Earth-units)')
+
 # Nice logticks
 xt =  [ 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
       [ 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
@@ -1461,3 +1486,5 @@ def logticks(axis):
         xticks(*getlogticks( xlim() ) )
     elif axis=='y':
         yticks(*getlogticks( ylim() ) ) 
+
+
