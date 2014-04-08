@@ -6,6 +6,8 @@ Functions that supplement matplotlib.
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+
 
 def one2one(*args,**kwargs):
     """
@@ -43,7 +45,6 @@ def adjust_spines(ax,spines,pad=10,smart_bounds=False):
         # no xaxis ticks
         ax.xaxis.set_ticks([])
 
-
 def appendAxes(axlist,nplots,plotidx):
     """
     Append axes to a list
@@ -52,7 +53,6 @@ def appendAxes(axlist,nplots,plotidx):
     plotidx - which plot are we on?
     """
     axlist.append( plt.subplot(nplots,1,plotidx+1) )
-
     return axlist
 
 def mergeAxes(figure):
@@ -166,3 +166,15 @@ def recMask():
         # ignore rects that are too small
         );
 
+def AddAnchored(*args,**kwargs):
+    at = AnchoredText(*args,**kwargs)
+    plt.gca().add_artist(at)
+
+def flip(axis):
+    if axis=='x':
+        plt.xlim(plt.xlim()[::-1])
+    if axis=='y':
+        plt.ylim(plt.ylim()[::-1])
+    if axis=='both':
+        plt.xlim(plt.xlim()[::-1])        
+        plt.ylim(plt.ylim()[::-1])
