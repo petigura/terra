@@ -1,11 +1,12 @@
 import argparse
 import glob
-import pyfits
-import h5py
+from numpy import rec
 import h5plus
 import pandas as pd
 import numpy as np
 import sys
+from astropy.io import fits
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('out', type=str, help='light curve *.h5')
@@ -14,29 +15,51 @@ args = parser.parse_args()
 
 out = args.out
 fL  = np.array(args.files)
+nfiles = len(fL)
 
-# Figure out the expected size of the array
+
+def read_k2_fits(f):
+    hduL = fits.open(f)
+
+    # Image cube. At every time step, one image. (440 x 50 x 50)
+    fcube = 'RAW_CNTS FLUX FLUX_ERR FLUX_BKG FLUX_BKG_ERR COSMIC_RAYS'.split()
+    cube = rec.fromarrays([hduL[1].data[f] for f in fcube],names=fcube)
+
+    # Time series. At every time step, one scalar. (440)
+    fts = 'TIME TIMECORR CADENCENO QUALITY POS_CORR1 POS_CORR2'.split()
+    ts = rec.fromarrays([hduL[1].data[f] for f in fts],names=fts)
+
+    return ts,cube
+
+
+# Figure out the expected size of the array read 100 random
+# files. Usually, I would just read in from the first file. But in the
+# case, where the module failed, not all of the datasets have the same
+# length
 ids   = np.sort(np.random.random_integers(0,len(fL),100))
-
-nobs  = [pyfits.open(f)[1].data.shape[0] for f in fL[ids]] 
+nobs  = [read_k2_fits(f)[0].shape[0] for f in fL[ids]] 
 df    = pd.DataFrame(nobs,columns=['len'])
 group = df.groupby('len')
 nobs  = group.count().len.idxmax()
 
 
-hduL = pyfits.open(fL[0])
-
+ts0,cube0 = read_k2_fits(fL[0])
 h5 = h5plus.File(args.out)
-h5.create_dataset('phot',dtype=hduL[1].data.dtype,shape=(len(fL),nobs))
+
+# The image dataset stores
+h5.create_dataset('cube',dtype=cube0.dtype,shape=(nfiles,nobs,50,50))
+h5.create_dataset('ts',dtype=ts0.dtype,shape=(nfiles,nobs) )
 
 i = 0
 kic = []
 
+import pdb;pdb.set_trace()
 for f in fL:
     try:
-        hduL = pyfits.open(f)
-        kic[i]   = hduL[0].header['KEPLERID']
-        h5['phot'][i] = hduL[1].data
+    ts,cube = read_k2_fits(f)
+    kic += [ f.split('kplr')[1].split('-')[0] ]
+    h5['cube'][i] = cube
+    h5['ts'][i] = ts
     except:
         print >> sys.stderr, "problem with ", f 
     i += 1
