@@ -1,6 +1,8 @@
-*
-!*.py
-!*.f
-!*.sh
-!*.c
-!.gitignore
+*.h5
+*.csv
+*.fits
+*.txt
+*.pyc
+*.png
+*.ipynb
+*.gif

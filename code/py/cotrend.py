@@ -236,7 +236,8 @@ def mkModes(fdt0,kic0):
     mad = mad.reshape(mad.size,1)
     fdt = fdt/mad
     fdt = np.vstack(fdt)
-
+    
+    import pdb;pdb.set_trace()
     U,S,Vtemp,goodid,X2 = robustSVD(fdt)
     # Cut out the columns that did not pass the robust SVD
     mad = mad[goodid]
@@ -289,12 +290,6 @@ def cotrendFits(U,S,V,nModes=None):
     
     return fits
 
-def calibrate():
-    """
-    Calibrate Light Curves
-
-    Take a collection of light curves along with the PCA vectors.
-    """
 def join_on_kic(x1,x2,kic1,kic2):
     """
     Join Arrays on KIC

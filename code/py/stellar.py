@@ -13,18 +13,9 @@ import numpy as np
 import kbcUtils 
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
-def LittleEndian(r):
-    names = r.dtype.names
-    data = {}
-    for n in names:
-        if r[n].dtype.byteorder=='>':
-            data[n] = r[n].byteswap().newbyteorder() 
-        else:
-            data[n] = r[n] 
-    q = pd.DataFrame(data,columns=names)
-    return np.array(q.to_records(index=False))
+from matplotlib.pylab import *
 
-def read_cat(cat,short=True):
+def read_cat():
     """
     Read Stellar Catalog
 
@@ -45,135 +36,49 @@ def read_cat(cat,short=True):
     Add an attribute to DataFrame returned that keeps track of the prov.
     """
 
-    if cat=='kepstellar':
-        cat     = '%s/keplerstellar.csv' % stellardir
-        stellar = pd.read_csv(cat,skiprows=25)
-        namemap = {'kepid':'kic','radius':'Rstar','prov_prim':'prov'}
-        stellar = stellar.rename(columns=namemap)
-    elif cat=='kic':
-        cat     = '%s/kic_stellar.db' % stellardir
-        con     = sqlite3.Connection(cat)
-        query = 'SELECT kic,kic_teff,kic_logg,kic_radius FROM kic'
-        stellar = sql.read_frame(query,con)
-        namemap = {'kic_radius':'Rstar','kic_teff':'teff','kic_logg':'logg'}
-        stellar = stellar.rename(columns=namemap)
-        stellar = stellar.convert_objects(convert_numeric=True)
-        stellar['prov'] = 'kic'
-    elif cat == 'ah':
-        cat     = '%s/ah_par_strip.h5' % stellardir
-        store   = pd.HDFStore(cat)
-        stellar = store['kic']
-        namemap = {'KICID':'kic','YY_RADIUS':'Rstar','YY_LOGG':'logg',
-                   'YY_TEFF':'teff'}
-        stellar = stellar.rename(columns=namemap)
-        stellar['prov'] = 'ah'
-    elif cat == 'sm':
-        cat = '/Users/petigura/Marcy/SpecMatch/sm_scrape_1480.sav'
-        sm = readsav(cat)['str_arr']
-        sm = LittleEndian(sm)
-        sm = pd.DataFrame(sm)
-
-        namemap = """
-OBNM  obs
-TEFF  teff
-UTEFF uteff
-LOGG  logg
-ULOGG ulogg
-FE    fe
-UFE   ufe
-M     Mstar
-UM    uMstar
-R     Rstar
-UR    uRstar"""
-        namemap = StringIO(namemap)
-        namemap = pd.read_table(namemap,sep='\s*',squeeze=True,index_col=0)
-
-        stellar = sm.rename(columns=namemap)[namemap.values]
-        stellar['prov']  = 'sm'
-    
-        kep = kbcUtils.loadkep()[['kic','obs']].dropna()
-        kep['kic'] = kep.kic.astype(int)
-        stellar  = pd.merge(stellar,kep)
-    else:
-        print "invalid catalog"
-        return None
-
-    shortcols = 'kic teff logg prov Rstar'.split()
-    if short:
-        stellar = stellar[shortcols]
-
-    stellar['Mstar'] = (stellar.Rstar*Rsun)**2 * 10**stellar.logg / G / Msun
-
-    cat     = '%s/kic_stellar.db' % stellardir
-    con     = sqlite3.Connection(cat)
-    query   = 'SELECT kic,kic_kepmag FROM kic'
-    mags    = sql.read_frame(query,con)
-    mags    = mags.convert_objects(convert_numeric=True)
-    stellar = pd.merge(stellar,mags)
-
-    return stellar
+    df = pd.read_csv('K2_E2_targets_lc.csv')
+    df = df.dropna()
 
 
-def read_subsamp(cat):
-    """
-    Return a DataFrame with Kepler subsample.
-    """
-    if cat=='b12k':
-        return pd.read_csv(stellardir+'b12k.csv')
-    elif cat=='b42k':
-        namemap = {'kepid':'kic'}
-        cat = pd.read_csv(stellardir+'b42k.csv')
-        cat = cat.rename(columns=namemap)[namemap.values()]
-        return cat
-
-def update_cat(cat1,cat2):
-    """
-    Default to the parameters in cat2.
-
-    Use case: cat1 is photometrically derived parameters. cat2 is
-    spectroscopically derived parameters.
-    """
-    cat2 = pd.merge(cat2,cat1[['kic']]) # Only use subset of stars in cat1
-    cat_multi = pd.concat([cat1,cat2])  # Multiple parameters for some stars
-    g = cat_multi.groupby('kic')
-    cat_single = g.last() # Single parameter for each star
-    cat_single['kic'] = cat_single.index
-    return cat_single
-
-def query_kic(*args):
-    """         
-    Query KIC
-   
-    Connect to Kepler kic sqlite database and return PANDAS dataframe
-    """
-    cnx = sqlite3.connect(os.environ['KEPBASE']+'/files/db/kic_ct.db')
-    if len(args)==0:
-        query  = "SELECT * FROM KIC WHERE kic=8435766"
-        print "enter an sqlite query, columns include:"
-        print sql.read_frame(query,cnx).T        
-        return None
-    
-    query = args[0]
-    if len(args)==2:
-        kic = args[1]
-        kic = tuple( list(kic) )
-        query += ' WHERE kic IN %s' % str( kic ) 
-
-    df = sql.read_frame(query,cnx)
+    namemap = dict([(c,c.strip()) for c in df.columns])
+    df = df.rename(columns=namemap)
+    df = df.rename(columns={'#EPIC':'epic',
+                            'Kp':'kepmag',
+                            'list':'prog'})
+    df['prog'] = df.prog.str.slice(start=1)
     return df
 
-def read_SMEatVandy(path):
+import astropy.coordinates as coord
+from astropy import units as u
+from astropy.coordinates import Longitude,Latitude
+
+def get_diag(df0,kepmag):
     """
-    Read SME-at-Vandy fits tables
+    Return 20 stars with kepmag above certain value
     """
+    df = df0.copy()
+    df = df.sort('kepmag')
+    df = df[df.kepmag > kepmag]
+
+    df['ra'] = Longitude(df.ra * u.deg).wrap_at(180*u.deg).degree
+    df['dec'] = Latitude(df.dec * u.deg).degree
+
+    cent_ra,cent_dec =  354.2,-2.42
+    df['dra'] = df['ra'] - median(df['ra'])
+    df['ddec'] = df['dec'] - median(df['dec'])
+
+    dfcut = df.iloc[:20]    
     
-    tab = fits.open(path)[1].data
-    names = tab.dtype.names
+    plot(df.dra,df.ddec,',')
+    plot(dfcut.dra,dfcut.ddec,'.',color='Tomato',mew=0,label='Diagnostic Stars')
+    setp(gca(),xlabel='delta RA',ylabel='delta DEC')
+    return dfcut
 
-    d = {}
-    for n in names:
-        d[n] = tab[n][0]
+def read_diag(kepmag):
+    df = pd.read_table('Ceng/diagnostic_stars/diag_kepmag=%i.txt' % kepmag,
+                      names=['epic'])
+    return pd.merge(read_cat(),df)
+
+def resolve_fits(epic):
+    return "Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits" % epic
     
-    return pd.DataFrame(d)
-
-

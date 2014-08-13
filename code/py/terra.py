@@ -115,17 +115,7 @@ def pp(par):
                 plt.gcf().savefig(figpath)
                 plt.close() 
 
-def getkic(f,kic):
-    with h5py.File(f) as h5:
-        b   = kic==h5['kic'][:]
-        s   = f.split('/')[-1]
-        if b.sum()==0:
-            print '%s does not contain %i' % (s,kic)
-        elif h5['phot'][b,0]['TIME'] < 1:
-            print '%s does not contain %i' % (s,kic)
-        else:
-            print '%s %i' % (s,kic)
-            return h5['phot'][b,:][0]
+
 
 
 def raw(h5,files,fields=[]):
