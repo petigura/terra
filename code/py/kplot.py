@@ -24,6 +24,7 @@ import numpy as np
 from numpy import ma
 from matplotlib import mlab
 import sys
+import tfind
 
 import pandas as pd
 pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
@@ -113,7 +114,7 @@ def plot_diag(h5,tpar=False):
 
     d = dict(h5.attrs)
     s = """
-KIC-%(skic)i
+EPIC-%(epic)i
 
 P     %(P).3f 
 t0    %(t0).2f 
@@ -165,14 +166,14 @@ grass %(grass).2f""" % d
         pass
 
     if tpar==False:
-        h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+        h5.noPrintRE = '.*?file|climb|epic|.*?folder'
         h5.noDiagRE  = \
-            '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+            '.*?file|climb|epic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
         h5.noDBRE    = 'climb'
         s = pd.Series(tval.flatten(h5,h5.noDiagRE))
-        s = "%i\n%s" % (h5.attrs['skic'], s.__str__())
+        s = "%i\n%s" % (h5.attrs['epic'], s.__str__())
     else:
-        s='%i\n-------\n' % h5.attrs['skic']
+        s='%i\n-------\n' % h5.attrs['epic']
         for k in 'P t0 tdur mean s2n noise twd'.split():
             s += '%s %s\n' % (k,h5.attrs[k])
 
@@ -465,7 +466,13 @@ def plotSES(h5):
     d = dict(time=False)
 
     res,lc = h5.RES,h5.lc
-    fm = ma.masked_array(lc['dM6']*1e6,lc['fmask'])
+    
+    # 6-hour single event statistic
+    bcad = 2*6
+    fcal = ma.masked_array(lc['fcal'],lc['fmask'])
+    dM = tfind.mtd(fcal,bcad)
+
+    fm = ma.masked_array(dM*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],fm,d)
     ylabel('SES (ppm)')
     axvline(0, alpha=.1,lw=10,color='m',zorder=1)
@@ -683,55 +690,6 @@ def helper(i):
                  year   = (i - season)/4 ,
                  qstr   = 'Q%i' % i )
 
-def plotraw(h5,i,label):
-    colors = ['RoyalBlue','Black']
-    d = helper(i)
-    year,season = d['year'],d['season']
-    xs =  365.25*year
-    ys =  year*0.01
-
-    qlc = h5['/raw/%(qstr)s' % d ][:]
-    dt = h5['/pp/dt/%(qstr)s' % d ][:]
-
-    t   = qlc['t']
-    fm = ma.masked_array(qlc['f'],qlc['isBadReg'])
-    ftnd = ma.masked_array(dt['ftnd'],qlc['fmask'])
-    foutlier  = fm.copy()
-    foutlier.mask = ~qlc['isOutlier']
-
-    fspsd  = fm.copy()
-    fspsd.mask = ~qlc['isStep']
-
-    fkw     = dict(color=colors[year % 2],lw=3)
-    foutkw  = dict(color=colors[(year-1) % 2],lw=0,marker='x',mew=2,ms=5)
-    fallkw  = dict(color=colors[year % 2],lw=3,alpha=0.4)
-    ftndkw  = dict(color='Tomato',lw=2)
-    fspsdkw = dict(color='Chartreuse',lw=10,alpha=0.5)
-
-    if label==True:
-        fkw['label']     = 'Raw Phot'
-        fallkw['label']  = 'Removed by Hand'
-        ftndkw['label']  = 'High Pass Filt'
-        foutkw['label']  = 'Outlier'
-        fspsdkw['label'] = 'SPSD'
-
-    def shiftplot(*args,**kwargs):
-        plot( args[0] - xs,args[1] -ys, **kwargs )
-
-    shiftplot(t , fm        ,**fkw)
-    shiftplot(t , fm.data   ,**fallkw)
-    shiftplot(t , ftnd      ,**ftndkw)
-    shiftplot(t , foutlier  ,**foutkw)
-    shiftplot(t , fspsd     ,**fspsdkw)
-
-    def shiftplot(*args,**kwargs):
-        plot( args[0] - xs,args[1] -ys+0.001, **kwargs )
-
-    addtrans(qlc,fm.data,label,shiftplot)
-
-    xy =  (t[0]-xs , fm.compressed()[0]-ys)
-    annotate(d['qstr'], xy=xy, xytext=(-10, 10), **annkw)
-    legend(loc='upper left')
 
 def addtrans(raw,y,label,plot):
     """
@@ -748,63 +706,48 @@ def addtrans(raw,y,label,plot):
         id = [s.start for s in  ma.clump_unmasked(ym)]
         plot(t[id] ,ym[id] + 0.001,**finjkw)
 
-def plotcal(h5,i,label):
-    colors = ['RoyalBlue','k']
-    d = helper(i)
-    year,season = d['year'],d['season']
 
-    raw = h5['/raw/%(qstr)s'    % d][:]
-    dt  = h5['/pp/dt/%(qstr)s'  % d][:]
-    cal = h5['/pp/cal/%(qstr)s' % d][:]
+def plotraw(h5):
+    """
+    """
 
-    t = raw['t']
+    qlc = h5['/pp/cal'][:]
+    t   = qlc['t']
+    fm = ma.masked_array(qlc['f'],qlc['fmask'])
+    plot(t,fm,label='Raw Photometry')
 
-    fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
-    fit  = ma.masked_array(cal['fit'],raw['fmask'])
-    fcal = ma.masked_array(cal['fcal'],raw['fmask'])
+def plotcal(h5):
+    qlc = h5['/pp/cal'][:]
+    t   = qlc['t']
 
-    xs =  365.25*year
-    ys =  year*0.003 
+    fdt  = ma.masked_array(qlc['fdt'],qlc['fmask'])
+    fit  = ma.masked_array(qlc['fit'],qlc['fmask'])
+    fcal = ma.masked_array(qlc['fcal'],qlc['fmask'])
 
-    def shiftplot(*args,**kwargs):
-        plot( args[0] - xs,args[1] -ys, **kwargs )
+    plot(t ,fit, color='Tomato',label='Mode Calibration')
+    plot(t ,fcal -0.001,color='k',label='Calibrated Photometry')
+    legend()
 
-    shiftplot(t ,fit, color='Tomato')
-    shiftplot(t ,fcal -0.001,color=colors[i%2])
+def plotdt(h5):
+    qlc = h5['/pp/cal'][:]
+    t   = qlc['t']
+    fdt = ma.masked_array(qlc['fdt'],qlc['fmask'])
+    plot(t,fdt,label='Detrended Photometry')
 
-def plotdt(h5,i,label):
-    colors = ['RoyalBlue','k']
-    d = helper(i)
-    year,season = d['year'],d['season']
-    xs =  365.25*year
-    ys =  year*0.003
-
-    raw = h5['/raw/%(qstr)s'   % d][:]
-    t   = raw['t']
-    dt  = h5['/pp/dt/%(qstr)s' % d][:]
-
-    fdt  = ma.masked_array(dt['fdt'],raw['fmask'])
-
-    def shiftplot(*args,**kwargs):
-        plot( args[0] - xs,args[1] -ys, **kwargs )
-
-    shiftplot(t,fdt,color=colors[i%2])
 
 def plot_lc(h5):
     fig,axL = subplots(nrows=2,figsize=(20,12),sharex=True)
-    try:
-        sca(axL[0])
-        qstackplot(h5,plotraw)
 
-        sca(axL[1])
-        qstackplot(h5,plotdt)
-        qstackplot(h5,plotcal)
+    sca(axL[0])
+    plotraw(h5)
+    legend()
 
-    except:
-        print sys.exc_info()[1]
+    sca(axL[1])
+    plotdt(h5)
+    plotcal(h5)
+    legend()
+    setp(fig,tight_layout=True)
 
-    tight_layout()
-    xlim(250,650)
 
 #############################################################################
 
