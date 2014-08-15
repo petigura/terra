@@ -249,7 +249,7 @@ def P2Pcad(PG0,ncad):
     PG     = (PcadG0 + 1.*remG / nrow)*lc
     return PcadG0,remG,PG
 
-def mtd(t,fm,twd):
+def mtd(fm,twd):
     """
     Mean Transit Depth
 

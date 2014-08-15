@@ -52,7 +52,7 @@ import astropy.coordinates as coord
 from astropy import units as u
 from astropy.coordinates import Longitude,Latitude
 
-def get_diag(df0,kepmag):
+def get_diag(df0,kepmag,plot_diag=False):
     """
     Return 20 stars with kepmag above certain value
     """
@@ -68,10 +68,11 @@ def get_diag(df0,kepmag):
     df['ddec'] = df['dec'] - median(df['dec'])
 
     dfcut = df.iloc[:20]    
-    
-    plot(df.dra,df.ddec,',')
-    plot(dfcut.dra,dfcut.ddec,'.',color='Tomato',mew=0,label='Diagnostic Stars')
-    setp(gca(),xlabel='delta RA',ylabel='delta DEC')
+    if plot_diag:
+        plot(df.dra,df.ddec,',')
+        plot(dfcut.dra,dfcut.ddec,'.',color='Tomato',mew=0,
+             label='Diagnostic Stars')
+        setp(gca(),xlabel='delta RA',ylabel='delta DEC')
     return dfcut
 
 def read_diag(kepmag):

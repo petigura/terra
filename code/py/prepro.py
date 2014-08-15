@@ -225,32 +225,17 @@ def rdt(r0):
          fdt   - f - ftnd.
     """
     r = r0.copy()
-
-    seglabel = getseg(r)
-
-    sL = np.unique(seglabel)
-    sL = sL[sL >=0]
-
     fm   = ma.masked_array(r['f'],r['fmask'])
     ftnd = fm.copy()
-    
-    segstr = ''
-    for s in sL:
-        b   = seglabel==s
-        r2  = r[b]
-        t   = r2['t']
-        segstr += '%.2f %.2f ' % (t[0],t[1])
 
-        x,y = detrend.bin(r2)           # Compute GP using binned lc (speed)
-        yi  = detrend.GPdt(t,x,y) # evaluate at all points
-        ftnd[b] = yi 
-    print segstr
-        
+    rvalid = r[ ~r['fmask'] ]
+    t   = r['t']
+    x,y = detrend.bin(rvalid)      # Compute GP using binned lc (speed)
+    yi  = detrend.GPdt(t,x,y) # evaluate at all points
+    ftnd[:] = yi 
+
     # Assign a label to the segEnd segment
-    label = ma.masked_array( np.zeros(r.size)-1, seglabel )
     fdt   = fm - ftnd
-
-    r = mlab.rec_append_fields(r,'label',label.data)
     r = mlab.rec_append_fields(r,'ftnd',ftnd.data)
     r = mlab.rec_append_fields(r,'fdt',fdt.data)
     return r
