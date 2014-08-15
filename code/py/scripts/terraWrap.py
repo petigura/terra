@@ -23,6 +23,10 @@ dL = []
 for f in files:
     df = pandas.read_csv(f,index_col=0)
     d = df.iloc[index]
+    d['outfile'] = terra.resolve_name(d['outfile'],'grid')
+
+    if f.count('pp.csv') > 0:
+        d['svdh5'] = terra.resolve_name(d['svdh5'],'svdh5')
     dL.append(d)
 
 def last2(s):

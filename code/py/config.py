@@ -1,4 +1,9 @@
 import numpy as np
+import os
+
+# Setup directories
+k2_dir = os.environ['K2_DIR']
+
 
 # Qalg
 Plim =  0.001   # Periods must agree to this fractional amount
@@ -42,7 +47,6 @@ harmL = np.array([1,Fraction('1/2'),Fraction('1/3'),2,3])
 nCheck = 10 # Number of peaks in periodogram to fit.
 
 #modesDiag
-
 cdict3 = {'red':  ((0.0, 0.0, 0.0),
                    (0.25,0.0, 0.0),
                    (0.5, 0.8, 1.0),

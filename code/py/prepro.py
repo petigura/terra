@@ -20,6 +20,7 @@ import pandas as pd
 
 import cotrend
 import config
+from config import k2_dir
 import detrend
 import h5plus
 import keplerio
@@ -141,7 +142,7 @@ def cal(h5,par):
           - epic
     """
 
-    lc = photometry.read_phot('Ceng.h5',par['epic'])
+    lc = photometry.read_phot('%s/Ceng.h5' % k2_dir,par['epic'])
     fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
     with h5py.File(par['svdh5'],'r') as hsvd:

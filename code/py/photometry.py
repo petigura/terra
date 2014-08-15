@@ -8,7 +8,8 @@ from numpy import ma
 from matplotlib.pylab import *
 import pandas as pd
 import prepro
-
+import os
+from config import k2_dir
 
 def imshow2(im,**kwargs):
     extent = (0,im.shape[0],0,im.shape[1])

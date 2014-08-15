@@ -11,9 +11,14 @@ from pandas.io import sql
 from scipy.io.idl import readsav
 import numpy as np
 import kbcUtils 
-from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 
+from config import k2_dir
+from config import G,Rsun,Rearth,Msun,AU,sec_in_day
 from matplotlib.pylab import *
+
+import astropy.coordinates as coord
+from astropy import units as u
+from astropy.coordinates import Longitude,Latitude
 
 def read_cat():
     """
@@ -36,9 +41,8 @@ def read_cat():
     Add an attribute to DataFrame returned that keeps track of the prov.
     """
 
-    df = pd.read_csv('K2_E2_targets_lc.csv')
+    df = pd.read_csv('%s/K2_E2_targets_lc.csv' % k2_dir )
     df = df.dropna()
-
 
     namemap = dict([(c,c.strip()) for c in df.columns])
     df = df.rename(columns=namemap)
@@ -48,9 +52,6 @@ def read_cat():
     df['prog'] = df.prog.str.slice(start=1)
     return df
 
-import astropy.coordinates as coord
-from astropy import units as u
-from astropy.coordinates import Longitude,Latitude
 
 def get_diag(df0,kepmag,plot_diag=False):
     """
@@ -76,10 +77,10 @@ def get_diag(df0,kepmag,plot_diag=False):
     return dfcut
 
 def read_diag(kepmag):
-    df = pd.read_table('Ceng/diagnostic_stars/diag_kepmag=%i.txt' % kepmag,
-                      names=['epic'])
+    path_diag = '%s/Ceng/diagnostic_stars/diag_kepmag=%i.txt' % (k2_dir,kepmag)
+    df = pd.read_table(path_diag,names=['epic'])
     return pd.merge(read_cat(),df)
 
 def resolve_fits(epic):
-    return "Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits" % epic
+    return "%s/Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits" % (k2_dir,epic)
     

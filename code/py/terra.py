@@ -20,19 +20,35 @@ import copy
 import os
 import pandas
 deltaPcad = 10
+from config import k2_dir
 
 #######################
 # Top Level Functions #
 #######################
 
+
+def resolve_name(outfile,type):
+    if os.environ['K2_PROJDIR']=='':
+        print "K2_PROJDIR not set. Using K2_DIR"
+        k2_projdir = os.environ['K2_DIR']
+    else:
+        k2_projdir = os.environ['K2_PROJDIR']
+
+    if type=='grid':
+        return "%s/%s" % (k2_projdir,outfile)
+    if type=='svdh5':
+        return "%s/%s" % (k2_dir,outfile)
+
 def h5F(par):
     """
     If the update kw is set, open h5 file as a h5plus object.
     """
+
+    outfile = par['outfile']
     if par['update']:
-        return h5plus.File(par['outfile'])
+        return h5plus.File(outfile)
     else:
-        return h5py.File(par['outfile'])
+        return h5py.File(outfile)
 
 def pp(par):
     """
@@ -83,7 +99,6 @@ def pp(par):
     """
 
     par = dict(par) # If passing in pandas series, treat as dict
-
     print "creating %(outfile)s" % par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
