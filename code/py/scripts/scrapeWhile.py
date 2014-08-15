@@ -4,9 +4,10 @@ import pandas as pd
 import h5py
 import sys
 import os
+from os.path import basename
+
 import glob
 import tval
-
 from argparse import ArgumentParser
 
 parser = ArgumentParser(description='Thin wrapper around terra module')
@@ -14,15 +15,14 @@ parser.add_argument('start',type=int,help='start')
 parser.add_argument('stop',type=int,help='stop')
 args  = parser.parse_args()
 
-
 pp = pd.read_csv('pp.csv',index_col=0)
-pp = pp.ix[range(args.start,args.stop)]
+pp = pp.iloc[range(args.start,args.stop)]
 
 fL = glob.glob('grid/*.h5')
 df = pd.DataFrame(fL,columns=['file'])
 
-df['outbase'] = df.file.apply(lambda x : x.split('/')[-1])
-pp['outbase'] = pp.outfile.apply(lambda x : x.split('/')[-1])
+df['outbase'] = df.file.apply(basename)
+pp['outbase'] = pp.outfile.apply(basename)
 
 pp = pd.merge(df[['outbase']],pp)
 

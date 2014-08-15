@@ -41,6 +41,7 @@ P2 = int(np.floor(config.P2/keptoy.lc))
 maCadCnt = int( np.floor(config.maCadCnt) )
 cut = 5e3
 
+
 def grid(h5,parL):
     """
     Run the grid search
@@ -54,7 +55,7 @@ def grid(h5,parL):
            twdG  - Range of trial durations to search over
     """
 
-    lc  = h5['/pp/mqcal'][:]
+    lc  = h5['/pp/cal'][:]
 
     f    = lc[ h5.attrs['fluxField'] ]
     mask = lc[ h5.attrs['fluxMask'] ] 
@@ -334,7 +335,7 @@ def tdpep(t,fm,PcadG,twdG):
     rtd = []
     for i in range(ntwd):     # Loop over twd
         twd = twdG[i]
-        dM  = mtd(t,fm,twd)
+        dM  = mtd(fm,twd)
 
         # Compute MES over period grid
         func = lambda Pcad: ep(dM,Pcad)
@@ -527,7 +528,7 @@ def noise(t,fm,twdG):
     # Constant estimation fof the noise for deltaT
     noiseG = []
     for twd in twdG:
-        dM     = mtd(t,fm,twd)
+        dM     = mtd(fm,twd)
         noiseG.append( ma.median( ma.abs(dM) )  )
     noiseG = np.array(noiseG)
     return noiseG

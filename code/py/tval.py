@@ -283,7 +283,7 @@ def read_dv(h5,tpar=False):
     tpar : alternative transit ephemeris dictionary with the following keys
            t0 Pcad twd mean s2n noise
     """
-    h5.lc  = h5['/pp/mqcal'][:] # Convenience
+    h5.lc  = h5['/pp/cal'][:] # Convenience
     h5.RES = h5['/it0/RES'][:]
 
     id  = np.argmax(h5.RES['s2n'])        
@@ -298,7 +298,7 @@ def read_dv(h5,tpar=False):
 
     # Convenience
     h5.fm = ma.masked_array(h5.lc['fcal'],h5.lc['fmask'])
-    h5.dM = tfind.mtd(h5.lc['t'],h5.fm,h5.attrs['twd'])
+    h5.dM = tfind.mtd(h5.fm,h5.attrs['twd'])
     h5.t  = h5.lc['t']
 
 def checkHarmh5(h5):
@@ -327,7 +327,7 @@ def at_phaseFold(h5,ph):
 
     attrs = h5.attrs
     
-    lc = h5['/pp/mqcal'][:]
+    lc = h5['/pp/cal'][:]
     t  = lc['t']
     fm = ma.masked_array(lc['f'],lc['fmask'])
 
@@ -430,7 +430,7 @@ def at_fit(h5,runmcmc=True):
 
 def at_med_filt(h5):
     """Add median detrended lc"""
-    lc = h5['/pp/mqcal']
+    lc = h5['/pp/cal']
     fm = ma.masked_array(lc['fcal'],lc['fmask'])
 
     t  = lc['t']
@@ -473,7 +473,7 @@ def at_s2ncut(h5):
     # Notch out the transit and recompute
     fmcut = h5.fm.copy()
     fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
-    dMCut = tfind.mtd(h5.t,fmcut, attrs['twd'] )    
+    dMCut = tfind.mtd(fmcut, attrs['twd'] )    
 
     Pcad0 = np.floor(attrs['Pcad'])
     r = tfind.ep(dMCut, Pcad0)
@@ -509,7 +509,7 @@ def at_SES(h5):
                   the max SES value within the transit range (allowed
                   for TTVs)
     """
-    lc   = h5['/pp/mqcal'][:]
+    lc   = h5['/pp/cal'][:]
     t    = lc['t']
     fcal = ma.masked_array(lc['fcal'],lc['fmask'])
     dM   = h5.dM

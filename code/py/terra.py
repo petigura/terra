@@ -82,30 +82,19 @@ def pp(par):
     terra.pp(dict(nt.ix[0]))
     """
 
+    par = dict(par) # If passing in pandas series, treat as dict
+
     print "creating %(outfile)s" % par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
+
     with h5F(par) as h5:
-        h5dir = '/global/project/projectdirs/m1669/Kepler/h5files/'
-        fL    = glob.glob(h5dir+'*.h5')
-
-        raw  = h5.create_group('/raw')
-        for f in fL:
-            q = int(f.split('/')[-1].split('.')[0][1:])
-            r = getkic(f,par['skic'])
-            if r != None:
-                r = prepro.modcols(r)
-                raw['Q%i' % q] = r
-
         if par['type'].find('mc') != -1:
             inj(h5,par)
-
-        # Perform detrending and calibration.
+        
         h5.create_group('/pp')
-        prepro.mask(h5)
-        prepro.dt(h5)        
-        prepro.cal(h5,par['svd_folder'])
-        prepro.sQ(h5)
+        prepro.cal(h5,par)
+
         if par.has_key('plot_lc'):
             if par['plot_lc']:
                 from matplotlib import pylab as plt
@@ -215,6 +204,7 @@ def dv(par):
     >>> terra.dv(ddv)
 
     """
+    par = dict(par) # If passing in pandas series, treat as dict
     print "Running dv on %s" % par['outfile'].split('/')[-1]
     par['update'] = True  # need to use h5plus for MCMC
 
@@ -228,12 +218,12 @@ def dv(par):
         for k in keys:
             h5.attrs[k] = par[k]
 
-        if dict(h5.attrs).has_key('skic') == False:
-            h5.attrs['skic']  = par['skic']
+        if dict(h5.attrs).has_key('epic') == False:
+            h5.attrs['epic']  = par['epic']
 
-        h5.noPrintRE = '.*?file|climb|skic|.*?folder'
+        h5.noPrintRE = '.*?file|climb|epic|.*?folder'
         h5.noDiagRE  = \
-            '.*?file|climb|skic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
+            '.*?file|climb|epic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
         h5.noDBRE    = 'climb'
 
         # Attach attributes

@@ -16,7 +16,7 @@ from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
 import pyfits
 import h5py
-import pandas 
+import pandas as pd
 
 import cotrend
 import config
@@ -24,6 +24,7 @@ import detrend
 import h5plus
 import keplerio
 import tfind
+import photometry 
 
 kepdir     = os.environ['KEPDIR']
 cbvdir     = os.path.join(kepdir,'CBV/')
@@ -33,7 +34,7 @@ sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
 sapkey     = csv2rec(sapkeypath,delimiter=' ')
 sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
 cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
-cutList    = pandas.read_csv(cutpath,comment='#').to_records(index=False)
+cutList    = pd.read_csv(cutpath,comment='#').to_records(index=False)
 
 def rec_zip(rL):
     """
@@ -128,25 +129,44 @@ def dt(h5):
     h5.create_group('/pp/dt')
     mapgroup(h5,qdt,'raw','/pp/dt')
 
-def cal(h5,svd_folder):
+def cal(h5,par):
     """
     Wrap over the calibration step
 
     Parameters
     ----------
 
-    par : dictionary, must contain follo
-    svd_folder : Where to find the SVD matricies.  They must be
-                 named in the following fashion Q1.svd.h5,
-                 Q2.svd.h5 ...
+    par : dictionary, must contain following keys:
+          - svdh5 
+          - epic
     """
-    raw = h5['/raw']
-    pp  = h5['/pp']
 
-    dt  = h5['/pp/dt']
-    cal = h5.create_group('/pp/cal')
+    lc = photometry.read_phot('Ceng.h5',par['epic'])
+    fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
-    kwd = {}
+    with h5py.File(par['svdh5'],'r') as hsvd:
+        bv   = hsvd['V'][:config.nMode]
+
+    fit    = ma.zeros(fdt.shape)
+    p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
+    fcal  = fdt - fit
+    rcal = np.array(zip(fit.data,fcal.data),
+                    dtype=[('fit', '<f8'), ('fcal', '<f8')]  )
+
+    lc = pd.DataFrame(lc)
+    lc['fit'] = fit.data
+    lc['fcal'] = fcal.data
+
+    lc = np.array(lc.to_records(index=False))
+    h5.create_dataset('/pp/cal',data=lc)
+
+def qcal(rraw,rdt,svdpath=None):
+
+    return rcal
+
+
+
+
     for i in raw.items():
         q = i[0]
         svdpath = os.path.join(svd_folder,'%s.svd.h5' % q)
