@@ -88,7 +88,7 @@ def bvfitm(fm,bv):
     return p1,fcbv
 
 
-def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
+def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
     """
     Robust SVD
 
@@ -149,8 +149,10 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
         X2 = np.sum( (Dfit - D)**2,axis=1) / Dncol
 
         rL = moments(A)
-        print "Moments of principle component weight"
-        print mlab.rec2txt(rL)        
+
+        if verbose:
+            print "Moments of principle component weight"
+            print mlab.rec2txt(rL,precision=1)        
 
         # Determine which rows of D are outliers
         dev  = (A - rL['med'])/rL['mad']
@@ -181,9 +183,10 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
             routData = [tuple(r) for r in routData]
             rout = np.array(routData,dtype=dtype)
 
-            print "First 10 a/MAD(a)"
-            print mlab.rec2txt(rout[~gRow][:10])
-            print "%i there are %i outliers " % (count,goodid[~gRow].size)
+            if verbose:
+                print "First 10 a/MAD(a)"
+                print mlab.rec2txt(rout[~gRow][:10],precision=1)
+                print "%i there are %i outliers " % (count,goodid[~gRow].size)
 
             goodid = goodid[gRow]
 
@@ -191,18 +194,26 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt):
 
     return U,S,V,goodid,X2
 
-def mkModes(fdt0,kic0):
+
+def mkModes(fdt0,kic0,verbose=True,maxIt=maxIt,nMode=nMode):
     """
     Make Modes
 
-    Take a collection of light curves and find the principle
-    components.  This algorithm implements a robust SVD.
+    Take a collection of light curves and decompose into principle
+    components.  This algorithm implements a robust SVD. We can
+    recover the light curves exactly with fdt = dot(A,V)
 
     Parameters
     ----------
+
     fdt : Masked array.  Collection of light curves arranged row-wise.
           Masked elements will be eliminated from the SVD
     kic : Array with the KIC ID
+    A   : Array of coefficients. Can reconstruct initial array with dot(A,V)
+          A[i,j] is coefficient for star i, mode j
+
+    V   : Principle components. Can capture most of the varience via
+          dot(A,V[:,:nModes])
     """
 
     fdt = fdt0.copy()
@@ -226,7 +237,6 @@ def mkModes(fdt0,kic0):
     fdt = fdt[brow,:]
     kic = kic[brow]
 
-
     nstars = kic.size    
     fdt[fdt.mask] = 0
 
@@ -236,9 +246,8 @@ def mkModes(fdt0,kic0):
     mad = mad.reshape(mad.size,1)
     fdt = fdt/mad
     fdt = np.vstack(fdt)
-    
-    import pdb;pdb.set_trace()
-    U,S,Vtemp,goodid,X2 = robustSVD(fdt)
+
+    U,S,Vtemp,goodid,X2 = robustSVD(fdt,verbose=verbose)
     # Cut out the columns that did not pass the robust SVD
     mad = mad[goodid]
     kic = kic[goodid]
@@ -254,8 +263,7 @@ def mkModes(fdt0,kic0):
     A      = A[:,:nMode]
     fit    = np.dot(A,V[:nMode])*mad
 
-    return U,S,V,A,fit,kic
-
+    return U,S,V,A,fit,kic,fdt
 
 
 def moments(A):
@@ -614,3 +622,74 @@ def medfit(fdt,vec):
     p1 = optimize.fmin(cost,p0,disp=0)
     fit = ma.masked_array(p1[0] * vec,mask=fdt.mask)
     return fit
+
+
+import stellar
+from matplotlib.pylab import *
+import h5py
+import photometry
+
+def plot_modes_diag(h5file,kepmag):
+    df = stellar.read_cat()
+
+    with h5py.File(h5file,'r') as h5:
+        V = h5['V'][:]
+
+    fig,axL = subplots(ncols=3,sharex=True,figsize=(20,8))
+    setp(fig,tight_layout=True)
+
+    sca(axL[0])
+    setp(axL[0],xlabel='Measurement Number',
+         ylabel='Change in Stellar Brightness',
+         title='Top 8 Principle Components')
+
+    dy = np.arange(nMode) * 0.25
+    plot(V[:nMode].T+dy)
+
+
+    sca(axL[1])
+
+    dfdiag = stellar.get_diag(df,kepmag)
+    ndiag = len(dfdiag)
+    
+    lc = photometry.read_phot('Ceng.h5',dfdiag.epic)
+    fdt = ma.masked_array(lc['fdt'],lc['fmask'])
+
+    fit = [bvfitm(fdt[i],V[:nMode])[1] for i in range(ndiag)]
+    fit = ma.vstack(fit)
+
+    MADdM4 = []
+    for i in range(ndiag):
+        dM = tfind.mtd(fdt[i],8)
+        MADdM4 += [ma.median(ma.abs(dM))]
+
+    MADdM4 = np.hstack(MADdM4)
+    title('median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
+    setp(axL[1],xlabel='Measurement Number',
+         ylabel='Change in Stellar Brightness',
+         title='20 Stars fit with 8 Principle Components')
+
+    dy = arange(ndiag)*0.01
+    plot(fdt.T+dy,color='k')
+    plot((fdt.T+dy)[0],color='k',label='Data')
+    plot(fit.T+dy,color='r')
+    plot((fit.T+dy)[0],color='r',label='PC fit')
+    legend()
+    sca(axL[2])
+
+    fcal = fdt - fit
+    plot(fcal.T+dy,color='r')
+    plot((fcal.T+dy)[0],color='r',label='Residuals')
+
+    MADdM4 = []
+    for i in range(ndiag):
+        dM = tfind.mtd(fcal[i],8)
+        MADdM4 += [ma.median(ma.abs(dM))]
+
+    MADdM4 = np.hstack(MADdM4)
+    title('median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
+    setp(axL[1],xlabel='Measurement Number',
+         ylabel='Change in Stellar Brightness',
+         title='Detrended Stellar Brightness')
+
+    legend()

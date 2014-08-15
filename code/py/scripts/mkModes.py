@@ -9,29 +9,45 @@ from numpy import ma
 import cotrend
 import sys
 from config import nMode,nModeSave
+import stellar
+import photometry
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib.pylab import *
+
 
 parser = ArgumentParser(description='Perform Robust SVD')
 parser.add_argument('dtfile', type=str ,help='dt')
-
 args  = parser.parse_args()
 
-h5  = h5py.File(args.dtfile)
-dt  = h5['dt']
-fdt = ma.masked_array( dt['fdt'], dt['fmask'] )
-kic = h5['kic'][:]
+mkModeskw = dict(nMode=nMode, maxIt=4, verbose=True)
 
-bgood = kic > 0
-print "%i  / %i good" % (kic[bgood].size, kic.size )
-kic = kic[bgood]
-fdt = fdt[bgood,:]
+# Grab stars used for computing modes
+df = stellar.read_cat()
+df = df[df.prog.str.contains('GKM|cool')]
+cut = df.query('11 < kepmag < 12')
 
-U,S,V,A,fit,kic = cotrend.mkModes(fdt,kic)
-out = args.dtfile.replace('dt','svd')
-h5 = h5plus.File(out)
-h5.create_dataset('U'     ,data=U,compression='lzf')
-h5.create_dataset('S'     ,data=S,compression='lzf',shuffle=True)
-h5.create_dataset('V'     ,data=V[:nModeSave],compression='lzf',shuffle=True)
-h5.create_dataset('A'     ,data=A[:,:nModeSave] )
-h5.create_dataset('KIC'   ,data=kic)
-h5.close()
+epic_mode = np.array(cut.epic.tolist())
+
+lc = photometry.read_phot(args.dtfile,epic_mode)
+fdt = ma.masked_array(lc['fdt'],lc['fmask'])
+U,S,V,A,fit,epic_mode_clip,fdt_clip \
+    = cotrend.mkModes(fdt.copy(),epic_mode,**mkModeskw)
+
+#out = args.dtfile.replace('dt','svd')
+out = 'C0.svd.h5'
+
+
+with h5plus.File(out) as h5:
+    h5.create_dataset('U',data=U,compression='lzf')
+    h5.create_dataset('S',data=S,compression='lzf',shuffle=True)
+    h5.create_dataset('V',data=V[:nModeSave],compression='lzf',shuffle=True)
+    h5.create_dataset('A',data=A[:,:nModeSave] )
+    h5.create_dataset('epic',data=epic_mode_clip)
+
 print "mkModes: created %s" % out
+for i in [10,11,12,13,14]:
+    cotrend.plot_modes_diag(out,i)
+    pngout = out.replace('.h5','_kepmag=%i.png' % i)
+    gcf().savefig(pngout)
+    print "mkModes: created %s" % pngout

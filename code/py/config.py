@@ -64,7 +64,7 @@ cdict3 = {'red':  ((0.0, 0.0, 0.0),
 
 
 # Cotrending
-nMode     = 4
+nMode     = 8
 nModeSave = 20 # To save space, don't save all the of the V matrix
 sigOut    = 10
 maxIt     = 10 # Maximum number of iterations for robust-SVD
