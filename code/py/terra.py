@@ -27,17 +27,6 @@ from config import k2_dir
 #######################
 
 
-def resolve_name(outfile,type):
-    if os.environ['K2_PROJDIR']=='':
-        print "K2_PROJDIR not set. Using K2_DIR"
-        k2_projdir = os.environ['K2_DIR']
-    else:
-        k2_projdir = os.environ['K2_PROJDIR']
-
-    if type=='grid':
-        return "%s/%s" % (k2_projdir,outfile)
-    if type=='svdh5':
-        return "%s/%s" % (k2_dir,outfile)
 
 def h5F(par):
     """
@@ -224,7 +213,6 @@ def dv(par):
     par['update'] = True  # need to use h5plus for MCMC
 
     with h5F(par) as h5:
-
         if dict(h5.attrs).has_key('climb') == False:
             climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
             h5.attrs['climb'] = climb
@@ -249,6 +237,7 @@ def dv(par):
         tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
 
+        
         if h5.attrs['num_trans'] >=2:
             tval.at_phaseFold(h5,0)
             tval.at_phaseFold(h5,180)

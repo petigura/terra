@@ -2,6 +2,8 @@ from argparse import ArgumentParser
 import pandas
 import terra
 import matplotlib
+import config
+
 matplotlib.use('Agg')
 
 parser = ArgumentParser(description='Thin wrapper around terra module')
@@ -22,11 +24,10 @@ multi = args.multi
 dL = []
 for f in files:
     df = pandas.read_csv(f,index_col=0)
-    d = df.iloc[index]
-    d['outfile'] = terra.resolve_name(d['outfile'],'grid')
-
-    if f.count('pp.csv') > 0:
-        d['svdh5'] = terra.resolve_name(d['svdh5'],'svdh5')
+    d = dict(df.iloc[index])
+#    if f.count('pp.csv')>0:
+#        d['outfile'] = config.resolve_grid(d['outfile'])
+#
     dL.append(d)
 
 def last2(s):

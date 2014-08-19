@@ -5,6 +5,25 @@ import os
 k2_dir = os.environ['K2_DIR']
 
 
+def resolve_grid(outfile):
+    """
+    Determine path to .grid.h5 based on environment variables
+    """
+
+    if os.environ['K2_PROJDIR']=='':
+        print "K2_PROJDIR not set. Using K2_DIR"
+        k2_projdir = os.environ['K2_DIR']
+    else:
+        k2_projdir = os.environ['K2_PROJDIR']
+
+    if type=='grid':
+        return "%s/%s" % (k2_projdir,outfile)
+
+svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
+lch5 = "%s/Ceng_2.h5" % (k2_dir) # h5 structure with light curve info
+
+
+
 # Qalg
 Plim =  0.001   # Periods must agree to this fractional amount
 epochlim =  0.1 # Epochs must agree to 0.1 days   
@@ -80,5 +99,4 @@ wd        = 4    # Width of the median filter used to determine step
 # After identifying problem cadences, we expand the region which we
 # consider bad data by the following amounts in both directions.
 cadGrow = dict(desat=1,atTwk=4)
-
 

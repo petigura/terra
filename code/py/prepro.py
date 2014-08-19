@@ -20,7 +20,7 @@ import pandas as pd
 
 import cotrend
 import config
-from config import k2_dir
+from config import k2_dir,svdh5,lch5
 import detrend
 import h5plus
 import keplerio
@@ -138,14 +138,14 @@ def cal(h5,par):
     ----------
 
     par : dictionary, must contain following keys:
-          - svdh5 
           - epic
     """
 
-    lc = photometry.read_phot('%s/Ceng.h5' % k2_dir,par['epic'])
+    lc = photometry.read_phot(lch5,par['epic'])
+    lc = rdt(lc)
     fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
-    with h5py.File(par['svdh5'],'r') as hsvd:
+    with h5py.File(svdh5,'r') as hsvd:
         bv   = hsvd['V'][:config.nMode]
 
     fit    = ma.zeros(fdt.shape)
@@ -160,20 +160,6 @@ def cal(h5,par):
 
     lc = np.array(lc.to_records(index=False))
     h5.create_dataset('/pp/cal',data=lc)
-
-def qcal(rraw,rdt,svdpath=None):
-
-    return rcal
-
-
-
-
-    for i in raw.items():
-        q = i[0]
-        svdpath = os.path.join(svd_folder,'%s.svd.h5' % q)
-        kwd[q] = dict(svdpath=svdpath)
-    mapgroup(h5,qcal,['raw','/pp/dt'],'/pp/cal',**kwd)
-
 
 def sQ(h5,stitch_groups='/raw,/pp/dt,/pp/cal'):
     """
