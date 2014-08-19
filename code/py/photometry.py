@@ -10,82 +10,91 @@ import pandas as pd
 import prepro
 import os
 from config import k2_dir
+from astropy.io import fits
+from scipy import ndimage as nd
 
 def imshow2(im,**kwargs):
-    extent = (0,im.shape[0],0,im.shape[1])
+    extent = None#(0,im.shape[0],0,im.shape[1])
+
+    if kwargs.has_key('cmap')==False:
+        kwargs['cmap'] = cm.gray 
+
     imshow(im,interpolation='nearest',origin='lower',
-           cmap=cm.gray,extent=extent,**kwargs)
+           extent=extent,**kwargs)
 
 c0_start_cad = 114
 
-def read_k2_fits(f):
-    """
-    Read in K2 pixel data from fits file
-    """
+def get_comb(f,name):
+    if hasattr(name,'__iter__') is False:
+        name = [name]
 
-    hduL = fits.open(f)
-
-    # Image cube. At every time step, one image. (440 x 50 x 50)
-    fcube = 'RAW_CNTS FLUX FLUX_ERR FLUX_BKG FLUX_BKG_ERR COSMIC_RAYS'.split()
-    cube = rec.fromarrays([hduL[1].data[f] for f in fcube],names=fcube)
-
-    # Time series. At every time step, one scalar. (440)
-    fts = 'TIME TIMECORR CADENCENO QUALITY POS_CORR1 POS_CORR2'.split()
-    ts = rec.fromarrays([hduL[1].data[f] for f in fts],names=fts)
-    return ts,cube
-    
-
-def get_comb(f,epic):
-    if hasattr(epic,'__iter__') is False:
-        epic = [epic]
-
-    nepic = len(epic)
+    nname = len(name)
     with h5py.File(f,'r') as h5:
-        h5db = pd.DataFrame( h5['epic'][:].astype(int),columns=['epic']) 
+        try:
+            h5db = pd.DataFrame( h5['name'][:].astype(int),columns=['name']) 
+        except:
+            h5db = pd.DataFrame( h5['epic'][:].astype(int),columns=['name']) 
+
         h5db['h5idx'] = np.arange(len(h5db))
         h5db['indb'] = True
 
-        epic = pd.DataFrame( epic,columns=['epic']) 
-        epic['inepic'] = True
-        epic['epicidx'] = np.arange(nepic)
+        name = pd.DataFrame( name,columns=['name']) 
+        name['inname'] = True
+        name['nameidx'] = np.arange(nname)
 
-        comb = pd.merge(epic,h5db,how='left')
-        missingepic = comb[comb['indb'].isnull()].epic
+        comb = pd.merge(name,h5db,how='left')
+        missingname = comb[comb['indb'].isnull()].name
 
-        assert comb['indb'].sum()==len(epic), "missing %s" % missingepic
+        assert comb['indb'].sum()==len(name), "missing %s" % missingname
 
         comb = comb.sort('h5idx')
     return comb
 
 
+def read_k2_fits(f):
+    with fits.open(f) as hduL:
+        # Image cube. At every time step, one image. (440 x 50 x 50)
+        fcube = 'RAW_CNTS FLUX FLUX_ERR FLUX_BKG FLUX_BKG_ERR COSMIC_RAYS'.split()
+        cube = rec.fromarrays([hduL[1].data[f] for f in fcube],names=fcube)
 
-def read_pix(f,epic):
+        # Time series. At every time step, one scalar. (440)
+        fts = 'TIME TIMECORR CADENCENO QUALITY POS_CORR1 POS_CORR2'.split()
+        ts = rec.fromarrays([hduL[1].data[f] for f in fts],names=fts)
+        aper = hduL[2].data
+
+        head0 = dict(hduL[0].header)
+        head1 = dict(hduL[1].header)
+        head2 = dict(hduL[2].header)
+
+        return ts[c0_start_cad:],cube[c0_start_cad:],aper,head0,head1,head2
+
+def read_pix(f,name):
     """
     Read in K2 pixel data from h5 repo.
 
-    epic : List of star names to read in
+    name : List of star names to read in
 
     """
     basename = f.split('/')[-1] 
     with h5py.File(f) as h5:
-        comb = get_comb(f,epic)
+        comb = get_comb(f,name)
         cube = h5['cube'][comb.h5idx,c0_start_cad:]
         ts = h5['ts'][comb.h5idx,c0_start_cad:]
 
         if len(comb) > 1:
-            if ~(comb.sort('epicidx').epicidx==comb.epicidx).all():
+            if ~(comb.sort('nameidx').nameidx==comb.nameidx).all():
                 print "For faster reads, read in order"
-                cube = cube[comb.epicidx]
-                ts = ts[comb.epicidx]
+                cube = cube[comb.nameidx]
+                ts = ts[comb.nameidx]
 
         return ts,cube
 
-def read_phot(f,epic):
+def read_phot(f,name):
     """
     Read in K2 photometry from h5 directory
     """
     with h5py.File(f,'r') as h5:
-        comb = get_comb(f,epic)
+        comb = get_comb(f,name)
         lc = h5['dt'][comb.h5idx,:]
     return lc
 
@@ -115,7 +124,6 @@ import numpy as np
 
 def get_pos(cube,plot_diag=False):
     """
-
     """
 
     # Do a median through the data cube to get a high SNR starting image
@@ -145,13 +153,12 @@ def flat_cube(cube):
     med_image = np.median(np.median(cube,axis=1),axis=1)
     return cube - med_image[:,np.newaxis,np.newaxis]
 
-def circular_photometry(ts,cube0,plot_diag=False):
+def circular_photometry(ts,cube0,aper,plot_diag=False):
     """
     Circular Photometry
 
     Parameters
     ----------
-    epic : K2 epic ID
 
     Returns
     -------
@@ -167,8 +174,10 @@ def circular_photometry(ts,cube0,plot_diag=False):
 
     cube['FLUX'] = flat_cube(cube['FLUX'])
 
-    pos = (25,25)
+    pos = nd.center_of_mass(aper==3)
+    pos = (pos[1],pos[0])
     radius = 8.
+
     apertures = ('circular', radius)   
 
     nobs = cube.shape[0]
@@ -183,18 +192,13 @@ def circular_photometry(ts,cube0,plot_diag=False):
             fluxtable, aux_dict = aperture_photometry(image['FLUX'], pos, 
                                                       apertures)
             f.data[i] = fluxtable['aperture_sum']
- 
-#            fluxtable, aux_dict = aperture_photometry(image['FLUX_ERR'], pos, 
-#                                                      apertures)
-#            ferr[i] = np.fluxtable['aperture_sum']
-#
         except:
             f.mask[i] = True
-
 
     ts = pd.DataFrame(ts)
     ts['f'] = f.data
     ts['fmask'] = f.mask
+    ts['fraw'] = ts['f'].copy()
     ts = ts.rename(columns={'TIME':'t','CADENCENO':'cad'})
     ts = ts.drop('POS_CORR1 POS_CORR2'.split(),axis=1)
     ts['f'] = ts.f / ts.f.median() - 1
@@ -203,9 +207,12 @@ def circular_photometry(ts,cube0,plot_diag=False):
     ts = np.array(pd.DataFrame(ts).to_records(index=False))
 
     if plot_diag:
+        clf()
+        fimagemed = np.median(cube['FLUX'],axis=0)
+        imshow2( arcsinh(fimagemed) ) 
+        imshow2(aper,cmap=cm.hot,alpha=0.2,vmax=10)
         c = Circle(pos,radius=8,fc='none',ec='red')
         gca().add_artist(c)
-        imshow2( np.median(cube['FLUX'],axis=0) )
 
     return ts
 
@@ -214,3 +221,5 @@ def r2fm(r,field):
     Convienence Function. Make masked array from r['f'] and r['fmask']
     """
     return ma.masked_array(r[field],r['fmask'])
+
+

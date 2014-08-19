@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 from argparse import ArgumentParser
 import h5plus
 import photometry
@@ -6,6 +9,8 @@ import h5py
 import numpy as np
 import prepro
 
+from matplotlib.pylab import *
+
 psr = ArgumentParser(description='Compute photometry from K2 data')
 psr.add_argument('--np',type=int,default=1,help='Number of processors to use')
 args = psr.parse_args()
@@ -13,54 +18,32 @@ args = psr.parse_args()
 df = stellar.read_cat()
 nlc = len(df)
 
-f = 'C0.h5'
-ts,cube = photometry.read_pix(f,df.iloc[0]['epic'])
-lc = photometry.circular_photometry(ts,cube)
-lc0 = prepro.rdt(lc)
+epic = df.iloc[0]['epic']
+f = 'Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits' % epic
+ts,cube,aper,head0,head1,head2 = photometry.read_k2_fits(f)
+lc0 = photometry.circular_photometry(ts,cube,aper,plot_diag=True)
 
-h5file = 'Ceng.h5'
+h5file = 'Ceng_2.h5'
 
 with h5plus.File(h5file) as h5:
     h5.create_dataset('dt',dtype=lc0.dtype,shape=(len(df),lc0.size) )
     h5['epic'] = np.array(df.epic)
 
-
-
 numpro  = args.np
 ids = np.arange(nlc)
+#ids = np.arange(10)
 if numpro==1:
     for i in ids:
-        lcL = get_lc(i)
-        with h5py.File(h5file) as h5:
-            h5['dt'][i,:] = lcL[0]
-else:
-    def circ_phot(arg):
-        ts = arg[0]
-        cube = arg[1]
-        return photometry.circular_photometry(ts,cube)
+        epic = df.iloc[i]['epic']
+        f = 'Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits' % epic
+        ts,cube,aper,head0,head1,head2 = photometry.read_k2_fits(f)
+        lc = photometry.circular_photometry(ts,cube,aper,plot_diag=True)
 
-    # Using Pool.map to handle parallelism. 
-    from multiprocessing import Pool
-    pool = Pool(numpro)
-    idsL = np.array_split(ids,nlc / numpro)
-    for iL in idsL:
-        tsL,cubeL = photometry.read_pix(f,df.iloc[iL]['epic'])
-
-        lcL = pool.map(circ_phot,zip(tsL,cubeL))
-        # For some reason prepro.rdt screws up multiprocessing module.
-        lcL = map(prepro.rdt,lcL)
-        lcL = np.vstack(lcL)
+        gcf().savefig('Ceng/plots/%09d.png' % epic)
 
         with h5py.File(h5file) as h5:
-            h5['dt'][iL,:] = lcL
+            h5['dt'][i,:] = lc
 
-
-        print df.iloc[iL]['epic']
-
+        if (i%100)==0:
+            print i
         
-    pool.close()
-    pool.join()
-    
-
-
-
