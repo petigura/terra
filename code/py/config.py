@@ -20,8 +20,9 @@ def resolve_grid(outfile):
         return "%s/%s" % (k2_projdir,outfile)
 
 svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
-lch5 = "%s/Ceng_2.h5" % (k2_dir) # h5 structure with light curve info
 
+path_phot = "%s/Ceng.phot.h5" % (k2_dir) # h5 structure with light curve info
+path_pix = "%s/Ceng.pix.h5" % (k2_dir) # h5 structure with light curve info
 
 
 # Qalg
