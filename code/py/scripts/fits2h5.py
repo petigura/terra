@@ -71,14 +71,15 @@ def dict_list_to_frame(dict_list):
     goodkeys = [ k for k in d0.keys() if (type(d0[k])!=fits.card.Undefined)]
     df = df[goodkeys]
 
+#    comb = pdplus.df_to_rec_strings(df)
     dfs = df.select_dtypes(include=['object'])
     dfns = df.select_dtypes(exclude=['object'])
-
     dfs = rec.fromarrays(np.array(dfs).astype('S100').T,names=list(dfs.columns))
 
     names = list(dfns.columns)
     arrs = [dfns[n] for n in names]
     comb = mlab.rec_append_fields(dfs,names,arrs)
+
     return comb
 
 

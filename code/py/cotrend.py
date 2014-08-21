@@ -16,7 +16,7 @@ from matplotlib import mlab
 from numpy import ma,rec
 import numpy as np
 
-from config import nMode,sigOut,maxIt
+from config import nMode,sigOut,maxIt,path_phot
 
 def dtbvfitm(t,fm,bv):
     """
@@ -190,9 +190,101 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
 
             goodid = goodid[gRow]
 
-        count +=1
+        count+=1
 
     return U,S,V,goodid,X2
+
+
+from sklearn.decomposition import FastICA, PCA
+def robust_components(M0,n_components=4,algo='PCA'):
+    """
+    Robust Independent Component Analysis
+
+    M : d x n matrix of observations, where d is the dimensionality of
+        the measurements, and n is the number of measurements
+    """
+
+    M = M0.copy()
+    d,n = M0.shape
+
+    # columns of M0, that make it to the end of the sigma-clipping
+    icolin = np.arange(n) 
+    outliers = -1
+    iteration = 0 
+    while outliers!=0:
+        if algo=='PCA':
+            pca = PCA(n_components=n_components)
+            U = pca.fit_transform(M)
+            V = pca.components_.T
+        elif algo=='ICA':
+            ica = FastICA(n_components=n_components,max_iter=600)
+            U = ica.fit_transform(M)  # Reconstruct signals
+            V = ica.mixing_   # Get estimated mixing matrix
+        else:
+            print "algo = [ICA|PCA]"
+            return 
+
+        # Typical dispersion in best fit parameters
+        Vsig = 1.48*np.median(abs(V),axis=0) 
+        bVin = (abs(V/Vsig) > 5)
+        bVin = bVin.sum(axis=1)==0 
+
+        # Throw out outliers
+        M = M[:,bVin]
+        icolin = icolin[bVin]
+
+        outliers=(~bVin).sum()
+        print "Iter %02d: %i outliers" % (iteration,outliers) 
+
+        iteration+=1
+
+    return U,V,icolin
+
+def robustPCA(M0,n_components=4):
+    """
+    Robust Independent Component Analysis
+
+    M : d x n matrix of observations, where d is the dimensionality of
+        the measurements, and n is the number of measurements
+    """
+
+
+    M = M0.copy()
+    outliers = -1
+
+    while outliers!=0:
+
+
+        # Typical dispersion in best fit parameters
+        # Typical dispersion in best fit parameters
+        Vsig = 1.48*np.median(abs(V),axis=0) 
+        bVin = (abs(V/Vsig) > 5)
+        bVin = bVin.sum(axis=1)==0 # Throw out outliers
+        M = M[:,bVin]
+        outliers=(~bVin).sum()
+        print outliers
+    return U,V
+
+
+from matplotlib.gridspec import GridSpec
+
+def plot_PCs(U,V):
+    fig = figure(figsize=(20,12))
+    nPC = U.shape[1]
+    gs = GridSpec(nPC,nPC+1)
+    axPCL = [fig.add_subplot(gs[i,:-1]) for i in range(nPC)]
+    axAL = [fig.add_subplot(gs[i,-1]) for i in range(nPC)]
+    for i in range(nPC):
+        sca(axPCL[i])
+        plot(U[:,i])
+
+        sca(axAL[i])
+        hist(V[:,i])
+
+    fig.set_tight_layout(True)
+
+
+
 
 
 def mkModes(fdt0,kic0,verbose=True,maxIt=maxIt,nMode=nMode):
@@ -531,21 +623,6 @@ def repQper(t,dM,nQ=12):
     res = tfind.pep(t.TIME[0],dM,PcadG)
     return PG,res['fom']
 
-
-def corr(f1,f2):
-    bgood = ~f1.mask & ~f2.mask
-    return stats.pearsonr(f1[bgood],f2[bgood])[0]
-
-def mcorr(fdtL):
-    nlc = len(fdtL)
-    corrmat = zeros((nlc,nlc))
-
-    for i in range(nlc):
-        for j in range(nlc):
-            corrmat[i,j] = corr(fdtL[i],fdtL[j])
-
-    return corrmat
-
 def indord(ind):
     n = len(ind)
     x,y = np.mgrid[0:n,0:n]
@@ -628,34 +705,43 @@ import stellar
 from matplotlib.pylab import *
 import h5py
 import photometry
+import tfind
+import prepro
+from matplotlib.transforms import blended_transform_factory as btf
 
-def plot_modes_diag(h5file,kepmag):
-    df = stellar.read_cat()
+def plot_modes_diag(U,V,kepmag):
+    n_components = U.shape[1]
+    fig = figure(figsize=(20,8))
 
-    with h5py.File(h5file,'r') as h5:
-        V = h5['V'][:]
+    gs1 = GridSpec(n_components,1)
+    gs1.update(left=0.05, right=0.33, wspace=0.05,hspace=0.001)
 
-    fig,axL = subplots(ncols=3,sharex=True,figsize=(20,8))
-    setp(fig,tight_layout=True)
+    ax0 = plt.subplot(gs1[0])
+
+    axPCL = [plt.subplot(gs1[i],sharex=ax0) for i in range(1,n_components)]
+    axPCL = [ax0] + axPCL
+    setp([ax.get_xaxis() for ax in axPCL[:-1]],visible=False)
+
+    gs2 = GridSpec(1,2)
+    gs2.update(left=0.4, right=0.99,hspace=0.1)
+    axL = [plt.subplot(gs2[0,i],sharex=ax0) for i in range(2)]
+
+
+    for i in range(n_components):
+        sca(axPCL[i])
+        plot(U[:,i])
+
 
     sca(axL[0])
-    setp(axL[0],xlabel='Measurement Number',
-         ylabel='Change in Stellar Brightness',
-         title='Top 8 Principle Components')
 
-    dy = np.arange(nMode) * 0.25
-    plot(V[:nMode].T+dy)
+    dfdiag = stellar.read_diag(kepmag)
 
-
-    sca(axL[1])
-
-    dfdiag = stellar.get_diag(df,kepmag)
     ndiag = len(dfdiag)
-    
-    lc = photometry.read_phot('Ceng.h5',dfdiag.epic)
+    lc = [photometry.read_phot(path_phot,epic) for epic in dfdiag.epic]
+    lc = vstack([prepro.rdt(lci) for lci in lc]) # Light curves are rows of lc
     fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
-    fit = [bvfitm(fdt[i],V[:nMode])[1] for i in range(ndiag)]
+    fit = [bvfitm(fdt[i],U.T)[1] for i in range(ndiag)]
     fit = ma.vstack(fit)
 
     MADdM4 = []
@@ -664,22 +750,29 @@ def plot_modes_diag(h5file,kepmag):
         MADdM4 += [ma.median(ma.abs(dM))]
 
     MADdM4 = np.hstack(MADdM4)
-    title('median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
-    setp(axL[1],xlabel='Measurement Number',
-         ylabel='Change in Stellar Brightness',
-         title='20 Stars fit with 8 Principle Components')
+    setp(axL[0],ylabel='Change in Stellar Brightness',
+         title='median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
 
     dy = arange(ndiag)*0.01
     plot(fdt.T+dy,color='k')
     plot((fdt.T+dy)[0],color='k',label='Data')
+
     plot(fit.T+dy,color='r')
     plot((fit.T+dy)[0],color='r',label='PC fit')
     legend()
-    sca(axL[2])
+
+    sca(axL[1])
 
     fcal = fdt - fit
     plot(fcal.T+dy,color='r')
     plot((fcal.T+dy)[0],color='r',label='Residuals')
+    for i in range(len(dfdiag)):
+        ax = gca()
+        s = str(dfdiag.iloc[i]['epic'])
+        text(0.9,dy[i],s,size='x-small',
+             transform=btf(ax.transAxes,ax.transData))
+
+
 
     MADdM4 = []
     for i in range(ndiag):
@@ -687,9 +780,40 @@ def plot_modes_diag(h5file,kepmag):
         MADdM4 += [ma.median(ma.abs(dM))]
 
     MADdM4 = np.hstack(MADdM4)
-    title('median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
-    setp(axL[1],xlabel='Measurement Number',
-         ylabel='Change in Stellar Brightness',
-         title='Detrended Stellar Brightness')
+    setp(axL[1],ylabel='Change in Stellar Brightness',
+         title='median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
 
+
+    setp(axPCL[0],title='Top %i Principle Components' % n_components)
+    setp([ax for ax in [axPCL[-1]] + axL],xlabel='Measurement Number')
     legend()
+
+
+def plot_modes_fov(U,V):
+    n_components = U.shape[1]
+
+    df = stellar.read_cat()
+
+    ndiag = len(dfdiag)
+    lc = [photometry.read_phot(path_phot,epic) for epic in dfdiag.epic]
+    lc = vstack([prepro.rdt(lci) for lci in lc]) # Light curves are rows of lc
+    fdt = ma.masked_array(lc['fdt'],lc['fmask'])
+
+    A = [bvfitm(fdt[i],U.T)[0] for i in range(ndiag)]
+    A = ma.vstack(A)
+    return dfdiag,A
+
+import re
+def dfA_get_coeffs(dfA):
+    kAs = [c for c in dfA.columns if len(re.findall('A\d{2}',c)) > 0]
+    return dfA[kAs]
+    
+def plot_mode_FOV(dfA):
+    kAs = dfA_get_coeffs(dfA).columns
+    fig,axL = subplots(ncols=4,nrows=2,sharex=True,sharey=True)
+    for i in range(len(kAs)):
+        sca(axL.flatten()[i])
+        k = kAs[i]
+        scatter(dfA.ra,dfA.dec,c=dfA[k])
+        title(k)
+

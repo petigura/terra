@@ -50,31 +50,12 @@ def read_cat():
                             'Kp':'kepmag',
                             'list':'prog'})
     df['prog'] = df.prog.str.slice(start=1)
+    ra = Longitude(df.ra*u.deg,180*u.deg)
+    ra.wrap_angle=180*u.deg
+    df['ra'] = ra.deg
+
     return df
 
-
-def get_diag(df0,kepmag,plot_diag=False):
-    """
-    Return 20 stars with kepmag above certain value
-    """
-    df = df0.copy()
-    df = df.sort('kepmag')
-    df = df[df.kepmag > kepmag]
-
-    df['ra'] = Longitude(df.ra * u.deg).wrap_at(180*u.deg).degree
-    df['dec'] = Latitude(df.dec * u.deg).degree
-
-    cent_ra,cent_dec =  354.2,-2.42
-    df['dra'] = df['ra'] - median(df['ra'])
-    df['ddec'] = df['dec'] - median(df['dec'])
-
-    dfcut = df.iloc[:20]    
-    if plot_diag:
-        plot(df.dra,df.ddec,',')
-        plot(dfcut.dra,dfcut.ddec,'.',color='Tomato',mew=0,
-             label='Diagnostic Stars')
-        setp(gca(),xlabel='delta RA',ylabel='delta DEC')
-    return dfcut
 
 def read_diag(kepmag):
     path_diag = '%s/Ceng/diagnostic_stars/diag_kepmag=%i.txt' % (k2_dir,kepmag)

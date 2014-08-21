@@ -20,7 +20,7 @@ import pandas as pd
 
 import cotrend
 import config
-from config import k2_dir,svdh5,lch5
+from config import k2_dir,svdh5,path_phot
 import detrend
 import h5plus
 import keplerio

@@ -9,7 +9,7 @@ from matplotlib.pylab import *
 import pandas as pd
 import prepro
 import os
-from config import k2_dir
+from config import k2_dir,path_phot,path_pix
 from astropy.io import fits
 from scipy import ndimage as nd
 
@@ -22,6 +22,17 @@ def imshow2(im,**kwargs):
     imshow(im,interpolation='nearest',origin='lower',
            extent=extent,**kwargs)
 
+def plot_med_star(name,stretch='none'):
+    ts,cube = read_pix(path_pix,name)
+    fcube = cube['FLUX']
+    fcube = flat_cube(fcube)
+    med_image = np.median(fcube,axis=0)
+
+    if stretch=='arcsinh':
+        imshow2(arcsinh(med_image))
+    else:
+        imshow2(med_image)
+        
 c0_start_cad = 114
 
 def get_comb(f,name):
@@ -222,4 +233,35 @@ def r2fm(r,field):
     """
     return ma.masked_array(r[field],r['fmask'])
 
+from scipy.optimize import fmin
+import stellar
 
+def phot_vs_kepmag(plot_diag=False):
+    with h5py.File(path_phot,'r') as h5:
+        fraw = h5['dt']['fraw']
+        epic = h5['epic'][:]
+
+    fmed = np.median(fraw,axis=1)
+    b = fmed > 1 
+    epic = epic[b]
+
+    df0 = stellar.read_cat()
+    df0.index = df0.epic
+    df = df0.copy()
+
+    df = df.ix[epic]
+    df['logfmed'] = log10(fmed[b])
+
+    # Fit a line (robust) to log(flux) and kepmag
+    p0 = [-1,14]
+    obj = lambda p : np.sum(abs(df.logfmed - polyval(p,df.kepmag)))
+    p1 = fmin(obj,p0,disp=0)
+
+    df['logfmed_resid'] = df.logfmed - polyval(p1,df.kepmag)
+    if plot_diag:
+        plot(df.kepmag,df.logfmed,'.')
+        kepmagi = linspace(9,20,100)
+        plot(kepmagi,polyval(p1,kepmagi),lw=2)
+        setp(gca(),xlabel='Kepmag',ylabel='Flux')
+
+    return pd.concat([df0,df['logfmed logfmed_resid'.split()]],axis=1)
