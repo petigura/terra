@@ -109,6 +109,14 @@ def read_phot(f,name):
         lc = h5['dt'][comb.h5idx,:]
     return lc
 
+def read_cal(f,name):
+    """
+    Read in K2 photometry from h5 directory
+    """
+    with h5py.File(f,'r') as h5:
+        comb = get_comb(f,name)
+        lc = h5['cal'][comb.h5idx,:]
+    return lc
 
 
 def SAP_FLUX(i):

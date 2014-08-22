@@ -84,9 +84,13 @@ dfA = pd.DataFrame(A,columns=kAs,index=dftr_clip.index)
 dfA = pd.concat([dftr_clip,dfA],axis=1)
 
 # Label points as inliers
-sig = 1.48*abs(dfA[kAs]).median()
-dfdev = dfA[kAs]/sig
-dfA['inlier'] = (np.array(abs(dfdev) > 5)).sum(axis=1)==0
+dfAc = cotrend.dfA_get_coeffs(dfA)
+dfAc_st = pd.DataFrame(dfAc.median(),columns=['med'])
+dfAc_st['sig'] = 1.48*abs(dfAc - dfAc_st['med']).median()
+dfAc_st['outhi'] = dfAc_st['med'] + 5 * dfAc_st['sig']
+dfAc_st['outlo'] = dfAc_st['med'] - 5 * dfAc_st['sig']
+inlier = (dfAc_st.outlo < dfAc) & (dfAc < dfAc_st.outhi)
+dfA['inlier'] = np.all(inlier,axis=1)
 
 print ""
 print "%i stars in training set " % fdt.shape[0]
@@ -97,7 +101,6 @@ clf()
 pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
 gcf().savefig(plot_basename+'_coeffs.png')
 
-
 clf()
 cotrend.plot_mode_FOV(dfA[dfA.inlier])
 gcf().set_tight_layout(True)
@@ -106,6 +109,7 @@ gcf().savefig(plot_basename+'_FOV.png')
 path_train = args.path_train
 path_train_dfA = path_train.replace('train','train-dfA')
 dfA.to_hdf(path_train_dfA,'dfA')
+dfAc_st.to_hdf(path_train_dfA,'dfAc_st')
 
 with h5plus.File(path_train) as h5:
     for k in 'U V U_clip'.split():

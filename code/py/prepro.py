@@ -491,6 +491,24 @@ def isOutlier(f):
     lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)    
     return good & ( (resf > up) | (resf < lo) )
 
+def isCR(f):
+    """
+    Is Cosmic Ray
+
+    Identifies single outliers that are > 5 sigma surronding measurements
+
+    Returns
+    -------
+    cr : Boolean array. True is cosmic ray
+    """
+
+    fmed = nd.median_filter(f,size=4)
+    fhpf = f-fmed
+    sig = 1.48*np.median(np.abs(fhpf))
+    cr = fhpf > 10*sig
+    return cr
+
+
 def noiseyReg(t,dM,thresh=2):
     """
     Noisey Region
