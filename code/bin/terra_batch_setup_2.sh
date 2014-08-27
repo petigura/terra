@@ -3,7 +3,7 @@ read -ep "Enter output directory " K2_PROJDIR
 BNAME=$(basename ${K2_PROJDIR})
 SCRIPTDIR="${K2_PROJDIR}/scripts/"
 
-N_STARS=$(cat ${BNAME}/pp.csv | wc -l)
+N_STARS=$(cat ${K2_PROJDIR}/pp.csv | wc -l)
 N_STARS=$(expr ${N_STARS} - 1 ) # Knock off header
 
 

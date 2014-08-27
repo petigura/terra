@@ -3,27 +3,29 @@ import os
 
 # Setup directories
 k2_dir = os.environ['K2_DIR']
-
+k2_camp = os.environ['K2_CAMP']
 
 def resolve_grid(outfile):
     """
     Determine path to .grid.h5 based on environment variables
     """
-
-    if os.environ['K2_PROJDIR']=='':
-        print "K2_PROJDIR not set. Using K2_DIR"
+    if os.environ['K2_SEARCH_DIR']=='':
+        print "K2_SEACH_DIR not set. Using K2_DIR"
         k2_projdir = os.environ['K2_DIR']
     else:
-        k2_projdir = os.environ['K2_PROJDIR']
+        k2_projdir = os.environ['K2_SEARCH_DIR']
 
     if type=='grid':
         return "%s/%s" % (k2_projdir,outfile)
 
 svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
 
-path_phot = "%s/Ceng.phot.h5" % (k2_dir) # h5 structure with light curve info
-path_pix = "%s/Ceng.pix.h5" % (k2_dir) # h5 structure with light curve info
+# path to pixel data
+path_pix_fits = os.environ['K2_PIX_DIR']
 
+# path to light curve photometry
+path_phot = "%s/%s.phot.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
+path_train = "%s/%s.train.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
 
 # Qalg
 Plim =  0.001   # Periods must agree to this fractional amount

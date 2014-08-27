@@ -10,17 +10,18 @@ echo "scripts will be stored here: ${SCRIPTDIR}"
 
 if [ -d "$K2_PROJDIR" ] 
 then
+    echo
     echo "Directory exists, could be overwriting files" 
 else
     echo "creating directories"
     mkdir -p ${GRIDDIR} ${SCRIPTDIR}
 fi
 
-cp tpstemp.ipynb ${K2_PROJDIR}/
+cp tpstemp.ipynb mctemp.ipynb ${K2_PROJDIR}/
 
 echo
 echo "cd ${K2_PROJDIR}"
-echo "ipython notebook tpstemp.ipynb"
+echo "ipython notebook [tpstemp.ipynb|mctemp.ipynb]"
 echo 
 echo "create pp.csv, grid.csv, and dv.csv"
 
