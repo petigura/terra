@@ -16,20 +16,17 @@ import h5py
 
 import cotrend
 import sys
-from config import path_phot
+from config import path_phot,path_train
 import stellar
 import photometry
 import prepro
 
 
 parser = ArgumentParser(description='Ensemble calibration')
-parser.add_argument('path_phot',type=str ,help='Path to photometry database')
-parser.add_argument('path_train',type=str ,help='Path to photometry database')
 
 args  = parser.parse_args()
 
 # Load up the information from ensemble cotrending
-path_train = args.path_train
 path_train_dfA = path_train.replace('train','train-dfA')
 path_cal = path_train.replace('train','cal')
 
@@ -43,7 +40,7 @@ dfAc_st = pd.read_hdf(path_train_dfA,'dfAc_st')
 # Load up stars
 dfstars = photometry.phot_vs_kepmag()
 nstars = len(dfstars)
-
+print "calibrating %s stars" % nstars
 def cal(i):
     ind = dict(dfstars.iloc[i])
     name = ind['epic']
@@ -82,10 +79,14 @@ with h5plus.File(path_cal) as h5:
     h5.create_dataset('cal', dtype=lc0.dtype, shape=(nstars, lc0.size))
     h5['name'] = np.array(dfstars.epic)
     outdL = []
-    for i in range(len(dfstars)):
+    
+    for i in range(nstars):
         lc,outd = cal(i)
         h5['cal'][i,:] = lc
         outdL+=[outd]
+        if (i%100)==0:
+            print i
+
     
 dfstars = pd.DataFrame(outdL)
 path_cal_meta = path_cal.replace('cal','cal-meta')

@@ -15,19 +15,19 @@ import h5py
 
 import cotrend
 import sys
-from config import path_phot
+from config import path_phot,path_train,k2_projdir
 import stellar
 import photometry
 import prepro
 
 algo = 'ICA'
 n_components = 8
-plot_basename = 'cotrend_robust%s_ncomp=%i' % (algo,n_components) 
+plot_basename = '%s/cotrend_robust%s_ncomp=%i' % (k2_projdir,algo,n_components) 
 
 parser = ArgumentParser(description='Ensemble calibration')
-parser.add_argument('path_phot',type=str ,help='Path to photometry database')
-parser.add_argument('path_train',type=str ,help='Path to photometry database')
 args  = parser.parse_args()
+print "Reading training photometry from %s" % path_phot
+print "Saving modes to %s" % path_train
 
 # Grab stars used for computing modes
 df0 = photometry.phot_vs_kepmag()
@@ -38,7 +38,18 @@ dftr = dftr.query('10 < kepmag < 13')
 
 # Load up light curves
 lc = photometry.read_phot(path_phot, list(dftr.epic) )
-lc = np.vstack([prepro.rdt(lci) for lci in lc]) # Detrend Light curves
+
+# Detrend light curves
+nlc = lc.shape[0]
+print "Detrending %i light curves" % nlc
+
+lc2 = []
+for i in range(nlc):
+    lc2+=[prepro.rdt(lc[i])]
+    if (i%100)==0:
+        print i
+lc = np.vstack(lc2) 
+
 fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
 # Mask out bad columns and rows
@@ -106,7 +117,6 @@ cotrend.plot_mode_FOV(dfA[dfA.inlier])
 gcf().set_tight_layout(True)
 gcf().savefig(plot_basename+'_FOV.png')
 
-path_train = args.path_train
 path_train_dfA = path_train.replace('train','train-dfA')
 dfA.to_hdf(path_train_dfA,'dfA')
 dfAc_st.to_hdf(path_train_dfA,'dfAc_st')

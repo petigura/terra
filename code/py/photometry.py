@@ -9,7 +9,7 @@ from matplotlib.pylab import *
 import pandas as pd
 import prepro
 import os
-from config import k2_dir,path_phot,path_pix
+from config import k2_dir,path_phot
 from astropy.io import fits
 from scipy import ndimage as nd
 
@@ -273,3 +273,24 @@ def phot_vs_kepmag(plot_diag=False):
         setp(gca(),xlabel='Kepmag',ylabel='Flux')
 
     return pd.concat([df0,df['logfmed logfmed_resid'.split()]],axis=1)
+
+def Ceng2C0(lc0):
+    """
+    Simple script that turns the engineering data into C0 lenght data
+    """
+    lc = lc0.copy()
+
+    tbaseC0 = 75
+    tbase = lc['t'].ptp()
+    lc = prepro.rdt(lc)
+
+    # Detrend light curves to remove some of the jumps between segments
+    lc['f'] = lc['fdt'] 
+
+    nrepeat = int(np.ceil(tbaseC0/tbase))
+    lcC0 = np.hstack([lc]*nrepeat)
+    for i in range(nrepeat):
+        s = slice(lc.size*i, lc.size*(i+1)) 
+        lcC0['t'][s]+=tbase*i
+        lcC0['cad'][s]+=lc['cad'].ptp()*i
+    return lcC0

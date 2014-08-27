@@ -18,9 +18,10 @@ from matplotlib import mlab
 import h5plus
 import copy
 import os
-import pandas
+import pandas as pd
 deltaPcad = 10
-from config import k2_dir
+from config import k2_dir,path_phot
+import photometry
 
 #######################
 # Top Level Functions #
@@ -32,7 +33,6 @@ def h5F(par):
     """
     If the update kw is set, open h5 file as a h5plus object.
     """
-
     outfile = par['outfile']
     if par['update']:
         return h5plus.File(outfile)
@@ -93,10 +93,19 @@ def pp(par):
 
 
     with h5F(par) as h5:
+        lc = photometry.read_phot(path_phot, par['epic'] )
+
+        h5.create_group('pp')
+        h5['/pp/cal'] = lc
         if par['type'].find('mc') != -1:
             inj(h5,par)
-        
-        h5.create_group('/pp')
+
+        lc = h5['/pp/cal'][:]
+        lc = prepro.rdt(lc) # detrend light curve
+
+        del h5['/pp/cal']
+        h5['/pp/cal'] = lc
+
         prepro.cal(h5,par)
 
         if par.has_key('plot_lc'):
@@ -107,8 +116,6 @@ def pp(par):
                 figpath = par['outfile'].replace('.h5','.lc.png')
                 plt.gcf().savefig(figpath)
                 plt.close() 
-
-
 
 
 def raw(h5,files,fields=[]):
@@ -149,19 +156,22 @@ def grid(par):
     -------
 
     >>> import terra
-    >>> dgrid = {'P1': 0.5,'P2': 400,
-                 'fluxField': 'fcal','fluxMask': 'fmask',
-                 'tbase':1440,'update':True,
-                 'outfile':'koi351_comp.h5'}
-    >>> dgrid['P1_FFA'] = int(dgrid['P1'] / keptoy.lc)
-    >>> dgrid['P2_FFA'] = int(dgrid['P2'] / keptoy.lc)
+    >>> par
+    {'P1': 0.5,
+    'P2': 3,
+    'fluxField': 'fcal',
+    'fluxMask': 'fmask',
+    'name': 60017806,
+    'outfile': 'test.h5',
+    'tbase': 7,
+    'update': True}
     >>> terra.grid(dgrid)    
     
     """
+    # Copy in calibrated light-curve
     names = 'P1 P2 Pcad1 Pcad2 delT1 delT2 twdG'.split()
-
     parL = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
-    df = pandas.DataFrame(parL,columns=names)
+    df = pd.DataFrame(parL,columns=names)
 
     print "Running grid on %s" % par['outfile'].split('/')[-1]
     print df.to_string()
@@ -374,7 +384,7 @@ def inj(h5,pardict):
 
     Parameters
     ----------
-    h5       : h5plus object.  Must have raw/ group
+    h5       : h5plus object.  Must have /pp/cal dataset
     injdict  : full pardict.  Will strip off only the necessary columns
     """
     injdict = {}
@@ -385,15 +395,15 @@ def inj(h5,pardict):
     for i in range(1,5):
         injdict['a%i' % i]=pardict['a%i' %i]
     
-    raw = h5['raw']
-    qL = [i[0] for i in raw.items() ]
-    for q in qL:
-        r  = raw[q][:] # pull data out of h5py file
-        ft = keptoy.synMA(injdict,r['t'])
-        r['f'] +=ft
-        r = mlab.rec_append_fields(r,'finj',ft)
-        del raw[q]
-        raw[q] = r
+    lc = h5['/pp/cal'][:]
+    ft = keptoy.synMA(injdict,lc['t'])
+    lc['f'] +=ft
+    lc = mlab.rec_append_fields(lc,'finj',ft)
+
+    del h5['/pp/cal']
+    h5['/pp/cal'] = lc
+    
+
         
 def addPaths(d0):
     """
@@ -434,3 +444,67 @@ def gridShort(h5,pardict):
     del h5['it0']['RES']
     h5['it0']['RES'] = res0
     
+
+### Mstar, 
+G          = 6.67e-8 # [cm3 g^-1 s^-2]
+Rsun       = 6.95e10 # cm
+Rearth     = 6.37e8 # cm
+Msun       = 1.98e33 # [g]
+AU         = 1.50e13 # [cm]
+sec_in_day = 86400
+
+def simPts(stars,nsim,limD):
+    """
+    Simulate Planet Parameters
+
+    Parameters
+    ----------
+    stars : DataFrame of stellar parameters. Must have the following keys
+            - Mstar
+            - Rstar
+    nsim : Number of simulations
+    limD : Specify the range of P and Re
+
+    """
+    nsim = int(nsim)
+    nstars = len(stars)
+    np.random.seed(100)
+
+    # Make a DataFrame with P and Rp
+    simPar = {}
+    for k in limD.keys():
+        lim = limD[k]
+        lo,hi = lim[0],lim[1]
+        x = np.random.random(nsim)
+        x = (np.log10(hi) -np.log10(lo) ) * x + np.log10(lo)
+        x = 10**x
+        simPar[k] = x
+    simPar = pd.DataFrame(simPar)
+
+    idxstars = np.random.random_integers(0,nstars-1,nsim)
+    stars = stars.ix[idxstars]
+    stars.index = range(nsim)
+    simPar = pd.concat([ stars, simPar],axis=1)
+    
+    # Return a in cm
+    def a(x):
+        Mstar = Msun*x['Mstar']
+        P = x['P']*sec_in_day
+        return (G * Mstar * P**2 / (4*np.pi**2))**(1/3.)
+
+    a = simPar.apply(a,axis=1) # [cm]
+    n = 2*np.pi / (simPar['P']*sec_in_day) # [s^-1]
+    tau = (Rsun*simPar['Rstar'] / a / n)/sec_in_day # [day]
+    p = simPar['Re']*Rearth/(simPar['Rstar']*Rsun)
+
+    simPar['inj_tau'] = tau
+    simPar['inj_p'] = p
+    simPar['id'] = simPar.index
+    
+    simPar['inj_b'] = np.random.random(nsim)
+    simPar['inj_phase'] = np.random.random(nsim) 
+    simPar['inj_P'] = simPar['P']
+
+    return simPar
+
+

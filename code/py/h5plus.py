@@ -31,6 +31,7 @@ class File(h5py.File):
       try:
          group = h5py.File.create_group(self,name)
       except ValueError:
+         print "removing %s " % name
          del self[name]
          group = h5py.File.create_group(self,name)
       return group

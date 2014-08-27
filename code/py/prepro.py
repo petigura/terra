@@ -20,7 +20,7 @@ import pandas as pd
 
 import cotrend
 import config
-from config import k2_dir,svdh5,path_phot
+from config import k2_dir,svdh5,path_phot,path_train
 import detrend
 import h5plus
 import keplerio
@@ -141,65 +141,54 @@ def cal(h5,par):
           - epic
     """
 
-    lc = photometry.read_phot(lch5,par['epic'])
-    lc = rdt(lc)
+
+    # Load up the information from ensemble cotrending
+    path_train_dfA = path_train.replace('train','train-dfA')
+    path_cal = path_train.replace('train','cal')
+
+    print "Calibrating using modes stored here:"
+    print path_train
+    print 
+
+    with h5plus.File(path_train) as h5_modes:
+        for k in 'U V U_clip'.split():
+            exec "%s = h5_modes['%s'][:]" % (k,k)
+
+    dfA = pd.read_hdf(path_train_dfA,'dfA')
+    dfAc_st = pd.read_hdf(path_train_dfA,'dfAc_st')
+    
+    lc = h5['pp/cal'][:]
     fdt = ma.masked_array(lc['fdt'],lc['fmask'])
 
-    with h5py.File(svdh5,'r') as hsvd:
-        bv   = hsvd['V'][:config.nMode]
+    A,fit = cotrend.bvfitm(fdt,U.T)
+    fit = fit.data
 
-    fit    = ma.zeros(fdt.shape)
-    p1,fit = cotrend.bvfitm(fdt.astype(float),bv)
-    fcal  = fdt - fit
-    rcal = np.array(zip(fit.data,fcal.data),
-                    dtype=[('fit', '<f8'), ('fcal', '<f8')]  )
+    dfAc_st['Afit'] = A
+    inlier = np.all(dfAc_st.Afit.between(dfAc_st.outlo,dfAc_st.outhi))
+    if inlier:
+        fcal = fdt - fit
+    else:
+        fcal = fdt.copy()
+        fit = np.zeros(fcal.size)
 
+    # Add in fit and fcal fields
     lc = pd.DataFrame(lc)
-    lc['fit'] = fit.data
+    lc['fit'] = fit
     lc['fcal'] = fcal.data
 
+    lc['cr'] = isCR(lc['fcal'])
+    lc['fmask'] = lc['fmask'] | lc['cr']
+
     lc = np.array(lc.to_records(index=False))
-    h5.create_dataset('/pp/cal',data=lc)
-
-def sQ(h5,stitch_groups='/raw,/pp/dt,/pp/cal'):
-    """
-    Stitch Quarters
-
-    Look at all of the groups. Zip all of the column together and
-    stich the quarters together.
-
-    Adds the mqcal dataset to the h5 directory.
-
-    stitch_groups - comma separated list of groups to stich together
-    """
     
-    groups = [ h5[k] for k in stitch_groups.split(',') ]
-    groups = [ g for g in groups if g.name!='/mqcal' ]
+    outd = dict(par,**dict(dfAc_st.Afit))
+    outd['inlier'] = inlier
 
-    quarters = [i[0] for i in groups[0].items()]
+    del h5['pp/cal']
+    h5['pp/cal'] = lc
+    for k in outd.keys():
+        h5['/pp'].attrs[k] = outd[k]
 
-    rL = []
-    for q in quarters:
-        dsL = rec_zip([ g[q] for g in groups ])
-        rL.append(dsL)            
-
-    if len(quarters)==1:
-        print "sQ: Only 1 quarter"
-        rLC = rL[0]
-    else:
-        rLC = keplerio.rsQ(rL)
-
-    binlen = [3,6,12]
-    try:
-        list(rLC.dtype.names).index('fcal')
-        for b in binlen:
-            bcad = 2*b
-            fcal = ma.masked_array(rLC['fcal'],rLC['fmask'])
-            dM = tfind.mtd(rLC['t'],fcal,bcad)
-            rLC = mlab.rec_append_fields(rLC,'dM%i' % b,dM.filled() )
-    except ValueError:
-        pass
-    h5['/pp/mqcal'] = rLC          
 
 def getseg(lc):
     seglabel = np.zeros(lc.size) - 1

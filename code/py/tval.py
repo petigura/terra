@@ -298,7 +298,7 @@ def read_dv(h5,tpar=False):
 
     # Convenience
     h5.fm = ma.masked_array(h5.lc['fcal'],h5.lc['fmask'])
-    h5.dM = tfind.mtd(h5.fm,h5.attrs['twd'])
+    h5.dM = tfind.mtd(h5.fm,int(h5.attrs['twd']))
     h5.t  = h5.lc['t']
 
 def checkHarmh5(h5):
