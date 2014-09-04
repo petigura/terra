@@ -247,7 +247,7 @@ def results2FITS(o):
     
     data = [getattr(o,n) for n in names]
     data = np.rec.fromarrays(data,names=names)
-    hdu = fits.BinTableHDU(data=data)
+    hdu = pyfits.BinTableHDU(data=data)
 
     hdu.header['time'] = 'Time, BJD_TDB'
     hdu.header['rawFlux'] = 'Raw aperture photometry'
