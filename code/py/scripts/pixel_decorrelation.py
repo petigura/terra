@@ -52,7 +52,6 @@ from multiprocessing import Pool
 from optparse import OptionParser
 import os
 import sys
-import pdb
 import warnings
 warnings.simplefilter('ignore', np.RankWarning) # For np.polyfit
 try:  
@@ -174,7 +173,6 @@ def main(argv=None):
     dapstr = (('%1.2f-'*3) % tuple(results.apertures)).replace('.', ',')[0:-1]
     locstr = 'loc-%i-%i' % tuple(np.array(results.loc).round())
     savefile = '%s%i_%s_r%s_m%i_p%i_s%i' % (_save, results.headers[0]['KEPLERID'], locstr, dapstr, results.nordArc, results.nordGeneralTrend, results.nordPixel1d)
-
 
     # Save everything to disk:
     if output==0 or output==1: # Save a pickle:
@@ -331,7 +329,7 @@ def runOptimizedPixelDecorrelation(fn, loc, apertures=None, resamp=1, nordGenera
         if RMSfit[0]<0 or nextguess<minrad or nextguess>maxrad or nextguess in inner_ap_radii:
             linfit = np.polyfit(np.array(inner_ap_radii)[best2], manyRMS[best2], 1)
             nextguess = inner_ap_radii[best1] - np.sign(linfit[0]) * max(minstep, np.abs(np.diff(np.array(inner_ap_radii)[best2][0:2])))
-        #pdb.set_trace()
+        
 
         rap = getAperRadii(nextguess)
 
@@ -456,7 +454,6 @@ def runPixelDecorrelation(fn, loc, apertures, resamp=1, nordGeneralTrend=5, verb
 
     # Load data:
     time, data, edata, headers = loadPixelFile(fn, header=True, tlimits=tlimits)
-
     # Extract photometry (add eventual hook for PRF fitting):
     flux, eflux, bg, testphot = extractPhotometryFromPixelData(data, loc, apertures, resamp=resamp, verbose=verbose, retall=True)
 
@@ -547,12 +544,12 @@ def loadPixelFile(fn, tlimits=None, bjd0=2454833, header=False):
     quality = f[1].data['quality']
     time = f[1].data['time']
     flux0 = f[1].data['flux'].sum(2).sum(1)
-    index = (quality==0) * (time > mintime) * (time < maxtime) * np.isfinite(flux0)
+    index = (quality==0) & (time > mintime) & (time < maxtime) & np.isfinite(flux0)
+
     stack = f[1].data['flux'][index]
     stack_err = f[1].data['flux_err'][index]
     time = time[index] + bjd0
-    
-
+        
     ret = time, stack, stack_err
     if header:
         ret = ret + ([tools.headerToDict(el.header) for el in f],)
@@ -636,7 +633,6 @@ def extractPhotometryFromPixelData(stack, loc, apertures, resamp=1, recentroid=T
     if mask is None:
         mask = phot4mask.mask_targ + phot4mask.mask_sky*2.0
 
-    #pdb.set_trace()
     phots = [phot.aperphot(frame, pos=(xcen, ycen), dap=dap, mask=mask, resamp=resamp, retfull=False) for frame in stack]
 
     flux = np.zeros(nobs, dtype=float)
@@ -813,7 +809,7 @@ def getCentroidsStandard(stack, mask=None, bg=None, strictlim=True):
     if bg is None:
         bg = np.zeros(stack.shape[0])
 
-    #pdb.set_trace()
+    
     stack -= bg.reshape(nobs, 1, 1)
 
     x1d, y1d = np.arange(stack.shape[2]), np.arange(stack.shape[1])
@@ -1484,7 +1480,7 @@ def errfunc(*arg, **kw):
 
         #print "len(arg)>>", len(arg),
 
-        #pdb.set_trace()
+        
         if kw.has_key('npars'):
             npars = kw['npars']
             chisq = 0.0
@@ -1497,7 +1493,7 @@ def errfunc(*arg, **kw):
                 jointpars = kw['jointpars']
                 for jointpar in jointpars:
                     params[jointpar[1]] = params[jointpar[0]]
-                #pdb.set_trace()
+                
 
             for ii in range(len(npars)):
                 i0 = sum(npars[0:ii])
@@ -1508,7 +1504,7 @@ def errfunc(*arg, **kw):
                 #if 'wrapped_joint_params' in lower_kw:
                 #    junk = lower_kw.pop('wrapped_joint_params')
                 chisq  += errfunc(these_params, *arg[ii+1], **lower_kw)
-                #pdb.set_trace()
+                
             return chisq
 
         else: # Single function-fitting
@@ -1564,7 +1560,7 @@ def errfunc(*arg, **kw):
         # Compute 1D and N-D gaussian, and uniform, prior penalties:
         additionalChisq = 0.
         if gaussprior is not None:
-            #pdb.set_trace()
+            
             additionalChisq += np.sum([((param0 - gprior[0])/gprior[1])**2 for \
                                    param0, gprior in zip(params, gaussprior)])
 
@@ -1653,3 +1649,5 @@ def xcorrStack(stack, npix_corr=4, plotalot=False, maxshift=np.inf):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+

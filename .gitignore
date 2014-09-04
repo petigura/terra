@@ -6,3 +6,5 @@
 *.png
 *.ipynb
 *.gif
+*.pdf
+*.pickle
