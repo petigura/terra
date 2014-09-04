@@ -113,28 +113,54 @@ def main(argv=None):
         plotmode = 'texexec' 
 
     else:  # Probably running from the command line.
-        parser = OptionParser()
+        p = OptionParser()
 
-        parser.add_option('-f', '--file', dest='fn', type='string', metavar='FILE', help='Pixel data filename', action='store')
-        parser.add_option('-x', '--xcen', dest='xcen', type='float', help='Row (X-coordinate) of target in frame')
-        parser.add_option('-y', '--ycen', dest='ycen', type='float', help='Column (Y-coordinate) of target in frame')
-        parser.add_option('-n', '--nthreads', dest='nthreads', type='int', help='Number of threads for multiprocessing.', default=1)
-        parser.add_option('-r', '--resamp', dest='resamp', type='int', help='Resampling factor for partial-pixel photometry.', default=1)
-        parser.add_option('-g', '--gentrend', dest='nordGeneralTrend', type='int', help='Polynomial order for fitting general trend.', default=5)
-        parser.add_option('--minrad', dest='minrad', type='float', help='Minimum aperture radius (pixels)', default=1.5)
-        parser.add_option('--maxrad', dest='maxrad', type='float', help='Maximum aperture radius (pixels)', default=15)
-        parser.add_option('--tmin', dest='tmin', type='float', help='Minimum valid time index. (e.g., 1862.45 for K2 engineering)', default=1862.45)
-        parser.add_option('--tmax', dest='tmax', type='float', help='Maximum valid time index.', default=np.inf)
-        parser.add_option('--gausscen', dest='gausscen', type='int', help='Fit 2D gaussians for centroids if 1 (DEFAULT) or not (if 0)', default=1)
-        parser.add_option('--fs', '--fontsize', dest='fs', type='float', help='Font size for plots.', default=15)
-        parser.add_option('-d', '--datadir', dest='_data', type='string', metavar='DIR', help='Load data from this directory.', action='store', default=_data)
-        parser.add_option('-s', '--savedir', dest='_save', type='string', metavar='DIR', help='Save data into this directory.', action='store', default=_save)
-        parser.add_option('--plotalot', dest='plotalot', type='int', help='Set verbose generation of plots.', action='store', default=False)
-        parser.add_option('--verbose', dest='verbose', type='int', help='Set verbosity level for output text.', action='store', default=0)
-        parser.add_option('--output', dest='output', type='int', help='0=pickled dict (DEFAULT), 1=pickled object (less compatible), 2=FITS (limited data)', action='store', default=0)
-        parser.add_option('--plotmode', dest='plotmode', type='string', help="'texexec' or 'gs' are best, but 'tar' is safest.", action='store', default='tar')
+        p.add_option('-f', '--file', dest='fn', type='string', metavar='FILE',
+                     help='Pixel data filename', action='store')
+        p.add_option('-x', '--xcen', dest='xcen', type='float', 
+                     help='Row (X-coordinate) of target in frame')
+        p.add_option('-y', '--ycen', dest='ycen', type='float', 
+                     help='Column (Y-coordinate) of target in frame')
+        p.add_option('-n', '--nthreads', dest='nthreads', type='int', 
+                     help='Number of threads for multiprocessing.', default=1)
+        p.add_option('-r', '--resamp', dest='resamp', type='int', 
+                     help='Resampling factor for partial-pixel photometry.', 
+                     default=1)
+        p.add_option('-g', '--gentrend', dest='nordGeneralTrend', type='int', 
+                     help='Polynomial order for fitting general trend.', 
+                     default=5)
+        p.add_option('--minrad', dest='minrad', type='float', 
+                     help='Minimum aperture radius (pixels)', default=1.5)
+        p.add_option('--maxrad', dest='maxrad', type='float', 
+                     help='Maximum aperture radius (pixels)', default=15)
+        p.add_option('--tmin', dest='tmin', type='float', 
+                     help='Minimum valid time index. (e.g., 1862.45 for K2 engineering)', default=1862.45)
+        p.add_option('--tmax', dest='tmax', type='float', 
+                     help='Maximum valid time index.', default=np.inf)
+        p.add_option('--gausscen', dest='gausscen', type='int', 
+                     help='Fit 2D gaussians for centroids if 1 (DEFAULT) or not (if 0)', default=1)
+        p.add_option('--fs', '--fontsize', dest='fs', type='float', 
+                     help='Font size for plots.', default=15)
+        p.add_option('-d', '--datadir', dest='_data', type='string', 
+                     metavar='DIR', help='Load data from this directory.', 
+                     action='store', default=_data)
+        p.add_option('-s', '--savedir', dest='_save', type='string', 
+                     metavar='DIR', help='Save data into this directory.', 
+                     action='store', default=_save)
+        p.add_option('--plotalot', dest='plotalot', type='int', 
+                     help='Set verbose generation of plots.', action='store', 
+                     default=False)
+        p.add_option('--verbose', dest='verbose', type='int', 
+                     help='Set verbosity level for output text.', 
+                     action='store', default=0)
+        p.add_option('--output', dest='output', type='int', 
+                     help='0=pickled dict (DEFAULT), 1=pickled object (less compatible), 2=FITS (limited data)', 
+                     action='store', default=0)
+        p.add_option('--plotmode', dest='plotmode', type='string', 
+                     help="'texexec' or 'gs' are best, but 'tar' is safest.", 
+                     action='store', default='tar')
 
-        options, args = parser.parse_args()
+        options, args = p.parse_args()
 
         fn       = options.fn
         xcen     = options.xcen
@@ -209,39 +235,43 @@ def main(argv=None):
     py.close('all')
     return
 
+import pandas as pd
 
 def results2FITS(o):
     """Convert results from :func:`runOptimizedPixelDecorrelation` or
     :func:`runPixelDecorrelation` into a FITS Header unit suitable for
     writing to disk."""
     # 2014-09-02 18:44 IJMC: Created
+    
+    names = 'time cad rawFlux cleanFlux decorMotion decorBaseline bg x y arcLength noThrusterFiring'.split() 
+    
+    data = [getattr(o,n) for n in names]
+    data = np.rec.fromarrays(data,names=names)
+    hdu = fits.BinTableHDU(data=data)
 
-    ii = o.noThrusterFiring
-    data = np.vstack((o.time, o.rawFlux, o.cleanFlux, o.decorMotion, o.decorBaseline, o.bg, o.x, o.y, o.arcLength))[:, ii]
-
-    hdu1 = pyfits.PrimaryHDU(data=data)
-    hdu1.header['ROW1'] = 'Time, BJD_TDB'
-    hdu1.header['ROW2'] = 'Raw aperture photometry'
-    hdu1.header['ROW3'] = 'Cleaned, detrended photometry'
-    hdu1.header['ROW4'] = 'Motion component of decorrelation.'
-    hdu1.header['ROW5'] = 'Long-term trend component of decorrelation.'
-    hdu1.header['ROW6'] = 'Background from photometry.'
-    hdu1.header['ROW7'] = 'X motion (pixels).'
-    hdu1.header['ROW8'] = 'Y motion (pixels).'
-    hdu1.header['ROW9'] = 'Length along arc (pixels).'
-    hdu1.header['APRAD0'] = o.apertures[0]
-    hdu1.header['APRAD1'] = o.apertures[1]
-    hdu1.header['APRAD2'] = o.apertures[2]
-    hdu1.header['LOC1'] = o.loc[0]
-    hdu1.header['LOC2'] = o.loc[1]
+    hdu.header['time'] = 'Time, BJD_TDB'
+    hdu.header['rawFlux'] = 'Raw aperture photometry'
+    hdu.header['cleanFlux'] = 'Cleaned, detrended photometry'
+    hdu.header['decorMotion'] = 'Motion component of decorrelation.'
+    hdu.header['decorBaseline'] = 'Long-term trend component of decorrelation.'
+    hdu.header['bg'] = 'Background from photometry.'
+    hdu.header['x'] = 'X motion (pixels).'
+    hdu.header['y'] = 'Y motion (pixels).'
+    hdu.header['arcLength'] = 'Length along arc (pixels).'
+    hdu.header['noThrusterFiring'] = 'No Thruster Firing Identified'
+    hdu.header['APRAD0'] = o.apertures[0]
+    hdu.header['APRAD1'] = o.apertures[1]
+    hdu.header['APRAD2'] = o.apertures[2]
+    hdu.header['LOC1'] = o.loc[0]
+    hdu.header['LOC2'] = o.loc[1]
     for key in ('kepmag', 'kid', 'resamp', 'rmsCleaned', 'rmsHonest', 'nordArc', 'nordPixel1d', 'nordGeneralTrend', 'rmsCleaned', 'rmsHonest'):
         val = getattr(o, key)
         if hasattr(val, '__iter__'):
-            hdu1.header[key] = val[0]
+            hdu.header[key] = val[0]
         else:
-            hdu1.header[key] = val
+            hdu.header[key] = val
 
-    return hdu1
+    return hdu
 
 def runOptimizedPixelDecorrelation(fn, loc, apertures=None, resamp=1, nordGeneralTrend=5, verbose=False, plotalot=False, xy=None, tlimits=[1862.45, np.inf], nthreads=1, pool=None, minrad=2, maxrad=15, minSkyRadius=4, skyBuffer=2, skyWidth=3, niter=12, gausscen=True):
     """Run (1D) pixel-decorrelation of Kepler Data, and optimized
@@ -453,7 +483,11 @@ def runPixelDecorrelation(fn, loc, apertures, resamp=1, nordGeneralTrend=5, verb
         print " verbosity level is: %i" % verbose
 
     # Load data:
-    time, data, edata, headers = loadPixelFile(fn, header=True, tlimits=tlimits)
+
+
+    cube,headers = loadPixelFile(fn, header=True, tlimits=tlimits)
+    time, data, edata = cube['time'],cube['flux'],cube['flux_err']
+
     # Extract photometry (add eventual hook for PRF fitting):
     flux, eflux, bg, testphot = extractPhotometryFromPixelData(data, loc, apertures, resamp=resamp, verbose=verbose, retall=True)
 
@@ -501,6 +535,7 @@ def runPixelDecorrelation(fn, loc, apertures, resamp=1, nordGeneralTrend=5, verb
     output.cleanFlux = flux / out.decor / out.baseline
     output.bg = bg
     output.loc = testphot.position
+    output.cad = cube['CADENCENO']
 
     output.medianFrame = np.median(data, axis=0)
     output.crudeApertureMask = testphot.mask_targ
@@ -541,21 +576,21 @@ def loadPixelFile(fn, tlimits=None, bjd0=2454833, header=False):
             maxtime = np.inf
 
     f = pyfits.open(fn)
-    quality = f[1].data['quality']
-    time = f[1].data['time']
-    flux0 = f[1].data['flux'].sum(2).sum(1)
-    index = (quality==0) & (time > mintime) & (time < maxtime) & np.isfinite(flux0)
 
-    stack = f[1].data['flux'][index]
-    stack_err = f[1].data['flux_err'][index]
-    time = time[index] + bjd0
-        
-    ret = time, stack, stack_err
+
+    cube = f[1].data
+    flux0 = cube['flux'].sum(2).sum(1)
+
+    index = (cube['quality']==0) & np.isfinite(flux0) \
+            & (cube['time'] > mintime) & (cube['time'] < maxtime) 
+
+    cube = cube[index]
+    cube['time'][:] = cube['time'] + bjd0
+
     if header:
-        ret = ret + ([tools.headerToDict(el.header) for el in f],)
+        ret = (cube,) + ([tools.headerToDict(el.header) for el in f],)
 
     f.close()
-
     return ret
 
 def extractPhotometryFromPixelData(stack, loc, apertures, resamp=1, recentroid=True, verbose=False, retall=True):
