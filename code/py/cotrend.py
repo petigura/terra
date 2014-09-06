@@ -1,5 +1,5 @@
 """
-Erik's cotrending functions.
+Cotrending code
 """
 from scipy import ndimage as nd
 from scipy import stats
@@ -17,6 +17,9 @@ from numpy import ma,rec
 import numpy as np
 
 from config import nMode,sigOut,maxIt,path_phot
+
+from sklearn.decomposition import FastICA, PCA
+
 
 def dtbvfitm(t,fm,bv):
     """
@@ -194,8 +197,6 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
 
     return U,S,V,goodid,X2
 
-
-from sklearn.decomposition import FastICA, PCA
 def robust_components(M0,n_components=4,algo='PCA'):
     """
     Robust Independent Component Analysis
@@ -708,86 +709,7 @@ import photometry
 import tfind
 import prepro
 from matplotlib.transforms import blended_transform_factory as btf
-
-def plot_modes_diag(U,V,kepmag):
-    n_components = U.shape[1]
-    fig = figure(figsize=(20,8))
-
-    gs1 = GridSpec(n_components,1)
-    gs1.update(left=0.05, right=0.33, wspace=0.05,hspace=0.001)
-
-    ax0 = plt.subplot(gs1[0])
-
-    axPCL = [plt.subplot(gs1[i],sharex=ax0) for i in range(1,n_components)]
-    axPCL = [ax0] + axPCL
-    setp([ax.get_xaxis() for ax in axPCL[:-1]],visible=False)
-
-    gs2 = GridSpec(1,2)
-    gs2.update(left=0.4, right=0.99,hspace=0.1)
-    axL = [plt.subplot(gs2[0,i],sharex=ax0) for i in range(2)]
-
-
-    for i in range(n_components):
-        sca(axPCL[i])
-        plot(U[:,i])
-
-
-    sca(axL[0])
-
-    dfdiag = stellar.read_diag(kepmag)
-
-    ndiag = len(dfdiag)
-    lc = [photometry.read_phot(path_phot,epic) for epic in dfdiag.epic]
-    lc = vstack([prepro.rdt(lci) for lci in lc]) # Light curves are rows of lc
-    fdt = ma.masked_array(lc['fdt'],lc['fmask'])
-
-    fit = [bvfitm(fdt[i],U.T)[1] for i in range(ndiag)]
-    fit = ma.vstack(fit)
-
-    MADdM4 = []
-    for i in range(ndiag):
-        dM = tfind.mtd(fdt[i],8)
-        MADdM4 += [ma.median(ma.abs(dM))]
-
-    MADdM4 = np.hstack(MADdM4)
-    setp(axL[0],ylabel='Change in Stellar Brightness',
-         title='median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
-
-    dy = arange(ndiag)*0.01
-    plot(fdt.T+dy,color='k')
-    plot((fdt.T+dy)[0],color='k',label='Data')
-
-    plot(fit.T+dy,color='r')
-    plot((fit.T+dy)[0],color='r',label='PC fit')
-    legend()
-
-    sca(axL[1])
-
-    fcal = fdt - fit
-    plot(fcal.T+dy,color='r')
-    plot((fcal.T+dy)[0],color='r',label='Residuals')
-    for i in range(len(dfdiag)):
-        ax = gca()
-        s = str(dfdiag.iloc[i]['epic'])
-        text(0.9,dy[i],s,size='x-small',
-             transform=btf(ax.transAxes,ax.transData))
-
-
-
-    MADdM4 = []
-    for i in range(ndiag):
-        dM = tfind.mtd(fcal[i],8)
-        MADdM4 += [ma.median(ma.abs(dM))]
-
-    MADdM4 = np.hstack(MADdM4)
-    setp(axL[1],ylabel='Change in Stellar Brightness',
-         title='median(MADdM4) = %i ppm' % (1e6*median(MADdM4)))
-
-
-    setp(axPCL[0],title='Top %i Principle Components' % n_components)
-    setp([ax for ax in [axPCL[-1]] + axL],xlabel='Measurement Number')
-    legend()
-
+from plotplus import AddAnchored
 
 def plot_modes_fov(U,V):
     n_components = U.shape[1]
@@ -803,17 +725,213 @@ def plot_modes_fov(U,V):
     A = ma.vstack(A)
     return dfdiag,A
 
-import re
-def dfA_get_coeffs(dfA):
-    kAs = [c for c in dfA.columns if len(re.findall('A\d{2}',c)) > 0]
-    return dfA[kAs]
-    
-def plot_mode_FOV(dfA):
-    kAs = dfA_get_coeffs(dfA).columns
-    fig,axL = subplots(ncols=4,nrows=2,sharex=True,sharey=True)
-    for i in range(len(kAs)):
-        sca(axL.flatten()[i])
-        k = kAs[i]
-        scatter(dfA.ra,dfA.dec,c=dfA[k])
-        title(k)
 
+
+def plot_mode_FOV(dfA,kAs):
+    fig,axL = subplots(ncols=4, nrows=2)
+    for i,k in zip(range(len(kAs)),kAs):
+        sca(axL.flatten()[i])
+        
+        scatter(dfA.ra,dfA.dec,c=dfA[k])
+
+        title(k)    
+        print dfA[('ra dec %s' % k).split()]
+
+
+import pandas as pd
+
+class EnsembleCalibrator:
+    """
+    Object for performing Ensemble based calibration of light curves.
+    """
+    def __init__(self, fdt, dftr):
+        """
+        Parameters
+        ----------
+        fdt : masked array of detrended light curves
+              fdt.shape = (N_lightcurves,N_measurements)
+        dftr : Pandas DataFrame with an entry for every training light curve
+
+        """
+        self.ntr = len(dftr)
+        assert fdt.shape[0]==self.ntr,\
+            'N_lightcurves must equal stars in catalog'
+
+        # Mask out bad columns and rows
+        intmask = (~fdt.mask).astype(int) # Mask as integers
+        bcol = intmask.sum(axis=0)!=0 # True - good column
+        brow = intmask.sum(axis=1)!=0 # True - good row
+        fdt = fdt[:,bcol]
+
+        for n,b in zip(['cadences','light curves'],[bcol,brow]):
+            print "%i %s masked out" % (b.size - b.sum(),n)
+        print ""
+
+        # Standardize the light curves
+        fdt_sig = 1.48 * median(abs(fdt),axis=1)
+        fdt_stand = fdt / fdt_sig[:,newaxis]
+        M = fdt_stand.data.T.copy()
+
+        self.fdt = fdt
+        self.dftr = dftr
+        self.M = M
+        self.bcol = bcol
+        self.brow = brow
+
+    def robust_components(self, algo='PCA', n_components=8):
+        self.algo = algo
+        self.n_components = n_components
+        self.plot_basename = 'cotrend_robust%s_ncomp=%i' % \
+                             (algo,n_components) 
+
+        U,V,icolin = robust_components(self.M, algo=algo, 
+                                       n_components=n_components)
+
+        # Output array has bad columns clipped. Resize U to original shape
+        U_clip = U.copy()
+        U = np.zeros((self.bcol.size,U.shape[1]))
+        U[self.bcol,:] = U_clip
+
+        # How many light curves surved iterative clipping?
+        nclip = len(icolin)
+
+        A = [bvfitm(self.fdt[i],U_clip.T)[0] for i in icolin]
+        A = ma.vstack(A)
+
+        kAs = ['A%02d' % i for i in range(n_components)]
+
+        dftr_clip = self.dftr.iloc[icolin]
+        dfAc = pd.DataFrame(A,columns=kAs,index=dftr_clip.index)
+        dfA = pd.concat([dftr_clip,dfAc],axis=1)
+
+        # Which stars have inliear coefficients
+        dfAc_st = pd.DataFrame(dfAc.median(),columns=['med'])
+        dfAc_st['sig'] = 1.48*abs(dfAc - dfAc_st['med']).median()
+        dfAc_st['outhi'] = dfAc_st['med'] + 5 * dfAc_st['sig']
+        dfAc_st['outlo'] = dfAc_st['med'] - 5 * dfAc_st['sig']
+        self.dfAc_st = dfAc_st
+
+        dfA['inlier'] = self.isinlier(dfAc)
+
+        print ""
+        print "%i stars in training set " % self.ntr
+        print "%i stars survived iterative %s " % (nclip,algo)
+        print "%i stars have inlier coefficients" % dfA.inlier.sum()
+        
+        self.dfA = dfA
+        self.kAs = kAs
+        self.U = U
+        self.V = V
+
+
+    def isinlier(self,dfAc):
+        """
+        Returns true if coefficients are in acceptable range
+        """
+        inlier = (self.dfAc_st.outlo < dfAc) & (dfAc < self.dfAc_st.outhi)
+        return np.all(inlier,axis=1)
+        
+    def bvfitfm(self,fm,mode='ls-map',verbose=True):
+        """
+
+        """
+        A,fcbv = bvfitm(fm,self.U.T)
+        if mode=='ls-map':
+            dfAc = pd.DataFrame(pd.Series(A,index=self.kAs)).T
+            inlier = self.isinlier(dfAc)[0]
+            if not inlier:
+                print "outlier not calibrating"
+                A[:] = 0
+                fcbv[:] =0
+
+        return A,fcbv
+
+    def makeplots(self):
+        dfA = self.dfA
+        kAs = self.kAs
+        plot_PCs(self.U,self.V)
+
+        pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
+        path = self.plot_basename+'_coeffs.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
+
+        plot_mode_FOV(dfA[dfA.inlier],kAs)
+
+        gcf().set_tight_layout(True)
+        path = self.plot_basename+'_FOV.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
+    def plot_modes_diag(self,fdt,step = 0.001):
+        # Compute the fits
+        n_components = self.n_components
+        U = self.U
+
+        ndiag = fdt.shape[0]
+
+        fit = [self.bvfitfm(f)[1] for f in fdt]
+        fit = ma.vstack(fit)
+        fcal = fdt - fit
+
+        def ses_stats(fstack):
+            out = []
+            for i in range(fstack.shape[0]):
+                df = tfind.ses_stats(fstack[i])
+                df['star'] = i
+                out+=[df]
+
+            return pd.concat(out,ignore_index=True)
+        
+        def plot_stats(df):
+            df = df.groupby('name').median()
+            keys = 'rms_1-cad-mean rms_6-cad-mean rms_12-cad-mean'.split()
+            s = df[['value']].ix[keys].to_string()
+            s = s[s.find('\n')+1:]
+            AddAnchored(s,4,prop=dict(family='monospace'))
+
+        df_stats_fdt = ses_stats(fdt)
+        df_stats_fcal= ses_stats(fcal)
+
+        # Axis Book-keeping
+        fig = figure(figsize=(20,8))
+
+        gs1 = GridSpec(n_components,1)
+        gs1.update(left=0.05, right=0.33, wspace=0.05,hspace=0.001)
+
+        ax0 = plt.subplot(gs1[0])
+
+        axPCL = [plt.subplot(gs1[i],sharex=ax0) for i in range(1,n_components)]
+        axPCL = [ax0] + axPCL
+        setp([ax.get_xaxis() for ax in axPCL[:-1]],visible=False)
+
+        gs2 = GridSpec(1,2)
+        gs2.update(left=0.4, right=0.99,hspace=0.1)
+        axL = [plt.subplot(gs2[0,i],sharex=ax0) for i in range(2)]
+        
+        for i in range(n_components):
+            sca(axPCL[i])
+            plot(U[:,i])
+
+        setp(axPCL[0],title='Top %i %s Components' % (n_components,self.algo) )
+        setp([ax for ax in [axPCL[-1]] + axL],xlabel='Measurement Number')
+        legend()
+
+        sca(axL[0])
+        dy = arange(ndiag)*step
+
+        def plot_label(fstack,**kwargs):
+            plot(fstack[0],**kwargs)
+            kwargs.pop('label')
+            plot(fstack,**kwargs)
+
+        plot_label(fdt.T+dy,color='k',label='Detrended Flux')
+        plot_label(fit.T+dy,color='r',label='%s Fit' % self.algo)
+        plot_stats(df_stats_fdt)
+        legend()
+
+        sca(axL[1])
+        plot_label(fcal.T+dy,color='r',label='Residuals')
+        plot_stats(df_stats_fcal)
+        legend()
