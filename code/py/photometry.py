@@ -294,3 +294,32 @@ def Ceng2C0(lc0):
         lcC0['t'][s]+=tbase*i
         lcC0['cad'][s]+=lc['cad'].ptp()*i
     return lcC0
+
+
+import glob
+from pdplus import LittleEndian as LE
+
+def read_crossfield(epic):
+    pathstar = 'photometry/Ceng_pixdecor/%i_loc*.fits' % epic
+    path = glob.glob(pathstar)
+    
+    if len(path)==0:
+        print "no results for %s" % pathstar
+        return None
+
+    with fits.open(path[0]) as hduL:
+        ian = pd.DataFrame(LE(hduL[1].data))
+
+    ian = ian['cad cleanFlux noThrusterFiring'.split()]
+    ian['noThrusterFiring'] = ian.noThrusterFiring.astype(bool)
+
+    lc = read_cal('Ceng.cal.h5',60017809)
+    lc = pd.DataFrame(lc)
+    lc = pd.merge(lc,ian,how='left',on='cad')
+    lc['fmask'] = np.isnan(lc['cleanFlux']) | (lc['noThrusterFiring']==False)
+    lc['fdt'] = lc['cleanFlux']
+    lc['fdt'] /= median(lc['fdt'])
+    lc['fdt'] -= 1
+    lc = lc.drop('fcal ftnd'.split(),axis=1)
+    return np.array(lc.to_records(index=False))
+

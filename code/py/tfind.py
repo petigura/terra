@@ -796,3 +796,35 @@ def pebls(t,fm,P1,P2,alg,dv=False):
     SNR = np.hstack(SNR)
     return Parr,SNR
 
+
+from scipy import ndimage as nd
+def running_mean(fm,size):
+    fm = fm.copy()
+    fm.fill_value = 0
+    w = (~fm.mask).astype(float) # weights either 0 or 1
+    f = fm.filled()
+
+    assert (np.isnan(f)==False).all() ,'mask out nans'
+    
+    # total flux in bin
+    f_sum = nd.uniform_filter(f,size=size) * size 
+
+    # number of unmasked points in bin
+    f_count = nd.uniform_filter(w,size=size) * size
+
+    f_mean = ma.masked_array( f_sum / f_count, f_count < 0.5*size) 
+    return f_mean
+import pandas as pd
+def ses_stats(fm):
+    """
+    Given a light curve what is the noise level on different timescales?
+    """
+    dL = []
+    for twd in [1,4,6,8,12]:
+        dL.append(['rms_%i-cad-mean' % twd, ma.std(running_mean(fm,twd)),twd])
+        dL.append(['rms_%i-cad-mtd' % twd, ma.std(mtd(fm,twd)),twd])
+
+    dL = pd.DataFrame(dL,columns='name value twd'.split())
+    dL['value']*=1e6
+    return dL
+    
