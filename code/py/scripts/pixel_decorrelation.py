@@ -53,6 +53,9 @@ from optparse import OptionParser
 import os
 import sys
 import warnings
+from scipy import ndimage as nd
+import pandas as pd
+
 warnings.simplefilter('ignore', np.RankWarning) # For np.polyfit
 try:  
     from astropy.io import fits as pyfits
@@ -121,6 +124,9 @@ def main(argv=None):
                      help='Row (X-coordinate) of target in frame')
         p.add_option('-y', '--ycen', dest='ycen', type='float', 
                      help='Column (Y-coordinate) of target in frame')
+        p.add_option('--aper',dest='aper', type='int', 
+                     help='Use  Kepler Aperture starting pixel position'
+                     ,default=False)
         p.add_option('-n', '--nthreads', dest='nthreads', type='int', 
                      help='Number of threads for multiprocessing.', default=1)
         p.add_option('-r', '--resamp', dest='resamp', type='int', 
@@ -160,11 +166,19 @@ def main(argv=None):
                      help="'texexec' or 'gs' are best, but 'tar' is safest.", 
                      action='store', default='tar')
 
-        options, args = p.parse_args()
 
+        options, args = p.parse_args()
         fn       = options.fn
-        xcen     = options.xcen
-        ycen     = options.ycen
+
+        if options.aper:
+            with pyfits.open(fn) as hduL:
+                aper = hduL[2].data
+                pos = nd.center_of_mass(aper==3)
+                xcen,ycen = pos[0],pos[1]
+        else:
+            xcen     = options.xcen
+            ycen     = options.ycen
+
         nthreads = options.nthreads
         resamp   = options.resamp
         nordGeneralTrend = options.nordGeneralTrend
@@ -193,12 +207,17 @@ def main(argv=None):
         pool = Pool(processes=nthreads)
 
     # Run the code:
-    results = runOptimizedPixelDecorrelation(fn, (xcen, ycen), resamp=resamp, nordGeneralTrend=nordGeneralTrend, pool=pool, tlimits=tlimits, verbose=verbose, plotalot=0, minrad=minrad, maxrad=maxrad, gausscen=gausscen)
+    results = runOptimizedPixelDecorrelation(fn, (xcen, ycen), resamp=resamp, 
+                                             nordGeneralTrend=nordGeneralTrend,
+                                             pool=pool, tlimits=tlimits,
+                                             verbose=verbose, plotalot=0,
+                                             minrad=minrad, maxrad=maxrad, 
+                                             gausscen=gausscen)
 
     # Set up results filename:
     dapstr = (('%1.2f-'*3) % tuple(results.apertures)).replace('.', ',')[0:-1]
     locstr = 'loc-%i-%i' % tuple(np.array(results.loc).round())
-    savefile = '%s%i_%s_r%s_m%i_p%i_s%i' % (_save, results.headers[0]['KEPLERID'], locstr, dapstr, results.nordArc, results.nordGeneralTrend, results.nordPixel1d)
+    savefile = '%s%09d' % (_save, results.headers[0]['KEPLERID'])
 
     import pdb;pdb.set_trace()
     # Save everything to disk:
@@ -222,7 +241,7 @@ def main(argv=None):
     py.close('all')
     return
 
-import pandas as pd
+
 
 def results2FITS(o):
     """Convert results from :func:`runOptimizedPixelDecorrelation` or
