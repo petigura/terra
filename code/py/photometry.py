@@ -306,8 +306,10 @@ def read_crossfield(epic):
     if len(path)==0:
         print "no results for %s" % pathstar
         return None
+    return read_crossfield_fits(path[0])
 
-    with fits.open(path[0]) as hduL:
+def read_crossfield_fits(path):
+    with fits.open(path) as hduL:
         ian = pd.DataFrame(LE(hduL[1].data))
 
     ian = ian['cad cleanFlux noThrusterFiring'.split()]

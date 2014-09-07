@@ -200,13 +200,10 @@ def main(argv=None):
     locstr = 'loc-%i-%i' % tuple(np.array(results.loc).round())
     savefile = '%s%i_%s_r%s_m%i_p%i_s%i' % (_save, results.headers[0]['KEPLERID'], locstr, dapstr, results.nordArc, results.nordGeneralTrend, results.nordPixel1d)
 
+    import pdb;pdb.set_trace()
     # Save everything to disk:
     if output==0 or output==1: # Save a pickle:
         picklefn = savefile + '.pickle'
-        iter = 1
-        while os.path.isfile(picklefn):
-            picklefn = savefile + '_%i.pickle' % iter
-            iter += 1
         if output==0: # Save a simple dict:
             tools.savepickle(tools.obj2dict(results), picklefn)
         elif output==1: # Save the object itself:
@@ -215,21 +212,12 @@ def main(argv=None):
     elif output==2: #Save a FITS file
         hdu1 = results2FITS(results)
         fitsfn = savefile + '.fits'
-        iter = 1
-        while os.path.isfile(fitsfn):
-            fitsfn = savefile + '_%i.fits' % iter
-            iter += 1
-        hdu1.writeto(fitsfn)
+        hdu1.writeto(fitsfn,clobber=True)
 
-        
     # Plot pretty pictures & print to disk:
     plotPixelDecorResults(results, fs=fs)
 
     pdffn = savefile + '.pdf'
-    iter = 1
-    while os.path.isfile(pdffn):
-        pdffn = savefile + '_%i.pdf' % iter
-        iter += 1
 
     tools.printfigs(pdffn, pdfmode=plotmode, verbose=verbose)
     py.close('all')
