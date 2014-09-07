@@ -224,7 +224,6 @@ def main(argv=None):
         
     # Plot pretty pictures & print to disk:
     plotPixelDecorResults(results, fs=fs)
-
     pdffn = savefile + '.pdf'
     iter = 1
     while os.path.isfile(pdffn):
@@ -245,8 +244,15 @@ def results2FITS(o):
     
     names = 'time cad rawFlux cleanFlux decorMotion decorBaseline bg x y arcLength noThrusterFiring'.split() 
     
+
     data = [getattr(o,n) for n in names]
+
+    # Unfortunately, there is some weird bug with how astropy stores
+    # booleans in tables, so I'll convert the noThrusterFiring to ints
     data = np.rec.fromarrays(data,names=names)
+    data = pd.DataFrame(data)
+    data['noThrusterFiring'] = data['noThrusterFiring'].astype(int)
+    data = np.array(data.to_records(index=False))
     hdu = pyfits.BinTableHDU(data=data)
 
     hdu.header['time'] = 'Time, BJD_TDB'
