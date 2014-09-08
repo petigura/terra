@@ -12,6 +12,27 @@ import os
 from config import k2_dir,path_phot
 from astropy.io import fits
 from scipy import ndimage as nd
+from astropy import wcs
+
+def scrape_headers(fL):
+    df =[]
+    for f in fL:
+        with fits.open(f,checksum=False) as hduL:
+            hduL.verify()
+            flux = hduL[1].data['FLUX']
+            w = wcs.WCS(header=hduL[2].header,key=' ')
+            xcen,ycen = w.wcs_world2pix(hduL[0].header['RA_OBJ'],hduL[0].header['DEC_OBJ'],0)
+            keys = 'KEPLERID CHANNEL MODULE OUTPUT KEPMAG RA_OBJ DEC_OBJ'.split()
+            d = dict([(k,hduL[0].header[k]) for k in keys])
+            d['f'] = f
+            d['xcen'] = xcen
+            d['ycen'] = ycen
+            df+=[d]
+    return df
+
+
+
+
 
 def imshow2(im,**kwargs):
     extent = None#(0,im.shape[0],0,im.shape[1])
@@ -32,8 +53,10 @@ def plot_med_star(name,stretch='none'):
         imshow2(arcsinh(med_image))
     else:
         imshow2(med_image)
-        
-c0_start_cad = 114
+
+Ceng_start_cad = 114
+C0_start_cad = 89347        
+
 
 def get_comb(f,name):
     if hasattr(name,'__iter__') is False:
@@ -62,22 +85,35 @@ def get_comb(f,name):
     return comb
 
 
-def read_k2_fits(f):
-    with fits.open(f) as hduL:
-        # Image cube. At every time step, one image. (440 x 50 x 50)
-        fcube = 'RAW_CNTS FLUX FLUX_ERR FLUX_BKG FLUX_BKG_ERR COSMIC_RAYS'.split()
-        cube = rec.fromarrays([hduL[1].data[f] for f in fcube],names=fcube)
+def read_k2_fits(f,K2_CAMP='C0'):
 
-        # Time series. At every time step, one scalar. (440)
-        fts = 'TIME TIMECORR CADENCENO QUALITY POS_CORR1 POS_CORR2'.split()
-        ts = rec.fromarrays([hduL[1].data[f] for f in fts],names=fts)
-        aper = hduL[2].data
+    hduL = fits.open(f)
+    # Image cube. At every time step, one image. (440 x 50 x 50)
+    fcube = 'RAW_CNTS FLUX FLUX_ERR FLUX_BKG FLUX_BKG_ERR COSMIC_RAYS'.split()
+    cube = rec.fromarrays([hduL[1].data[f] for f in fcube],names=fcube)
 
-        head0 = dict(hduL[0].header)
-        head1 = dict(hduL[1].header)
-        head2 = dict(hduL[2].header)
+    # Time series. At every time step, one scalar. (440)
+    fts = 'TIME TIMECORR CADENCENO QUALITY POS_CORR1 POS_CORR2'.split()
+    ts = rec.fromarrays([hduL[1].data[f] for f in fts],names=fts)
+    aper = hduL[2].data
 
-        return ts[c0_start_cad:],cube[c0_start_cad:],aper,head0,head1,head2
+    head0 = dict(hduL[0].header)
+    head1 = dict(hduL[1].header)
+    head2 = dict(hduL[2].header)
+    hduL.close()
+
+    if K2_CAMP=='Ceng':
+        start_cad = Ceng_start_cad
+    if K2_CAMP=='C0':
+        start_cad = C0_start_cad
+
+    b = ts['CADENCENO'] >= start_cad
+    return ts[b],cube[b],aper,head0,head1,head2        
+
+
+
+
+
 
 def read_pix(f,name):
     """
@@ -89,8 +125,8 @@ def read_pix(f,name):
     basename = f.split('/')[-1] 
     with h5py.File(f) as h5:
         comb = get_comb(f,name)
-        cube = h5['cube'][comb.h5idx,c0_start_cad:]
-        ts = h5['ts'][comb.h5idx,c0_start_cad:]
+        cube = h5['cube'][comb.h5idx,Ceng_start_cad:]
+        ts = h5['ts'][comb.h5idx,Ceng_start_cad:]
 
         if len(comb) > 1:
             if ~(comb.sort('nameidx').nameidx==comb.nameidx).all():
@@ -300,7 +336,7 @@ import glob
 from pdplus import LittleEndian as LE
 
 def read_crossfield(epic):
-    pathstar = 'photometry/Ceng_pixdecor/%i_loc*.fits' % epic
+    pathstar = 'photometry/Ceng_pixdecor2/%i_loc*.fits' % epic
     path = glob.glob(pathstar)
     
     if len(path)==0:

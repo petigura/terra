@@ -20,41 +20,57 @@ import astropy.coordinates as coord
 from astropy import units as u
 from astropy.coordinates import Longitude,Latitude
 
-def read_cat():
+def read_cat(k2_camp='C0'):
     """
     Read Stellar Catalog
 
     Unified way to read in stellar parameters:
-    
-    cat : str; one of the following:
-          - 'kepstellar' : Kepler stellar parameters from Exoplanet Archive
-          - 'kic'        : Kepler Input Catalog
-          - 'ah'         : Andrew Howard's YY corrected paramters
-          - 'sm'         : SpecMatch parameters
-         
+             
     Note
     ---- 
-    Mstar is a derived parameter from Rstar and logg.
 
     Future Work
     -----------
-    Add an attribute to DataFrame returned that keeps track of the prov.
     """
 
-    df = pd.read_csv('%s/K2_E2_targets_lc.csv' % k2_dir )
-    df = df.dropna()
+    
 
-    namemap = dict([(c,c.strip()) for c in df.columns])
-    df = df.rename(columns=namemap)
-    df = df.rename(columns={'#EPIC':'epic',
-                            'Kp':'kepmag',
-                            'list':'prog'})
-    df['prog'] = df.prog.str.slice(start=1)
-    ra = Longitude(df.ra*u.deg,180*u.deg)
-    ra.wrap_angle=180*u.deg
-    df['ra'] = ra.deg
+    if k2_camp=='Ceng':
+        df = pd.read_csv('%s/catalogs/K2_E2_targets_lc.csv' % k2_dir )
+        df = df.dropna()
+
+        namemap = dict([(c,c.strip()) for c in df.columns])
+        df = df.rename(columns=namemap)
+        df = df.rename(columns={'#EPIC':'epic',
+                                'Kp':'kepmag',
+                                'list':'prog'})
+        df['prog'] = df.prog.str.slice(start=1)
+        ra = Longitude(df.ra*u.deg,180*u.deg)
+        ra.wrap_angle=180*u.deg
+        df['ra'] = ra.deg
+    elif k2_camp=='C0':
+        # Read in the column descriptors
+        df = pd.read_table('catalogs/README_d14108_01_epic_c0_dmc',
+                           header=None,names=['line'])
+        df = df[df.line.str.contains('^#\d{1}')==True]
+        df['col'] = df.line.apply(lambda x : x.split()[0][1:]).astype(int)
+        df['name'] = df.line.apply(lambda x : x.split()[1])
+        namemap = {'ID':'epic','RA':'ra','DEC':'dec','Kp':'kepmag'}
+
+        # Read in the actual calatog
+        df.index=df.name
+        cut = df.ix[namemap.keys()]
+        cut['newname'] = namemap.values()
+        cut = cut.sort('col')
+        usecols = cut.col-1
+        df = pd.read_table('catalogs/d14108_01_epic_c0_dmc.mrg',
+                           sep='|',names=cut.newname,header=None,
+                           usecols=usecols)
 
     return df
+
+
+
 
 
 def read_diag(kepmag):
