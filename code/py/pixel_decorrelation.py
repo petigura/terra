@@ -311,8 +311,6 @@ def results2FITS(o):
     # 2014-09-02 18:44 IJMC: Created
     
     names = 'time cad rawFlux cleanFlux decorMotion decorBaseline bg x y arcLength noThrusterFiring'.split() 
-    
-
     data = [getattr(o,n) for n in names]
 
     # Unfortunately, there is some weird bug with how astropy stores
@@ -1476,6 +1474,9 @@ def plotPixelDecorResults(input, fs=15):
     elif input.apertureMode=='prf':
         py.contour(input.crudeApertureMask, [0.5], colors='lime', linewidths=3)
     py.title('log10(median image)', fontsize=fs)
+
+
+
     py.gcf().text(.5, .95, titstr, fontsize=fs*1.2, horizontalalignment='center')
     ax = py.axis()
     py.plot(input.y, input.x, '.r')
