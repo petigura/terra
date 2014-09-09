@@ -66,11 +66,7 @@ def read_cat(k2_camp='C0'):
         df = pd.read_table('catalogs/d14108_01_epic_c0_dmc.mrg',
                            sep='|',names=cut.newname,header=None,
                            usecols=usecols)
-
     return df
-
-
-
 
 
 def read_diag(kepmag):
@@ -81,3 +77,25 @@ def read_diag(kepmag):
 def resolve_fits(epic):
     return "%s/Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits" % (k2_dir,epic)
     
+#def query_nearby_stars(epic):
+#
+#
+#
+#pixw = max(medflux.shape) / 2
+#degw = 4*pixw/3600.
+#rarng = (ra-degw,ra+degw)
+#decrng = (dec-degw,dec+degw)
+#kepmagmax = epic.ix[202060516,'kepmag'] + 5
+#
+## Query all the the other targets in FOV. 
+#epiccut = epic[epic.ra.between(*rarng) & epic.dec.between(*decrng) & (epic.kepmag < kepmagmax)]
+#plot(xcen,ycen,'oc')
+#
+#text(xcen,ycen,'%(epic)09d, %(kepmag).1f' % epic.ix[202060516])
+#
+#coords = array(epiccut['ra dec'.split()])+np.array([dra,ddec])
+#cen = w.wcs_world2pix(coords,0)
+#epiccut['xcen'] = cen[:,0]
+#epiccut['ycen'] = cen[:,1]
+#plot(epiccut['xcen'],epiccut['ycen'],'.')
+#epiccut.apply(lambda x : text(x['xcen'],x['ycen'],'%(epic)09d, %(kepmag).1f' % x),axis=1)
