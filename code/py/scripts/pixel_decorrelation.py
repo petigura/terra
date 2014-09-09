@@ -219,7 +219,6 @@ def main(argv=None):
     locstr = 'loc-%i-%i' % tuple(np.array(results.loc).round())
     savefile = '%s%09d' % (_save, results.headers[0]['KEPLERID'])
 
-    import pdb;pdb.set_trace()
     # Save everything to disk:
     if output==0 or output==1: # Save a pickle:
         picklefn = savefile + '.pickle'
