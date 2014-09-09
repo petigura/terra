@@ -884,6 +884,7 @@ class EnsembleCalibrator:
 
             return pd.concat(out,ignore_index=True)
         
+        pd.set_option('precision',1)
         def plot_stats(df):
             df = df.groupby('name').median()
             keys = 'rms_1-cad-mean rms_6-cad-mean rms_12-cad-mean'.split()
