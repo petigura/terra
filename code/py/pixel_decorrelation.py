@@ -89,13 +89,12 @@ import sys
 import warnings
 from scipy import ndimage as nd
 import pandas as pd
-import photometry
 
 warnings.simplefilter('ignore', np.RankWarning) # For np.polyfit
-try:  
-    from astropy.io import fits as pyfits
-except:
-    import pyfits
+
+from astropy.io import fits as pyfits
+from astropy import wcs
+
 
 # Import my personal modules:
 import analysis as an
@@ -224,10 +223,10 @@ def main(argv=None):
         fn       = options.fn
 
         if options.aper:
-            xcen,ycen = photometry.get_star_pos(fn,mode='aper')
+            xcen,ycen = get_star_pos(fn,mode='aper')
             pos_mode = 'aper'
         elif options.wcs:
-            xcen,ycen = photometry.get_star_pos(fn,mode='wcs')
+            xcen,ycen = get_star_pos(fn,mode='wcs')
             pos_mode = 'wcs'
         else:
             xcen     = options.xcen
@@ -2434,6 +2433,52 @@ def bfixpix(data, badmask, n=4, retdat=False):
         ret = None
 
     return ret
+
+
+
+def get_star_pos(f,mode='wcs'):
+    """
+    Get Star's Position (pixel coordinates)
+    
+    Parameters
+    ----------
+    f : path to fits file
+    mode : How do we determine star's position?
+
+    Returns
+    -------
+    xcen,ycen : tuple with the X and Y position of the star
+
+    
+    """
+
+    with pyfits.open(f) as hduL:
+        if mode=='aper':
+            aper = hduL[2].data
+            pos = nd.center_of_mass(aper==3)
+            xcen,ycen = pos[0],pos[1]
+        elif mode=='wcs':
+            w = get_wcs(f)
+            ra,dec = hduL[0].header['RA_OBJ'],hduL[0].header['DEC_OBJ']
+            xcen0,ycen0 = w.wcs_world2pix(ra,dec,0)
+
+    return xcen0,ycen0
+
+def get_wcs(f):
+    """
+    Get WCS object from fits header
+
+    Parameters
+    ----------
+    f : path to fits file
+
+    Returns
+    -------
+    w : wcs object
+    """
+    with pyfits.open(f) as hduL:
+        w = wcs.WCS(header=hduL[2].header,key=' ')
+    return w 
 
 
 if __name__ == "__main__":
