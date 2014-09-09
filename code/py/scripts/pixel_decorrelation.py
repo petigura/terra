@@ -46,6 +46,8 @@ import matplotlib
 matplotlib.use('Agg')  # Should allow plotting directly to files.
 
 import numpy as np
+from numpy import ma
+
 import pylab as py
 from scipy import interpolate
 from multiprocessing import Pool
@@ -55,6 +57,7 @@ import sys
 import warnings
 from scipy import ndimage as nd
 import pandas as pd
+import photometry
 
 warnings.simplefilter('ignore', np.RankWarning) # For np.polyfit
 try:  
@@ -125,7 +128,10 @@ def main(argv=None):
         p.add_option('-y', '--ycen', dest='ycen', type='float', 
                      help='Column (Y-coordinate) of target in frame')
         p.add_option('--aper',dest='aper', type='int', 
-                     help='Use  Kepler Aperture starting pixel position'
+                     help='Determine Star Position From Kepler Aperture'
+                     ,default=False)
+        p.add_option('--wcs',dest='wcs', type='int', 
+                     help='Determine Star Position WCS'
                      ,default=False)
         p.add_option('-n', '--nthreads', dest='nthreads', type='int', 
                      help='Number of threads for multiprocessing.', default=1)
@@ -166,18 +172,27 @@ def main(argv=None):
                      help="'texexec' or 'gs' are best, but 'tar' is safest.", 
                      action='store', default='tar')
 
-
         options, args = p.parse_args()
+
+        print ""
+        print "Running motion decorrelation on %s" % options.fn
+        print ""
+
         fn       = options.fn
 
         if options.aper:
-            with pyfits.open(fn) as hduL:
-                aper = hduL[2].data
-                pos = nd.center_of_mass(aper==3)
-                xcen,ycen = pos[0],pos[1]
+            xcen,ycen = photometry.get_star_pos(fn,mode='aper')
+            pos_mode = 'aper'
+        elif options.wcs:
+            xcen,ycen = photometry.get_star_pos(fn,mode='wcs')
+            pos_mode = 'wcs'
         else:
             xcen     = options.xcen
             ycen     = options.ycen
+            pos_mode = 'manual'
+
+        print "Using position mode %s, star is at pixels = [%.2f,%.2f]" % \
+            (pos_mode,xcen,ycen)
 
         nthreads = options.nthreads
         resamp   = options.resamp
@@ -214,12 +229,13 @@ def main(argv=None):
                                              minrad=minrad, maxrad=maxrad, 
                                              gausscen=gausscen)
 
+
+
     # Set up results filename:
     dapstr = (('%1.2f-'*3) % tuple(results.apertures)).replace('.', ',')[0:-1]
     locstr = 'loc-%i-%i' % tuple(np.array(results.loc).round())
     savefile = '%s%09d' % (_save, results.headers[0]['KEPLERID'])
 
-    import pdb;pdb.set_trace()
     # Save everything to disk:
     if output==0 or output==1: # Save a pickle:
         picklefn = savefile + '.pickle'
@@ -286,7 +302,7 @@ def results2FITS(o):
 
     return hdu
 
-def runOptimizedPixelDecorrelation(fn, loc, apertures=None, resamp=1, nordGeneralTrend=5, verbose=False, plotalot=False, xy=None, tlimits=[1862.45, np.inf], nthreads=1, pool=None, minrad=2, maxrad=15, minSkyRadius=4, skyBuffer=2, skyWidth=3, niter=12, gausscen=True):
+def runOptimizedPixelDecorrelation(fn, loc, apertures=None, resamp=1, nordGeneralTrend=5, verbose=False, plotalot=False, xy=None, tlimits=[1862.45, np.inf], nthreads=1, pool=None, minrad=2, maxrad=15, minSkyRadius=4, skyBuffer=2, skyWidth=3, niter=3, gausscen=True):
     """Run (1D) pixel-decorrelation of Kepler Data, and optimized
     aperture too. If you want a single, fixed aperture then use
     :func:`runPixelDecorrelation` instead.
@@ -326,7 +342,6 @@ def runOptimizedPixelDecorrelation(fn, loc, apertures=None, resamp=1, nordGenera
     """
     # 2014-08-29 11:59 IJMC: Created
 
-    
     def getAperRadii(targRad):
         if np.array(targRad).ndim>0:  targRad = targRad[0]
         targRad = max(min(targRad, maxrad), minrad)
@@ -496,13 +511,21 @@ def runPixelDecorrelation(fn, loc, apertures, resamp=1, nordGeneralTrend=5, verb
         print " verbosity level is: %i" % verbose
 
     # Load data:
-
-
     cube,headers = loadPixelFile(fn, header=True, tlimits=tlimits)
     time, data, edata = cube['time'],cube['flux'],cube['flux_err']
 
+    # Perform flat fielding
+    data = ma.masked_invalid(data)
+    data.fill_value=0
+    fmed = ma.median(data.reshape(data.shape[0],-1),axis=1)
+    data -= fmed[:,np.newaxis,np.newaxis]
+    data = data.filled()
+
+
     # Extract photometry (add eventual hook for PRF fitting):
     flux, eflux, bg, testphot = extractPhotometryFromPixelData(data, loc, apertures, resamp=resamp, verbose=verbose, retall=True)
+
+
 
     if xy is None:
         # Compute centroid motions in 3 different ways:
@@ -590,9 +613,11 @@ def loadPixelFile(fn, tlimits=None, bjd0=2454833, header=False):
 
     f = pyfits.open(fn)
 
-
     cube = f[1].data
-    flux0 = cube['flux'].sum(2).sum(1)
+    
+    # Because masks are not always rectanglges, we have to deal with nans.
+    flux0 = ma.masked_invalid(cube['flux'])
+    flux0 = flux0.sum(2).sum(1)
 
     index = (cube['quality']==0) & np.isfinite(flux0) \
             & (cube['time'] > mintime) & (cube['time'] < maxtime) 
@@ -617,8 +642,6 @@ def extractPhotometryFromPixelData(stack, loc, apertures, resamp=1, recentroid=T
         converted to int these would index the approximate location of
         the target star.
   
-        If loc is None, just use the brightest pixel. This is dangerous!
-  
       apertures : various
         If a 3-sequence, this indicates the *radii* of three circular apertures.
   
@@ -635,8 +658,7 @@ def extractPhotometryFromPixelData(stack, loc, apertures, resamp=1, recentroid=T
 
     nobs = stack.shape[0]
     frame0 = np.median(stack, axis=0)
-    if loc is None:
-        loc = (frame0==frame0.max()).nonzero()
+
 
     apertures = np.array(apertures)
     if len(apertures)==3:
@@ -646,7 +668,8 @@ def extractPhotometryFromPixelData(stack, loc, apertures, resamp=1, recentroid=T
         dap = None
         mask = apertures
 
-    phot0 = phot.aperphot(frame0, pos=loc, dap=dap, mask=mask, resamp=1, retfull=True)
+    phot0 = phot.aperphot(frame0, pos=loc, dap=dap, mask=mask, resamp=1, 
+                          retfull=True)
 
     if recentroid:
         if verbose: print "Refining centroid position:"

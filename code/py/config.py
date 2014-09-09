@@ -3,7 +3,7 @@ import os
 
 # Setup directories
 k2_dir = os.environ['K2_DIR']
-k2_camp = os.environ['K2_CAMP']
+#k2_camp = os.environ['K2_CAMP']
 
 def resolve_grid(outfile):
     """
@@ -21,11 +21,11 @@ def resolve_grid(outfile):
 svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
 
 # path to pixel data
-path_pix_fits = os.environ['K2_PIX_DIR']
+#path_pix_fits = os.environ['K2_PIX_DIR']
 
 # path to light curve photometry
-path_phot = "%s/%s.phot.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
-path_train = "%s/%s.train.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
+#path_phot = "%s/%s.phot.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
+#path_train = "%s/%s.train.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
 
 # Qalg
 Plim =  0.001   # Periods must agree to this fractional amount
