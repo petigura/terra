@@ -20,7 +20,7 @@ import astropy.coordinates as coord
 from astropy import units as u
 from astropy.coordinates import Longitude,Latitude
 
-def read_cat(k2_camp='C0'):
+def read_cat(k2_camp='C0',return_targets=True):
     """
     Read Stellar Catalog
 
@@ -50,7 +50,7 @@ def read_cat(k2_camp='C0'):
         df['ra'] = ra.deg
     elif k2_camp=='C0':
         # Read in the column descriptors
-        df = pd.read_table('catalogs/README_d14108_01_epic_c0_dmc',
+        df = pd.read_table('%s/catalogs/README_d14108_01_epic_c0_dmc' % k2_dir,
                            header=None,names=['line'])
         df = df[df.line.str.contains('^#\d{1}')==True]
         df['col'] = df.line.apply(lambda x : x.split()[0][1:]).astype(int)
@@ -63,16 +63,31 @@ def read_cat(k2_camp='C0'):
         cut['newname'] = namemap.values()
         cut = cut.sort('col')
         usecols = cut.col-1
-        df = pd.read_table('catalogs/d14108_01_epic_c0_dmc.mrg',
+        df = pd.read_table('%s/catalogs/d14108_01_epic_c0_dmc.mrg' % k2_dir,
                            sep='|',names=cut.newname,header=None,
                            usecols=usecols)
+
+        df.index = df.epic
+
+        targets = pd.read_table('%s/catalogs/C0_files.txt' % k2_dir,names=['file'])
+        targets['epic'] = targets.file.apply(lambda x : x.split('/')[-1][4:13])
+        targets['epic'] = targets.epic.astype(int)
+        if return_targets:
+            df = df.ix[targets.epic]
+
     return df
 
+def read_diag(k2_camp,kepmag):
+    if k2_camp=='Ceng':
+        path_diag = '%s/Ceng/diagnostic_stars/diag_kepmag=%i.txt' % \
+                    (k2_dir,kepmag)
+    elif k2_camp=='C0':
+        path_diag = '%s/catalogs/diagnostics/C0-diag_kepmag=%02d.txt' % \
+                    (k2_dir,kepmag)
 
-def read_diag(kepmag):
-    path_diag = '%s/Ceng/diagnostic_stars/diag_kepmag=%i.txt' % (k2_dir,kepmag)
     df = pd.read_table(path_diag,names=['epic'])
-    return pd.merge(read_cat(),df)
+    df = pd.merge( read_cat(k2_camp=k2_camp), df )
+    return df
 
 def resolve_fits(epic):
     return "%s/Ceng/fits/kplr%09d-2014044044430_lpd-targ.fits" % (k2_dir,epic)

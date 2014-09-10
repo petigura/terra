@@ -20,7 +20,7 @@ import copy
 import os
 import pandas as pd
 deltaPcad = 10
-from config import k2_dir,path_phot
+from config import k2_dir
 import photometry
 
 #######################
@@ -67,6 +67,13 @@ def pp(par):
                'type': 'mc', 'plot_lc':True}
     >>> terra.pp(dpp)
 
+    # TPS Run (Hacked to work on Ian's photometry)
+    dpp = dict(path_phot='photometry/C0_pixdecor/202083828.fits',
+             outfile='temp.grid.h5',plot_lc=True,update=True,type='tps')
+    terra.pp(dpp)
+
+
+
     Make a dataframe with the following columns
     Minumum processing to look at LC
 
@@ -93,7 +100,7 @@ def pp(par):
 
 
     with h5F(par) as h5:
-        lc = photometry.read_phot(path_phot, par['epic'] )
+        lc = photometry.read_crossfield_fits(par['path_phot'])
 
         h5.create_group('pp')
         h5['/pp/cal'] = lc
@@ -102,11 +109,16 @@ def pp(par):
 
         lc = h5['/pp/cal'][:]
         lc = prepro.rdt(lc) # detrend light curve
-
+        
         del h5['/pp/cal']
-        h5['/pp/cal'] = lc
 
-        prepro.cal(h5,par)
+        # Hack to get around no calibration step
+        for k in 'fcal fit'.split():
+            lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
+        h5['/pp/cal'] = lc
+#        prepro.cal(h5,par)
+
+
 
         if par.has_key('plot_lc'):
             if par['plot_lc']:

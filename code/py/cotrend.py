@@ -16,7 +16,7 @@ from matplotlib import mlab
 from numpy import ma,rec
 import numpy as np
 
-from config import nMode,sigOut,maxIt,path_phot
+from config import nMode,sigOut,maxIt#,path_phot
 
 from sklearn.decomposition import FastICA, PCA
 

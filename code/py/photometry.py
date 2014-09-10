@@ -138,6 +138,8 @@ def read_phot(f,name):
     """
     Read in K2 photometry from h5 directory
     """
+
+    
     with h5py.File(f,'r') as h5:
         comb = get_comb(f,name)
         lc = h5['dt'][comb.h5idx,:]
@@ -342,20 +344,31 @@ def read_crossfield(epic):
         return None
     return read_crossfield_fits(path[0])
 
-def read_crossfield_fits(path):
+def read_crossfield_fits(path,k2_camp='C0'):
     with fits.open(path) as hduL:
         ian = pd.DataFrame(LE(hduL[1].data))
 
     ian = ian['cad cleanFlux noThrusterFiring'.split()]
     ian['noThrusterFiring'] = ian.noThrusterFiring.astype(bool)
 
-    lc = read_cal('Ceng.cal.h5',60017809)
+    if k2_camp=='Ceng':
+        lc = read_cal('Ceng.cal.h5',60017809)
+    elif k2_camp=='C0':
+        namemap={'TIME':'t','CADENCENO':'cad'}
+        keys = namemap.values() + ['QUALITY']
+        ts,cube,aper,head0,head1,head2 = read_k2_fits(
+            'pixel/C0/ktwo200000818-c00_lpd-targ.fits')
+        lc = pd.DataFrame(ts).rename(columns=namemap)[keys]
+
     lc = pd.DataFrame(lc)
     lc = pd.merge(lc,ian,how='left',on='cad')
-    lc['fmask'] = np.isnan(lc['cleanFlux']) | (lc['noThrusterFiring']==False)
-    lc['fdt'] = lc['cleanFlux']
-    lc['fdt'] /= median(lc['fdt'])
-    lc['fdt'] -= 1
-    lc = lc.drop('fcal ftnd'.split(),axis=1)
-    return np.array(lc.to_records(index=False))
+    lc['noThrusterFiring'] = (lc['noThrusterFiring']==False)
+    lc['fmask'] = np.isnan(lc['cleanFlux']) | lc['noThrusterFiring']
+    lc['f'] = lc['cleanFlux']
+    lc['f'] /= median(lc['f'])
+    lc['f'] -= 1
 
+    #dropkeys = [k for k in 'fcal'.split() if list(lc.columns).count(k) > 0]
+    #lc = lc.drop(dropkeys,axis=1)
+    lc = np.array(lc.to_records(index=False))
+    return lc 
