@@ -39,6 +39,11 @@ rc('axes',color_cycle=['RoyalBlue','Tomato'])
 rc('font',size=8)
 
 def AddAnchored(*args,**kwargs):
+    # Hack to get rid of warnings
+    for k in 'ha va'.split():
+        if kwargs['prop'].has_key(k):
+            kwargs['prop'].pop(k)
+
     at = AnchoredText(*args,**kwargs)
     gca().add_artist(at)
 
@@ -61,7 +66,6 @@ def plot_diag(h5,tpar=False):
            noise 
            s2n
     """
-
     tval.read_dv(h5,tpar=tpar)
 
     try:
@@ -465,16 +469,15 @@ def plotCalWrap(h5):
 def plotSES(h5):
     d = dict(time=False)
 
+    twd = int(h5.attrs['twd'])
+
     res,lc = h5.RES,h5.lc
-    
-    # 6-hour single event statistic
-    bcad = 2*6
     fcal = ma.masked_array(lc['fcal'],lc['fmask'])
-    dM = tfind.mtd(fcal,bcad)
+    dM = tfind.mtd(fcal,twd)
 
     fm = ma.masked_array(dM*1e6,lc['fmask'])
     wrapHelp(h5,lc['t'],fm,d)
-    ylabel('SES (ppm)')
+    ylabel('SES (ppm) [%.1f hour]' % (twd/2.0))
     axvline(0, alpha=.1,lw=10,color='m',zorder=1)
     axvline(.5,alpha=.1,lw=10,color='m',zorder=1)
 

@@ -269,6 +269,9 @@ def mtd(fm,twd):
     interpolate the entire time series.  We see some edge effects
 
     """
+
+    assert isinstance(twd,int),"Box width most be integer number of cadences"
+
     fm = fm.copy()
     fm.fill_value = 0
     w = (~fm.mask).astype(int) # weights either 0 or 1

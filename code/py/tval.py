@@ -473,7 +473,9 @@ def at_s2ncut(h5):
     # Notch out the transit and recompute
     fmcut = h5.fm.copy()
     fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
-    dMCut = tfind.mtd(fmcut, attrs['twd'] )    
+
+    twd = int(attrs['twd'])
+    dMCut = tfind.mtd(fmcut,twd )    
 
     Pcad0 = np.floor(attrs['Pcad'])
     r = tfind.ep(dMCut, Pcad0)

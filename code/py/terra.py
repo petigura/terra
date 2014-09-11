@@ -115,6 +115,8 @@ def pp(par):
         # Hack to get around no calibration step
         for k in 'fcal fit'.split():
             lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
+        lc['fcal'] = lc['f']
+
         h5['/pp/cal'] = lc
 #        prepro.cal(h5,par)
 
@@ -192,7 +194,7 @@ def grid(par):
     with h5F(par) as h5:     
         h5.attrs['fluxField']  = par['fluxField']
         h5.attrs['fluxMask']   = par['fluxMask']
-
+    
         tfind.grid(h5,parL) 
 
 def dv(par):
@@ -254,9 +256,8 @@ def dv(par):
         # Attach attributes
         tval.read_dv(h5)
 
-
         tval.at_grass(h5) # How many nearby SNR peaks are there?
-        tval.checkHarmh5(h5)
+#        tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
 
         
