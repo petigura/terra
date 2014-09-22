@@ -1,5 +1,7 @@
 import numpy as np
 import warnings
+from scipy.interpolate import RectBivariateSpline
+from scipy.optimize import fmin
 
 try:
     import fftw3
@@ -138,6 +140,8 @@ def register_images(im1, im2, usfac=1, return_registered=False,
         Measures the amount im2 is offset from im1 (i.e., shift im2 by these #'s
         to match im1)
 
+    # Really weird convention
+    nd.shift(im2,[-dy,-dx]) = im1
     """
     if not im1.shape == im2.shape:
         raise ValueError("Images must have same shape.")
@@ -173,7 +177,7 @@ def register_images(im1, im2, usfac=1, return_registered=False,
 
 def dftregistration(buf1ft,buf2ft,usfac=1, return_registered=False,
         return_error=False, zeromean=True, DEBUG=False, maxoff=None,
-        nthreads=1, use_numpy_fft=False):
+                    nthreads=1, use_numpy_fft=False,polish=True):
     """
     translated from matlab:
     http://www.mathworks.com/matlabcentral/fileexchange/18401-efficient-subpixel-image-registration-by-cross-correlation/content/html/efficient_subpixel_registration.html
@@ -338,18 +342,16 @@ def dftregistration(buf1ft,buf2ft,usfac=1, return_registered=False,
             if DEBUG: print row_shift2, col_shift2
             row_shift0 = round(row_shift2*usfac)/usfac; 
             col_shift0 = round(col_shift2*usfac)/usfac;     
-            dftshift = trunc(ceil(usfac*zoom_factor)/2); #% Center of output array at dftshift+1
+
+            #% Center of output array at dftshift+1
+            dftshift = trunc(ceil(usfac*zoom_factor)/2); 
             if DEBUG: print 'dftshift,rs,cs,zf:',dftshift, row_shift0, col_shift0, usfac*zoom_factor
             # Matrix multiply DFT around the current shift estimate
             roff = dftshift-row_shift0*usfac
             coff = dftshift-col_shift0*usfac
             upsampled = dftups(
-                    (buf2ft * conj(buf1ft)),
-                    ceil(usfac*zoom_factor),
-                    ceil(usfac*zoom_factor), 
-                    usfac, 
-                    roff,
-                    coff)
+                (buf2ft * conj(buf1ft)),ceil(usfac*zoom_factor),
+                ceil(usfac*zoom_factor), usfac, roff, coff)
             #CC = conj(dftups(buf2ft.*conj(buf1ft),ceil(usfac*1.5),ceil(usfac*1.5),usfac,...
             #    dftshift-row_shift*usfac,dftshift-col_shift*usfac))/(md2*nd2*usfac^2);
             CC = conj(upsampled)/(md2*nd2*usfac**2);
@@ -368,6 +370,17 @@ def dftregistration(buf1ft,buf2ft,usfac=1, return_registered=False,
             rloc,cloc = np.unravel_index(abs(CC).argmax(), CC.shape) 
             rloc0,cloc0 = np.unravel_index(abs(CC).argmax(), CC.shape) 
             CCmax = CC[rloc,cloc]
+
+            if polish:
+                rows = np.arange(CC.shape[0])
+                cols = np.arange(CC.shape[1])
+                spl = RectBivariateSpline(rows, cols,abs(CC))
+
+                p0 = [rloc,cloc]
+                f = lambda p: - spl(*p)[0][0]
+                rloc,cloc = fmin(f,p0,disp=0)
+                CCmax = spl(rloc,cloc)
+
             #[max1,loc1] = CC.max(axis=0), CC.argmax(axis=0)
             #[max2,loc2] = max1.max(),max1.argmax()
             #rloc=loc1[loc2];
@@ -387,6 +400,9 @@ def dftregistration(buf1ft,buf2ft,usfac=1, return_registered=False,
             if DEBUG: print "Coordinate went from",row_shift2,col_shift2,"to",row_shift0,col_shift0,"to", row_shift, col_shift
             if DEBUG: print "dftsh - usfac:", dftshift-usfac
             if DEBUG: print  rloc,cloc,row_shift,col_shift,CCmax,dftshift,rloc0,cloc0
+
+
+
 
         # If upsampling = 2, no additional pixel shift refinement
         else:    
