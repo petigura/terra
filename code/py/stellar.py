@@ -10,7 +10,6 @@ import pandas as pd
 from pandas.io import sql
 from scipy.io.idl import readsav
 import numpy as np
-import kbcUtils 
 
 from config import k2_dir
 from config import G,Rsun,Rearth,Msun,AU,sec_in_day

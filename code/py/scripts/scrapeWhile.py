@@ -18,7 +18,7 @@ args  = parser.parse_args()
 pp = pd.read_csv('pp.csv',index_col=0)
 pp = pp.iloc[range(args.start,args.stop)]
 
-fL = glob.glob('grid/*.h5')
+fL = glob.glob('../www/K2/TPS/C0/*.h5')
 df = pd.DataFrame(fL,columns=['file'])
 
 df['outbase'] = df.file.apply(basename)

@@ -1,10 +1,11 @@
 from argparse import ArgumentParser
-import pandas
-import terra
 import matplotlib
+matplotlib.use('Agg')
+
+import pandas as pd
+import terra
 import config
 
-matplotlib.use('Agg')
 
 parser = ArgumentParser(description='Thin wrapper around terra module')
 parser.add_argument('args',nargs='+',type=str,help='file[s] function keywords')
@@ -23,7 +24,7 @@ multi = args.multi
     
 dL = []
 for f in files:
-    df = pandas.read_csv(f,index_col=0)
+    df = pd.read_csv(f,index_col=0)
     d = dict(df.iloc[index])
 #    if f.count('pp.csv')>0:
 #        d['outfile'] = config.resolve_grid(d['outfile'])

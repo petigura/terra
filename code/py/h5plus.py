@@ -3,7 +3,7 @@ import numpy as np
 import os
 from matplotlib import mlab
 import sys
-import pyfits
+#import pyfits
 
 class File(h5py.File):
    def __init__(self,name,mode=None,driver=None,**kwds):

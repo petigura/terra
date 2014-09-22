@@ -21,7 +21,7 @@ import os
 import sys
 import tarfile
 import glob
-import pyfits
+from astropy.io import fits
 import sqlite3
 import pandas as pd
 
@@ -61,7 +61,7 @@ def qload(file,allCol=False):
     t    : atpy table
 
     """
-    hdu = pyfits.open(file)
+    hdu = fits.open(file)
     t = atpy.Table(file,type='fits')  
     if allCol is False:
         t.remove_columns(xtraCol)
