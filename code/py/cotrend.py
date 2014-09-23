@@ -19,7 +19,16 @@ import numpy as np
 from config import nMode,sigOut,maxIt#,path_phot
 
 from sklearn.decomposition import FastICA, PCA
-
+from matplotlib.gridspec import GridSpec
+import stellar
+from matplotlib.pylab import *
+import h5py
+import photometry
+import tfind
+import prepro
+from matplotlib.transforms import blended_transform_factory as btf
+from plotplus import AddAnchored
+import pandas as pd
 
 def dtbvfitm(t,fm,bv):
     """
@@ -267,7 +276,6 @@ def robustPCA(M0,n_components=4):
     return U,V
 
 
-from matplotlib.gridspec import GridSpec
 
 def plot_PCs(U,V):
     fig = figure(figsize=(20,12))
@@ -355,9 +363,7 @@ def mkModes(fdt0,kic0,verbose=True,maxIt=maxIt,nMode=nMode):
     A      = np.dot(U,S)
     A      = A[:,:nMode]
     fit    = np.dot(A,V[:nMode])*mad
-
     return U,S,V,A,fit,kic,fdt
-
 
 def moments(A):
     # Evaluate moments
@@ -380,7 +386,6 @@ def cotrendFits(U,S,V,nModes=None):
     Use the priciple components and singular values, to construct the
     cotrending fits to the light curves
     """
-
     # Construct fits
     nstars = U.shape[0]
     S      = S[:nstars,:nstars]
@@ -388,7 +393,6 @@ def cotrendFits(U,S,V,nModes=None):
     A      = A[:,:nModes]
     fits   = np.dot(A,V[:nModes])
     fits   = fit*mad[goodid]
-    
     return fits
 
 def join_on_kic(x1,x2,kic1,kic2):
@@ -414,7 +418,6 @@ def join_on_kic(x1,x2,kic1,kic2):
     Make default proceedure to just return the indecies like (arg join).
 
     """
-    
     r = lambda kic : rec.fromarrays([kic,np.arange(kic.size)],names='kic,rid')
     r1 = r(kic1)
     r2 = r(kic2)
@@ -424,9 +427,7 @@ def join_on_kic(x1,x2,kic1,kic2):
 
     xj1 = x1[ rj['rid1'] ]
     xj2 = x2[ rj['rid2'] ]
-    
     return xj1,xj2,kic
-
 
 tq = 89.826658388163196
 def cutQuarterPeriod(PG):
@@ -474,17 +475,8 @@ def medfit(fdt,vec):
     fit = ma.masked_array(p1[0] * vec,mask=fdt.mask)
     return fit
 
-
-
-
-
-twd = 20
-#from matplotlib import gridspec
-#from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-
-tprop = dict(size=10,name='monospace')
-
 def compCoTrend(tlc):
+    tprop = dict(size=10,name='monospace')
     fig = figure(figsize=(18,12))
 
     algL = ['RawCBV','ClipCBV']
@@ -505,22 +497,6 @@ def compCoTrend(tlc):
     rcParams['axes.color_cycle'] = ['k','r','c','g']
 
     axmtd = plt.subplot(gs[-1],sharex=gca())
-#    for mtd in mtdL:
-#        axmtd.plot(t.TIME,mtd)
-#
-#    for mtd in mtdL:
-#        mf = nd.maximum_filter(mtd,twd)
-#        axmtd.plot(t.TIME,mf+50e-6)
-
-#    rdL = [diag(mtd,twd) for mtd in mtdL]
-#    rdL = hstack(rdL)
-#    for n in rdL.dtype.names:
-#        rdL[n] *= 1e6 
-
-#    rdL = mlab.rec_append_fields(rdL,'alg',algL)
-#    at = AnchoredText(mlab.rec2txt(rdL,precision=0),prop=tprop, frameon=True,loc=3)
-
-#    axmtd.add_artist(at)
     axL = fig.get_axes()
     for ax in axL:
         ax.xaxis.set_visible(False)
@@ -572,8 +548,6 @@ def compwrap(tset):
         vec = numpy.load('mom_cycle_q%i.npy' % kw['QUARTER'])
         tndMedCT = medfit(fdt,vec)
         data,tnd  = fdt,tndMedCT
-
-
 
 def compDTdata(t):
     """
@@ -701,44 +675,24 @@ def medfit(fdt,vec):
     fit = ma.masked_array(p1[0] * vec,mask=fdt.mask)
     return fit
 
-
-import stellar
-from matplotlib.pylab import *
-import h5py
-import photometry
-import tfind
-import prepro
-from matplotlib.transforms import blended_transform_factory as btf
-from plotplus import AddAnchored
-
 def plot_modes_fov(U,V):
     n_components = U.shape[1]
-
     df = stellar.read_cat()
-
     ndiag = len(dfdiag)
     lc = [photometry.read_phot(path_phot,epic) for epic in dfdiag.epic]
     lc = vstack([prepro.rdt(lci) for lci in lc]) # Light curves are rows of lc
     fdt = ma.masked_array(lc['fdt'],lc['fmask'])
-
     A = [bvfitm(fdt[i],U.T)[0] for i in range(ndiag)]
     A = ma.vstack(A)
     return dfdiag,A
-
-
 
 def plot_mode_FOV(dfA,kAs):
     fig,axL = subplots(ncols=4, nrows=2)
     for i,k in zip(range(len(kAs)),kAs):
         sca(axL.flatten()[i])
-        
         scatter(dfA.ra,dfA.dec,c=dfA[k])
-
         title(k)    
         print dfA[('ra dec %s' % k).split()]
-
-
-import pandas as pd
 
 class EnsembleCalibrator:
     """
@@ -750,8 +704,12 @@ class EnsembleCalibrator:
         ----------
         fdt : masked array of detrended light curves
               fdt.shape = (N_lightcurves,N_measurements)
-        dftr : Pandas DataFrame with an entry for every training light curve
 
+        dftr : Pandas DataFrame with an entry for every training light
+               curve. Must contain the following keys:
+               - epic
+               - ra
+               - dec
         """
         self.ntr = len(dftr)
         assert fdt.shape[0]==self.ntr,\
@@ -766,6 +724,13 @@ class EnsembleCalibrator:
         for n,b in zip(['cadences','light curves'],[bcol,brow]):
             print "%i %s masked out" % (b.size - b.sum(),n)
         print ""
+
+        assert np.alltrue(brow),"cannot handel garbage lightcurves"
+
+        # Fill in the rest of the missing cadences with 0s
+        fdt = ma.masked_invalid(fdt)
+        fdt.fill_value=0
+        fdt.data[:] = fdt.filled()
 
         # Standardize the light curves
         fdt_sig = 1.48 * median(abs(fdt),axis=1)
@@ -823,7 +788,6 @@ class EnsembleCalibrator:
         self.U = U
         self.V = V
 
-
     def isinlier(self,dfAc):
         """
         Returns true if coefficients are in acceptable range
@@ -833,7 +797,6 @@ class EnsembleCalibrator:
         
     def bvfitfm(self,fm,mode='ls-map',verbose=True):
         """
-
         """
         A,fcbv = bvfitm(fm,self.U.T)
         if mode=='ls-map':
@@ -845,24 +808,6 @@ class EnsembleCalibrator:
                 fcbv[:] =0
 
         return A,fcbv
-
-    def makeplots(self):
-        dfA = self.dfA
-        kAs = self.kAs
-        plot_PCs(self.U,self.V)
-
-        pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
-        path = self.plot_basename+'_coeffs.png'
-        print "saving %s" % path
-        gcf().savefig(path)
-
-
-        plot_mode_FOV(dfA[dfA.inlier],kAs)
-
-        gcf().set_tight_layout(True)
-        path = self.plot_basename+'_FOV.png'
-        print "saving %s" % path
-        gcf().savefig(path)
 
     def plot_modes_diag(self,fdt,step = 0.001):
         # Compute the fits
@@ -881,7 +826,6 @@ class EnsembleCalibrator:
                 df = tfind.ses_stats(fstack[i])
                 df['star'] = i
                 out+=[df]
-
             return pd.concat(out,ignore_index=True)
         
         pd.set_option('precision',1)
@@ -936,3 +880,28 @@ class EnsembleCalibrator:
         plot_label(fcal.T+dy,color='r',label='Residuals')
         plot_stats(df_stats_fcal)
         legend()
+
+def makeplots(ec,savefig=False):
+    dfA = ec.dfA
+    kAs = ec.kAs
+
+    plot_PCs(ec.U,ec.V)
+    if savefig:
+        path = ec.plot_basename+'_PCs.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+        
+
+    pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
+    if savefig:
+        path = ec.plot_basename+'_coeffs.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
+    plot_mode_FOV(dfA[dfA.inlier],kAs)
+    if savefig:
+        gcf().set_tight_layout(True)
+        path = ec.plot_basename+'_FOV.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
