@@ -32,14 +32,6 @@ def scrape_headers(fL):
 
 
 
-def imshow2(im,**kwargs):
-    extent = None#(0,im.shape[0],0,im.shape[1])
-
-    if kwargs.has_key('cmap')==False:
-        kwargs['cmap'] = cm.gray 
-
-    imshow(im,interpolation='nearest',origin='lower',
-           extent=extent,**kwargs)
 
 def plot_med_star(name,stretch='none'):
     ts,cube = read_pix(path_pix,name)
@@ -335,6 +327,11 @@ def Ceng2C0(lc0):
 import glob
 from pdplus import LittleEndian as LE
 
+ts,_,_,_,_,_ = read_k2_fits('pixel/C0/ktwo200000818-c00_lpd-targ.fits')
+namemap={'TIME':'t','CADENCENO':'cad'}
+keys = namemap.values() + ['QUALITY']
+lc0_C0 = pd.DataFrame(ts).rename(columns=namemap)[keys]
+
 def read_crossfield(epic):
     pathstar = 'photometry/Ceng_pixdecor2/%i_loc*.fits' % epic
     path = glob.glob(pathstar)
@@ -344,24 +341,39 @@ def read_crossfield(epic):
         return None
     return read_crossfield_fits(path[0])
 
+
+import cPickle as pickle
+from pixel_decorrelation import baseObject
+
+keys = 'cad cleanFlux noThrusterFiring'.split()
 def read_crossfield_fits(path,k2_camp='C0'):
-    with fits.open(path) as hduL:
-        ian = pd.DataFrame(LE(hduL[1].data))
-
-    ian = ian['cad cleanFlux noThrusterFiring'.split()]
-    ian['noThrusterFiring'] = ian.noThrusterFiring.astype(bool)
-
     if k2_camp=='Ceng':
         lc = read_cal('Ceng.cal.h5',60017809)
+        lc0 = pd.DataFrame(lc)
     elif k2_camp=='C0':
-        namemap={'TIME':'t','CADENCENO':'cad'}
-        keys = namemap.values() + ['QUALITY']
-        ts,cube,aper,head0,head1,head2 = read_k2_fits(
-            'pixel/C0/ktwo200000818-c00_lpd-targ.fits')
-        lc = pd.DataFrame(ts).rename(columns=namemap)[keys]
+        lc0 = lc0_C0
 
-    lc = pd.DataFrame(lc)
-    lc = pd.merge(lc,ian,how='left',on='cad')
+
+    keys = 'cad cleanFlux noThrusterFiring'.split()
+    if path.count('.pickle') > 0:
+        with open(path,'r') as f:
+            o = pickle.load(f)
+            ian = pd.DataFrame(dict([(k,getattr(o,k)) for k in keys]))
+
+    if path.count('.fits') > 0:
+        with fits.open(path) as hduL:
+            ian = pd.DataFrame(LE(hduL[1].data))
+
+    try:
+        ian = ian[keys]
+        ian['noThrusterFiring'] = ian.noThrusterFiring.astype(bool)
+        lc = pd.merge(lc0,ian,how='left',on='cad')
+    except KeyError:
+        # Hack for 
+        ian['t1000'] = ((ian['time'] - 2454833)*100).astype(int)
+        lc0['t1000'] = (lc0['t']*100).astype(int)
+        lc = pd.merge(lc0,ian,how='left',on='t1000')
+
     lc['noThrusterFiring'] = (lc['noThrusterFiring']==False)
     lc['fmask'] = np.isnan(lc['cleanFlux']) | lc['noThrusterFiring']
     lc['f'] = lc['cleanFlux']
