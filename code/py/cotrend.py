@@ -1,34 +1,28 @@
 """
 Cotrending code
 """
-from scipy import ndimage as nd
-from scipy import stats
 import glob
+
+from matplotlib import mlab
+from matplotlib.gridspec import GridSpec
+from matplotlib.pylab import *
+from matplotlib.transforms import blended_transform_factory as btf
+
+from scipy import optimize
+from scipy import ndimage as nd
+from sklearn.decomposition import FastICA, PCA
+import pandas as pd
+import h5py
 
 import tfind
 import detrend
 import keplerio
-from scipy import optimize
-import ebls
-
-from matplotlib import mlab
-
-from numpy import ma,rec
-import numpy as np
-
-from config import nMode,sigOut,maxIt#,path_phot
-
-from sklearn.decomposition import FastICA, PCA
-from matplotlib.gridspec import GridSpec
-import stellar
-from matplotlib.pylab import *
-import h5py
 import photometry
-import tfind
 import prepro
-from matplotlib.transforms import blended_transform_factory as btf
+import stellar
+import h5plus
 from plotplus import AddAnchored
-import pandas as pd
+from config import nMode,sigOut,maxIt#,path_phot
 
 def dtbvfitm(t,fm,bv):
     """
@@ -99,7 +93,6 @@ def bvfitm(fm,bv):
 
     return p1,fcbv
 
-
 def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
     """
     Robust SVD
@@ -127,7 +120,6 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
              median.  Defaults to the config value.
     maxIt  : Maximum number of iterations to perform before exiting.
              Defaults to the config value.
-
 
     """
     Dnrow,Dncol = D.shape     
@@ -250,30 +242,6 @@ def robust_components(M0,n_components=4,algo='PCA'):
 
     return U,V,icolin
 
-def robustPCA(M0,n_components=4):
-    """
-    Robust Independent Component Analysis
-
-    M : d x n matrix of observations, where d is the dimensionality of
-        the measurements, and n is the number of measurements
-    """
-
-
-    M = M0.copy()
-    outliers = -1
-
-    while outliers!=0:
-
-
-        # Typical dispersion in best fit parameters
-        # Typical dispersion in best fit parameters
-        Vsig = 1.48*np.median(abs(V),axis=0) 
-        bVin = (abs(V/Vsig) > 5)
-        bVin = bVin.sum(axis=1)==0 # Throw out outliers
-        M = M[:,bVin]
-        outliers=(~bVin).sum()
-        print outliers
-    return U,V
 
 
 
@@ -584,19 +552,7 @@ def compDTdata(t):
     tlc.keywords = t.keywords
     return tgrid,tlc
 
-def repQper(t,dM,nQ=12):
-    """
-    Extend the quarter and compute the MES 
-    """
-    
-    dM = [dM for i in range(nQ)]
-    dM = ma.hstack(dM)
 
-    PG0 = ebls.grid( nQ*90 , 0.5, Pmin=180)
-    PcadG,PG = tfind.P2Pcad(PG0)
-
-    res = tfind.pep(t.TIME[0],dM,PcadG)
-    return PG,res['fom']
 
 def indord(ind):
     n = len(ind)
@@ -698,7 +654,10 @@ class EnsembleCalibrator:
     """
     Object for performing Ensemble based calibration of light curves.
     """
-    def __init__(self, fdt, dftr):
+    def __init__(self):
+        pass
+    
+    def add_training_set(self,fdt,dftr):
         """
         Parameters
         ----------
@@ -809,11 +768,10 @@ class EnsembleCalibrator:
 
         return A,fcbv
 
-    def plot_modes_diag(self,fdt,step = 0.001):
+    def plot_modes_diag(self, fdt, step=0.001):
         # Compute the fits
-        n_components = self.n_components
         U = self.U
-
+        n_components = U.shape[1]
         ndiag = fdt.shape[0]
 
         fit = [self.bvfitfm(f)[1] for f in fdt]
@@ -881,6 +839,34 @@ class EnsembleCalibrator:
         plot_stats(df_stats_fcal)
         legend()
 
+dsetkeys = 'U'.split()
+attrkeys = 'kAs dfAc_st'.split()
+
+def to_hdf(ec,h5file):
+    with h5plus.File(h5file) as h5:
+        for k in dsetkeys:
+            h5[k] = getattr(ec,k)
+
+        r = ec.dfAc_st.to_records()
+        rless = mlab.rec_drop_fields(r,['index'])
+        sindex = r['index'].astype(str)
+        r = mlab.rec_append_fields(rless,'index', sindex)
+        h5.attrs['dfAc_st'] = r
+        h5.attrs['kAs'] = ec.kAs
+
+def read_hdf(h5file):
+    ec = EnsembleCalibrator()
+    with h5plus.File(h5file) as h5:
+        for k in dsetkeys:
+            setattr(ec,k,h5[k][:])
+
+        dfAc_st = pd.DataFrame(h5.attrs['dfAc_st'])
+        dfAc_st.index=dfAc_st['index']
+        dfAc_st.drop('index',axis=1)
+        setattr(ec,'dfAc_st',dfAc_st)
+        setattr(ec,'kAs',h5.attrs['kAs'])
+    return ec
+
 def makeplots(ec,savefig=False):
     dfA = ec.dfA
     kAs = ec.kAs
@@ -890,7 +876,6 @@ def makeplots(ec,savefig=False):
         path = ec.plot_basename+'_PCs.png'
         print "saving %s" % path
         gcf().savefig(path)
-        
 
     pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
     if savefig:

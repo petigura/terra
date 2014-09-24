@@ -15,10 +15,9 @@ from matplotlib.pylab import *
 import photometry
 import h5plus
 import prepro
-from cotrend import EnsembleCalibrator,makeplots
+import cotrend
 import k2_catalogs
 import cPickle as pickle
-
 
 parser = ArgumentParser(description='Ensemble calibration')
 parser.add_argument('fitsdir',type=str,help='directory with fits files')
@@ -28,11 +27,9 @@ args = parser.parse_args()
 
 # Loading up all the fits files takes some time. The first order of
 # business is to create a checkpoint.
-
 dir = args.fitsdir
 dirname = os.path.dirname(dir)
 h5file = "%s.h5" % (dirname)
-
 if not os.path.exists(h5file) or args.f:
     fL = glob('%s/*.fits' % dirname)
     nfL = len(fL)
@@ -67,20 +64,22 @@ with h5py.File(h5file) as h5:
     epic = h5['epic'][:]
 
 fdt = ma.masked_array(lc['fdt'],lc['fmask'])
-epic = epic.astype(int)
-dftr = pd.DataFrame(index=epic)
+epic = np.array(pd.Series(epic).str.replace('.pickle','').astype(int))
+#epic = epic.astype(int)
+dftr = pd.DataFrame(dict(i=arange(len(epic))),index=epic)
 dftr['epic'] = dftr.index
 targets = k2_catalogs.read_cat(return_targets=True)
 dftr = pd.merge(dftr,targets.drop_duplicates())
 
-import pdb;pdb.set_trace()    
-ec = EnsembleCalibrator(fdt,dftr)
+fdt = fdt[dftr.i]
+ec = cotrend.EnsembleCalibrator()
+ec.add_training_set(fdt,dftr)
 ec.robust_components(algo='PCA')
 
 ec.plot_basename = ec.plot_basename.replace('cotrend',dirname)
-makeplots(ec,savefig=True)
+cotrend.makeplots(ec,savefig=True)
 
-picklefn = dirname+'_ec.pickle'
-print "Saving calibrator object to %s" % picklefn
-with open(picklefn,'w') as f:
-    pickle.dump(ec,f)
+h5file = dirname+'_ec.h5'
+print "Saving calibrator object to %s" % h5file
+cotrend.to_hdf(ec,h5file)
+
