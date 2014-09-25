@@ -6,23 +6,28 @@ Evaluate a figure of merit at each point in P,epoch,tdur space.
 Future work: implement a general linear function that works along folded columns.  Right now I'm doing a weighted mean. 
 
 """
-from scipy import ndimage as nd
-import scipy
 import sys
+import time
+
+import scipy
+from scipy import ndimage as nd
 import numpy as np
 from numpy import ma
 from matplotlib import mlab
+import pandas as pd
+import h5py
+import BLS_cy
+import BLS_cext
 
 import keptoy
 import keplerio
 import FFA_cext as FFA
-
 from config import *
-
 import config
 import h5plus
-import h5py
 import tval
+
+
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
@@ -34,13 +39,11 @@ tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
-
 # Default period limits.  Can change after instaniation.
 P1 = int(np.floor(config.P1/keptoy.lc))
 P2 = int(np.floor(config.P2/keptoy.lc))
 maCadCnt = int( np.floor(config.maCadCnt) )
 cut = 5e3
-
 
 def grid(h5,parL):
     """
@@ -76,7 +79,6 @@ def grid(h5,parL):
     it0 = h5.create_group('it0')
     it0 = h5['it0']
     it0['RES']   = r
-
 
 def itOutRej(h5):
     """
@@ -185,8 +187,6 @@ def itOutRej(h5):
         PcadG = np.arange(h5.attrs['P1_FFA'],h5.attrs['P2_FFA'])
         del curIt['RES']
         curIt['RES'] = tdmarg(tdpep(t,fm,PcadG,twdG))
-
-
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
     """
@@ -430,7 +430,6 @@ def fold(dM,Pcad0):
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
 
-
 def epmarg(t0cad,Pcad,meanF,countF):
     """
     Epoch Marginalize
@@ -483,7 +482,6 @@ def cadCount(cad,res):
     c,b = np.histogram(cadLL,bins=np.linspace(cadmi,cadma+1,cad.size+1))
     return c
 
-
 def tdpep2(t,fm,Pcad0,twdG,noiseG):
     """
 
@@ -525,7 +523,6 @@ def tdpep2(t,fm,Pcad0,twdG,noiseG):
 #    res = np.array(resL,dtype=zip(names,types)  )
 
 #    return res
-
 
 def noise(t,fm,twdG):
     # Constant estimation fof the noise for deltaT
@@ -599,8 +596,7 @@ def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
 
     return dL
 
-import time
-import pandas
+
 
 filtWid = np.array([5,10,20]) # lists at which to compute filters
 def tryalgs(FdtL,W,alg,d):
@@ -624,20 +620,17 @@ def tryalgs(FdtL,W,alg,d):
         Fdt = FdtL['%i' % delT2]
 
         Pcad,out = FBLS(Fdt,W,alg,d['Pcad1'],d['Pcad2'],delT1,delT2)
-        df = pandas.DataFrame(out)
+        df = pd.DataFrame(out)
         FOM.append(np.array(df[0]))
 
     Parr = Pcad*config.lc
     FOM = np.max(np.vstack(FOM),axis=0)
 
     stoptime = time.time()
-
-
     if ver:
         print "total execution time %.2f " % (stoptime-starttime)
 
     return Parr,FOM
-
 
 def FBLS(F,W,alg,d):
 
@@ -681,7 +674,6 @@ def FBLS(F,W,alg,d):
     return Pcad,outL
 
 ##### BLS-SNR ######
-
 def BLS_SNR(t,fm,P1,P2):
     """
     BLS based on SNR
@@ -699,8 +691,6 @@ def BLS_SNR(t,fm,P1,P2):
     Parr = np.hstack(Parr)
     return Parr,SNR
 
-
-from scipy import ndimage as nd
 def medfilt_interp(fm,s):
     """
     Run a median filter on a array with masked values. 
@@ -713,10 +703,6 @@ def medfilt_interp(fm,s):
     fi   = np.interp(x,xp,fp)
     fmed = nd.median_filter(fi,size=s)
     return fmed
-
-
-import BLS_cy
-import BLS_cext
 
 def multiScaleBLS(t0,fm,d,alg):
     fact = 3 # Filter is fact times wider than maximum duration searched over
@@ -755,7 +741,7 @@ def multiScaleBLS(t0,fm,d,alg):
 
 def ebls(t,fm,P1,P2,alg,dv=False):
     dL = pgramParsSeg(P1,P2,t.ptp(),nseg=10)
-    df = pandas.DataFrame(dL)
+    df = pd.DataFrame(dL)
     
     SNR  = []
     Parr = np.hstack(df.farr)
@@ -777,11 +763,9 @@ def ebls(t,fm,P1,P2,alg,dv=False):
     SNR = np.hstack(SNR)
     return Parr,SNR
 
-
-
 def pebls(t,fm,P1,P2,alg,dv=False):
     dL = pgramParsSeg(P1,P2,t.ptp(),nseg=10)
-    df = pandas.DataFrame(dL)
+    df = pd.DataFrame(dL)
     
     SNR  = []
     Parr = np.hstack(df.farr)
@@ -799,35 +783,38 @@ def pebls(t,fm,P1,P2,alg,dv=False):
     SNR = np.hstack(SNR)
     return Parr,SNR
 
-
-from scipy import ndimage as nd
 def running_mean(fm,size):
     fm = fm.copy()
     fm.fill_value = 0
     w = (~fm.mask).astype(float) # weights either 0 or 1
     f = fm.filled()
-
     assert (np.isnan(f)==False).all() ,'mask out nans'
     
     # total flux in bin
     f_sum = nd.uniform_filter(f,size=size) * size 
-
     # number of unmasked points in bin
     f_count = nd.uniform_filter(w,size=size) * size
-
     f_mean = ma.masked_array( f_sum / f_count, f_count < 0.5*size) 
     return f_mean
-import pandas as pd
+
 def ses_stats(fm):
     """
     Given a light curve what is the noise level on different timescales?
     """
     dL = []
     for twd in [1,4,6,8,12]:
-        dL.append(['rms_%i-cad-mean' % twd, ma.std(running_mean(fm,twd)),twd])
-        dL.append(['rms_%i-cad-mtd' % twd, ma.std(mtd(fm,twd)),twd])
+        fom = ma.std(running_mean(fm,twd))
+        dL.append(['rms_%i-cad-mean' % twd, fom ,twd])
+
+        fom = ma.std(mtd(fm,twd))
+        dL.append(['rms_%i-cad-mtd' % twd, fom,twd])
+
+        fom = ma.median(ma.abs(running_mean(fm,twd)))
+        dL.append(['mad_%i-cad-mean' % twd, fom ,twd])
+
+        fom = ma.median(ma.abs(mtd(fm,twd)))
+        dL.append(['mad_%i-cad-mtd' % twd, fom,twd])
 
     dL = pd.DataFrame(dL,columns='name value twd'.split())
     dL['value']*=1e6
     return dL
-    

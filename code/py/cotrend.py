@@ -1,25 +1,28 @@
 """
 Cotrending code
 """
-from scipy import ndimage as nd
-from scipy import stats
 import glob
+
+from matplotlib import mlab
+from matplotlib.gridspec import GridSpec
+from matplotlib.pylab import *
+from matplotlib.transforms import blended_transform_factory as btf
+
+from scipy import optimize
+from scipy import ndimage as nd
+from sklearn.decomposition import FastICA, PCA
+import pandas as pd
+import h5py
 
 import tfind
 import detrend
 import keplerio
-from scipy import optimize
-import ebls
-
-from matplotlib import mlab
-
-from numpy import ma,rec
-import numpy as np
-
+import photometry
+import prepro
+import stellar
+import h5plus
+from plotplus import AddAnchored
 from config import nMode,sigOut,maxIt#,path_phot
-
-from sklearn.decomposition import FastICA, PCA
-
 
 def dtbvfitm(t,fm,bv):
     """
@@ -90,7 +93,6 @@ def bvfitm(fm,bv):
 
     return p1,fcbv
 
-
 def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
     """
     Robust SVD
@@ -118,7 +120,6 @@ def robustSVD(D,nMode=nMode,sigOut=sigOut,maxIt=maxIt,verbose=True):
              median.  Defaults to the config value.
     maxIt  : Maximum number of iterations to perform before exiting.
              Defaults to the config value.
-
 
     """
     Dnrow,Dncol = D.shape     
@@ -241,53 +242,6 @@ def robust_components(M0,n_components=4,algo='PCA'):
 
     return U,V,icolin
 
-def robustPCA(M0,n_components=4):
-    """
-    Robust Independent Component Analysis
-
-    M : d x n matrix of observations, where d is the dimensionality of
-        the measurements, and n is the number of measurements
-    """
-
-
-    M = M0.copy()
-    outliers = -1
-
-    while outliers!=0:
-
-
-        # Typical dispersion in best fit parameters
-        # Typical dispersion in best fit parameters
-        Vsig = 1.48*np.median(abs(V),axis=0) 
-        bVin = (abs(V/Vsig) > 5)
-        bVin = bVin.sum(axis=1)==0 # Throw out outliers
-        M = M[:,bVin]
-        outliers=(~bVin).sum()
-        print outliers
-    return U,V
-
-
-from matplotlib.gridspec import GridSpec
-
-def plot_PCs(U,V):
-    fig = figure(figsize=(20,12))
-    nPC = U.shape[1]
-    gs = GridSpec(nPC,nPC+1)
-    axPCL = [fig.add_subplot(gs[i,:-1]) for i in range(nPC)]
-    axAL = [fig.add_subplot(gs[i,-1]) for i in range(nPC)]
-    for i in range(nPC):
-        sca(axPCL[i])
-        plot(U[:,i])
-
-        sca(axAL[i])
-        hist(V[:,i])
-
-    fig.set_tight_layout(True)
-
-
-
-
-
 def mkModes(fdt0,kic0,verbose=True,maxIt=maxIt,nMode=nMode):
     """
     Make Modes
@@ -355,9 +309,7 @@ def mkModes(fdt0,kic0,verbose=True,maxIt=maxIt,nMode=nMode):
     A      = np.dot(U,S)
     A      = A[:,:nMode]
     fit    = np.dot(A,V[:nMode])*mad
-
     return U,S,V,A,fit,kic,fdt
-
 
 def moments(A):
     # Evaluate moments
@@ -373,385 +325,26 @@ def moments(A):
     rL['mad']  = ma.median(  np.abs( A - rL['med'] ) , axis=0 )
     return rL
 
-def cotrendFits(U,S,V,nModes=None):
-    """
-    Cotrending Fits
-
-    Use the priciple components and singular values, to construct the
-    cotrending fits to the light curves
-    """
-
-    # Construct fits
-    nstars = U.shape[0]
-    S      = S[:nstars,:nstars]
-    A      = np.dot(U,S)
-    A      = A[:,:nModes]
-    fits   = np.dot(A,V[:nModes])
-    fits   = fit*mad[goodid]
-    
-    return fits
-
-def join_on_kic(x1,x2,kic1,kic2):
-    """
-    Join Arrays on KIC
-
-    Parameters
-    ----------
-
-    x1   : First array
-    x2   : Second array
-    kic1 : KIC ID corresponding to first array
-    kic2 : KIC ID corresponding to first array
-
-    Returns
-    -------
-    xj1  : Joined first array
-    xj2  : Joined second array
-    kic  : The union of kic1 kic2
-
-    Todo
-    ----
-    Make default proceedure to just return the indecies like (arg join).
-
-    """
-    
-    r = lambda kic : rec.fromarrays([kic,np.arange(kic.size)],names='kic,rid')
-    r1 = r(kic1)
-    r2 = r(kic2)
-                                    
-    rj = mlab.rec_join('kic',r1,r2)
-    kic = rj['kic']
-
-    xj1 = x1[ rj['rid1'] ]
-    xj2 = x2[ rj['rid2'] ]
-    
-    return xj1,xj2,kic
-
-
-tq = 89.826658388163196
-def cutQuarterPeriod(PG):
-    """
-    Remove multiples of the quarter spacing.
-    """
-    for i in range(12):
-        PG = ma.masked_inside(PG,i*tq-1,i*tq+1)
-    for i in range(24):
-        PG = ma.masked_inside(PG,i*tq/2-1,i*tq/2+1)
-    for i in range(36):
-        PG = ma.masked_inside(PG,i*tq/3-1,i*tq/3+1)
-    for i in range(48):
-        PG = ma.masked_inside(PG,i*tq/4-1,i*tq/4+1)
-    return PG
-
-def peaks(mtd,twd):
-    mf = nd.maximum_filter(mtd,twd)
-    pks = np.unique(mf)
-    cnt = np.array([mf[mf==p].size for p in pks])
-    pks = pks[cnt==twd]
-    return pks
-
-def diag(mtd,twd):
-    pks = peaks(mtd,twd)
-    pks = sort(pks)
-
-    mad = ma.median(ma.abs(mtd))
-    max3day = mean(nd.maximum_filter(mtd,150))
-
-    val   = (pks[-1],mean(pks[-3:]),mean(pks[-10:]),mad  ,max3day)
-    dtype = [('maxpk',float),('pk3',float),('pk10',float),('mad',float),('max3day',float)]
-    rd = np.array(val,dtype=dtype)
-
-    return rd
-
-def medfit(fdt,vec):
-    vec = ma.masked_invalid(vec)
-    fdt.mask = vec.mask = fdt.mask | vec.mask
-    
-    p0 = [0]
-    def cost(p):
-        return ma.median(ma.abs(fdt-p[0]*vec))
-    p1 = optimize.fmin(cost,p0,disp=0)
-    fit = ma.masked_array(p1[0] * vec,mask=fdt.mask)
-    return fit
-
-
-
-
-
-twd = 20
-#from matplotlib import gridspec
-#from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-
-tprop = dict(size=10,name='monospace')
-
-def compCoTrend(tlc):
-    fig = figure(figsize=(18,12))
-
-    algL = ['RawCBV','ClipCBV']
-    nalg = len(algL)
-    gs = GridSpec(nalg+1,1)
-
-    mtdL = []
-    for i in range(nalg):
-        alg = algL[i]
-        time = tlc.time
-        data = ma.masked_array(tlc[alg+'data'],mask=tlc[alg+'datamask'])
-        tnd = ma.masked_array(tlc[alg+'tnd'],mask=tlc[alg+'tndmask'])
-
-        pltDiagCoTrend(time,data,tnd,gs=gs[i]) 
-        at = AnchoredText(alg,prop=tprop, frameon=True,loc=2)
-        gca().add_artist(at)
-        
-    rcParams['axes.color_cycle'] = ['k','r','c','g']
-
-    axmtd = plt.subplot(gs[-1],sharex=gca())
-#    for mtd in mtdL:
-#        axmtd.plot(t.TIME,mtd)
-#
-#    for mtd in mtdL:
-#        mf = nd.maximum_filter(mtd,twd)
-#        axmtd.plot(t.TIME,mf+50e-6)
-
-#    rdL = [diag(mtd,twd) for mtd in mtdL]
-#    rdL = hstack(rdL)
-#    for n in rdL.dtype.names:
-#        rdL[n] *= 1e6 
-
-#    rdL = mlab.rec_append_fields(rdL,'alg',algL)
-#    at = AnchoredText(mlab.rec2txt(rdL,precision=0),prop=tprop, frameon=True,loc=3)
-
-#    axmtd.add_artist(at)
-    axL = fig.get_axes()
-    for ax in axL:
-        ax.xaxis.set_visible(False)
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=5,prune='both'))
-        ax.set_xlim(axL[0].get_xlim())
-    ax.xaxis.set_visible(True)
-
-    draw()
-    fig.tight_layout()
-    fig.subplots_adjust(hspace=0.001)
-    draw()
-
-def pltDiagCoTrend(time,data,fit,gs=None):
-    res = data-fit
-
-    if gs is None:
-        smgs = GridSpec(4,1)
-    else:
-        smgs = gridspec.GridSpecFromSubplotSpec(4,1,subplot_spec=gs)
-
-    axres = plt.subplot(smgs[0])
-    axres.plot(time,res)
-
-    plt.subplot(smgs[1:],sharex=axres)
-    axfit.plot(time,data)
-    axfit.plot(time,fit)
-
-def compwrap(tset):
-    tset = map(keplerio.ppQ,tset)
-
-    for t in tset:
-        compCoTrend(t)
-        fig = gcf()
-        fig.savefig('%09d.png' % t.keywords['KEPLERID'])
-
-
-    
-    if (alg is 'RawCBV') or (alg is 'ClipCBV') :
-        p1 = np.linalg.lstsq( bv[:,bg].T , fm[bg] )[0]
-        tnd     = fm.copy()
-        tnd[bg] = np.dot( p1 , bv[:,bg] )
-        data,tnd = fm,tnd
-    elif alg is 'DtSpl':
-        data,tnd = fm,fm-fdt
-    elif alg is 'DtCBV':
-        tndDtCBV = ma.masked_array(tDtCBV.fcbv,mask=fm.mask)
-        data,tnd = fdt,tndDtCBV
-    elif alg is 'DtMed':
-        vec = numpy.load('mom_cycle_q%i.npy' % kw['QUARTER'])
-        tndMedCT = medfit(fdt,vec)
-        data,tnd  = fdt,tndMedCT
-
-
-
-def compDTdata(t):
-    """
-    Emit the tables used to compare different detrending algorithns.
-    """
-    tgrid = atpy.Table(masked=True) # Store the different grid search results.
-    tlc   = atpy.Table(masked=True) # Store the differnt detrending schemes
-    
-    tgrid.table_name = 'tgrid'
-    tlc.table_name = 'tlc'
-    
-    fm = ma.masked_array(t.f,mask=t.fmask)
-
-    for alg in ['RawCBV','ClipCBV','DtSpl','DtCBV','DtMed']:
-        data,tnd = coTrend(t,alg)
-        res = data - tnd
-        dM = tfind.mtd(t.TIME,res.data,t.isStep,res.mask,20)
-
-        for name,marr in zip(['data','tnd','dM'],[data,tnd,dM]):
-            tlc.add_column(alg+name,marr.data)
-            tlc.add_column(alg+name+'mask',marr.mask)
-        
-        PG,fom = repQper(t,dM,nQ=12)
-        tgrid.add_column(alg+'fom',fom)
-
-        
-    PG = cutQuarterPeriod(PG)
-    tgrid.add_column('PG',PG.data)
-    tgrid.add_column('PGmask',PG.mask)
-    
-    tlc.add_column('time',t.TIME)
-        
-    tgrid.keywords = t.keywords
-    tlc.keywords = t.keywords
-    return tgrid,tlc
-
-def repQper(t,dM,nQ=12):
-    """
-    Extend the quarter and compute the MES 
-    """
-    
-    dM = [dM for i in range(nQ)]
-    dM = ma.hstack(dM)
-
-    PG0 = ebls.grid( nQ*90 , 0.5, Pmin=180)
-    PcadG,PG = tfind.P2Pcad(PG0)
-
-    res = tfind.pep(t.TIME[0],dM,PcadG)
-    return PG,res['fom']
-
-def indord(ind):
-    n = len(ind)
-    x,y = np.mgrid[0:n,0:n]
-    xs = x[ind]
-    return xs
-
-def corrplot(cms,t,fdts,binsize=20):
-    """
-    Make a correlation plot showing how correlated lightcurves are 
-    """
-    clf()
-    fig = gcf()
-    nbins = int(fdts.shape[0] / binsize)
-    gs = plt.GridSpec(nbins,3)
-
-
-    axim = fig.add_subplot(gs[:,0])
-    axim.imshow(cms,vmin=0.1,vmax=0.5,aspect='auto',interpolation='nearest')
-    axim.set_xlabel("star number")
-    axim.set_ylabel("star number")
-
-    for i in range(nbins):
-        ax = fig.add_subplot(gs[i,1:3])
-        start = i*binsize
-        fdtb = [ fdts[i]/ median(fdts[i])  for i in range(start,start+10)]
-        fdtb = ma.vstack(fdtb)
-        med = ma.median(fdtb,axis=0)
-        ax.plot(t,fdtb.T,',')
-        ax.plot(t,med,lw=2,color='red')
-        ax.xaxis.set_visible(False)
-        ax.yaxis.set_visible(False)
-        ylim(-15,15)
-
-    ax.xaxis.set_visible(True)
-    tight_layout()
-    fig.subplots_adjust(hspace=0.001)
-    
-def dblock(X,dmi,dma):
-    """
-    Return block matrix off the diagonal.
-    """
-    n = X.shape[0]
-    nn = dma-dmi
-    x,y = mgrid[0:n,0:n]
-    return X[(x>=dmi) & (x<dma) & (y>=dmi) & (y<dma)].reshape(nn,nn)
-
-def peaks(mtd,twd):
-    mf = nd.maximum_filter(mtd,twd)
-    pks = np.unique(mf)
-    cnt = np.array([mf[mf==p].size for p in pks])
-    pks = pks[cnt==twd]
-    return pks
-
-def diag(mtd,twd):
-    pks = peaks(mtd,twd)
-    pks = sort(pks)
-
-    mad = ma.median(ma.abs(mtd))
-    max3day = mean(nd.maximum_filter(mtd,150))
-
-    val   = (pks[-1],mean(pks[-3:]),mean(pks[-10:]),mad  ,max3day)
-    dtype = [('maxpk',float),('pk3',float),('pk10',float),('mad',float),('max3day',float)]
-    rd = np.array(val,dtype=dtype)
-
-    return rd
-
-def medfit(fdt,vec):
-    vec = ma.masked_invalid(vec)
-    fdt.mask = vec.mask = fdt.mask | vec.mask
-    
-    p0 = [0]
-    def cost(p):
-        return ma.median(ma.abs(fdt-p[0]*vec))
-    p1 = optimize.fmin(cost,p0,disp=0)
-    fit = ma.masked_array(p1[0] * vec,mask=fdt.mask)
-    return fit
-
-
-import stellar
-from matplotlib.pylab import *
-import h5py
-import photometry
-import tfind
-import prepro
-from matplotlib.transforms import blended_transform_factory as btf
-from plotplus import AddAnchored
-
-def plot_modes_fov(U,V):
-    n_components = U.shape[1]
-
-    df = stellar.read_cat()
-
-    ndiag = len(dfdiag)
-    lc = [photometry.read_phot(path_phot,epic) for epic in dfdiag.epic]
-    lc = vstack([prepro.rdt(lci) for lci in lc]) # Light curves are rows of lc
-    fdt = ma.masked_array(lc['fdt'],lc['fmask'])
-
-    A = [bvfitm(fdt[i],U.T)[0] for i in range(ndiag)]
-    A = ma.vstack(A)
-    return dfdiag,A
-
-
-
-def plot_mode_FOV(dfA,kAs):
-    fig,axL = subplots(ncols=4, nrows=2)
-    for i,k in zip(range(len(kAs)),kAs):
-        sca(axL.flatten()[i])
-        
-        scatter(dfA.ra,dfA.dec,c=dfA[k])
-
-        title(k)    
-        print dfA[('ra dec %s' % k).split()]
-
-
-import pandas as pd
 
 class EnsembleCalibrator:
     """
     Object for performing Ensemble based calibration of light curves.
     """
-    def __init__(self, fdt, dftr):
+    def __init__(self):
+        pass
+    
+    def add_training_set(self,fdt,dftr):
         """
         Parameters
         ----------
         fdt : masked array of detrended light curves
               fdt.shape = (N_lightcurves,N_measurements)
-        dftr : Pandas DataFrame with an entry for every training light curve
 
+        dftr : Pandas DataFrame with an entry for every training light
+               curve. Must contain the following keys:
+               - epic
+               - ra
+               - dec
         """
         self.ntr = len(dftr)
         assert fdt.shape[0]==self.ntr,\
@@ -766,6 +359,13 @@ class EnsembleCalibrator:
         for n,b in zip(['cadences','light curves'],[bcol,brow]):
             print "%i %s masked out" % (b.size - b.sum(),n)
         print ""
+
+        assert np.alltrue(brow),"cannot handel garbage lightcurves"
+
+        # Fill in the rest of the missing cadences with 0s
+        fdt = ma.masked_invalid(fdt)
+        fdt.fill_value=0
+        fdt.data[:] = fdt.filled()
 
         # Standardize the light curves
         fdt_sig = 1.48 * median(abs(fdt),axis=1)
@@ -823,7 +423,6 @@ class EnsembleCalibrator:
         self.U = U
         self.V = V
 
-
     def isinlier(self,dfAc):
         """
         Returns true if coefficients are in acceptable range
@@ -833,7 +432,6 @@ class EnsembleCalibrator:
         
     def bvfitfm(self,fm,mode='ls-map',verbose=True):
         """
-
         """
         A,fcbv = bvfitm(fm,self.U.T)
         if mode=='ls-map':
@@ -846,29 +444,10 @@ class EnsembleCalibrator:
 
         return A,fcbv
 
-    def makeplots(self):
-        dfA = self.dfA
-        kAs = self.kAs
-        plot_PCs(self.U,self.V)
-
-        pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
-        path = self.plot_basename+'_coeffs.png'
-        print "saving %s" % path
-        gcf().savefig(path)
-
-
-        plot_mode_FOV(dfA[dfA.inlier],kAs)
-
-        gcf().set_tight_layout(True)
-        path = self.plot_basename+'_FOV.png'
-        print "saving %s" % path
-        gcf().savefig(path)
-
-    def plot_modes_diag(self,fdt,step = 0.001):
+    def plot_modes_diag(self, fdt, step=0.001):
         # Compute the fits
-        n_components = self.n_components
         U = self.U
-
+        n_components = U.shape[1]
         ndiag = fdt.shape[0]
 
         fit = [self.bvfitfm(f)[1] for f in fdt]
@@ -881,7 +460,6 @@ class EnsembleCalibrator:
                 df = tfind.ses_stats(fstack[i])
                 df['star'] = i
                 out+=[df]
-
             return pd.concat(out,ignore_index=True)
         
         pd.set_option('precision',1)
@@ -936,3 +514,81 @@ class EnsembleCalibrator:
         plot_label(fcal.T+dy,color='r',label='Residuals')
         plot_stats(df_stats_fcal)
         legend()
+
+
+# I/O
+dsetkeys = 'U'.split()
+attrkeys = 'kAs dfAc_st'.split()
+
+def to_hdf(ec,h5file):
+    with h5plus.File(h5file) as h5:
+        for k in dsetkeys:
+            h5[k] = getattr(ec,k)
+
+        r = ec.dfAc_st.to_records()
+        rless = mlab.rec_drop_fields(r,['index'])
+        sindex = r['index'].astype(str)
+        r = mlab.rec_append_fields(rless,'index', sindex)
+        h5.attrs['dfAc_st'] = r
+        h5.attrs['kAs'] = ec.kAs
+
+def read_hdf(h5file):
+    ec = EnsembleCalibrator()
+    with h5plus.File(h5file) as h5:
+        for k in dsetkeys:
+            setattr(ec,k,h5[k][:])
+
+        dfAc_st = pd.DataFrame(h5.attrs['dfAc_st'])
+        dfAc_st.index=dfAc_st['index']
+        dfAc_st.drop('index',axis=1)
+        setattr(ec,'dfAc_st',dfAc_st)
+        setattr(ec,'kAs',h5.attrs['kAs'])
+    return ec
+
+# Plotting functions
+def plot_mode_FOV(dfA,kAs):
+    fig,axL = subplots(ncols=4, nrows=2)
+    for i,k in zip(range(len(kAs)),kAs):
+        sca(axL.flatten()[i])
+        scatter(dfA.ra,dfA.dec,c=dfA[k])
+        title(k)    
+        print dfA[('ra dec %s' % k).split()]
+
+def plot_PCs(U,V):
+    fig = figure(figsize=(20,12))
+    nPC = U.shape[1]
+    gs = GridSpec(nPC,nPC+1)
+    axPCL = [fig.add_subplot(gs[i,:-1]) for i in range(nPC)]
+    axAL = [fig.add_subplot(gs[i,-1]) for i in range(nPC)]
+    for i in range(nPC):
+        sca(axPCL[i])
+        plot(U[:,i])
+
+        sca(axAL[i])
+        hist(V[:,i])
+
+    fig.set_tight_layout(True)
+
+def makeplots(ec,savefig=False):
+    dfA = ec.dfA
+    kAs = ec.kAs
+
+    plot_PCs(ec.U,ec.V)
+    if savefig:
+        path = ec.plot_basename+'_PCs.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
+    pd.scatter_matrix(dfA[dfA.inlier][kAs],figsize=(8,8))
+    if savefig:
+        path = ec.plot_basename+'_coeffs.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
+    plot_mode_FOV(dfA[dfA.inlier],kAs)
+    if savefig:
+        gcf().set_tight_layout(True)
+        path = ec.plot_basename+'_FOV.png'
+        print "saving %s" % path
+        gcf().savefig(path)
+
