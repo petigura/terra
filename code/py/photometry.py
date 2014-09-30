@@ -327,7 +327,9 @@ def Ceng2C0(lc0):
 import glob
 from pdplus import LittleEndian as LE
 
-ts,_,_,_,_,_ = read_k2_fits('pixel/C0/ktwo200000818-c00_lpd-targ.fits')
+ts,_,_,_,_,_ = read_k2_fits(
+    '%(K2_DIR)s/pixel/C0/ktwo200000818-c00_lpd-targ.fits' % os.environ)
+
 namemap={'TIME':'t','CADENCENO':'cad'}
 keys = namemap.values() + ['QUALITY']
 lc0_C0 = pd.DataFrame(ts).rename(columns=namemap)[keys]
