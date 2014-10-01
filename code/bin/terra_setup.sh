@@ -11,7 +11,7 @@ TPSDIR=${HOME}/TPS/C0
 PHOTDIR=${K2_DIR}/photometry/C0/
 K2_SCRIPTS=${K2_DIR}/code/py/scripts
 
-#read -ep "Enter output directory " TPSDIR
+read -ep "Enter output directory " TPSDIR
 SCRIPTSDIR=${TPSDIR}/scripts
 OUTPUTDIR=${TPSDIR}/output
 
@@ -19,7 +19,7 @@ mkdir -p ${TPSDIR}
 mkdir -p ${SCRIPTSDIR}
 mkdir -p ${OUTPUTDIR}
 
-#read -ep "Enter photometry directory" PHOTDIR
+read -ep "Enter photometry directory" PHOTDIR
 
 # Generate a list of the EPIC IDs
 find ${PHOTDIR} -name "*.fits" |
@@ -35,7 +35,7 @@ tail -n +2 > epiclist.temp
 # Figure out how many of the requested stars have extant photometry
 join photfiles.temp epiclist.temp > phot_epic_join.temp
 N_PHOT_EXTANT=$( cat phot_epic_join.temp | wc -l)
-N_PARS=$(cat epiclist  | wc -l )
+N_PARS=$(cat epiclist.temp  | wc -l )
 
 echo "Photometry exists for ${N_PARS} out of ${N_PHOT_EXTANT} stars"
 for epic in `cat phot_epic_join.temp`

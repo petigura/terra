@@ -48,6 +48,8 @@ if __name__=='__main__':
     args = p.parse_args()
 
     # Import here to save time when just calling help.
+    import matplotlib
+    matplotlib.use('Agg')
     import terra
     import pandas as pd
     import sqlite3
