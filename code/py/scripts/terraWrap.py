@@ -1,58 +1,54 @@
-from argparse import ArgumentParser
-import matplotlib
-matplotlib.use('Agg')
+def pp(args):
+    con = sqlite3.connect(args.parfile)
+    df = pd.read_sql('select * from pp',con,index_col='id')
+    d = dict(df.ix[args.index])
+    d['outfile'] = args.outfile
+    d['path_phot'] = args.path_phot
+    terra.pp(d)
 
-import pandas as pd
-import terra
-import config
+def grid(args):
+    con = sqlite3.connect(args.parfile)
+    df = pd.read_sql('select * from grid',con,index_col='id')
+    d = dict(df.ix[args.index])
+    d['outfile'] = args.outfile
+    terra.grid(d)
 
+def dv(args):
+    con = sqlite3.connect(args.parfile)
+    df = pd.read_sql('select * from dv',con,index_col='id')
+    d = dict(df.ix[args.index])
+    d['outfile'] = args.outfile
+    terra.dv(d)
 
-parser = ArgumentParser(description='Thin wrapper around terra module')
-parser.add_argument('args',nargs='+',type=str,help='file[s] function keywords')
-parser.add_argument('--multi',type=int,default=1,help='')
-parser.add_argument('--P'   ,type=float,default=-1,help='Period to cut')
-parser.add_argument('--t0'  ,type=float,default=-1,help='epoch to cut')
-parser.add_argument('--tdur',type=float,default=-1,help='duration to cut')
+if __name__=='__main__':
+    from argparse import ArgumentParser
 
-args  = parser.parse_args()
+    p = ArgumentParser(description='Wrapper around functions in terra.py')
+    subparsers = p.add_subparsers()
 
-files = args.args[:-1]
-index = int(args.args[-1])
+    p_pp = subparsers.add_parser('pp', help='Run the preprocessing module')
+    p_pp.add_argument('path_phot',type=str,help='photometry file <*.fits>')
+    p_pp.add_argument('outfile',type=str,help='output file <*.grid.h5>')
+    p_pp.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
+    p_pp.add_argument('index',type=str,help='photometry id')
+    p_pp.set_defaults(func=pp)
 
+    p_grid = subparsers.add_parser('grid', help='Run the grid search code')
+    p_grid.add_argument('outfile',type=str,help='output file <*.grid.h5>')
+    p_grid.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
+    p_grid.add_argument('index',type=str,help='photometry id')
+    p_grid.set_defaults(func=grid)
 
-multi = args.multi
-    
-dL = []
-for f in files:
-    df = pd.read_csv(f,index_col=0)
-    d = dict(df.iloc[index])
-#    if f.count('pp.csv')>0:
-#        d['outfile'] = config.resolve_grid(d['outfile'])
-#
-    dL.append(d)
+    p_grid = subparsers.add_parser('dv', help='Run the data validation module')
+    p_grid.add_argument('outfile',type=str,help='output file <*.grid.h5>')
+    p_grid.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
+    p_grid.add_argument('index',type=str,help='photometry id')
+    p_grid.set_defaults(func=dv)
 
-def last2(s):
-    sL = s.split('/')[-2:]
-    sL = tuple(sL)
-    return '%s/%s' % sL 
+    args = p.parse_args()
 
-if multi > 1:
-    outfile0    = dL[0]['outfile']
-    if multi > 2:
-        outfile = outfile0.replace('grid','grid%i'  % (multi-1))
-    else:
-        outfile = outfile0
-
-    newoutfile = outfile0.replace('grid','grid%i'  % multi)
-
-    print "copying %s to %s" %  tuple( map(last2,[outfile,newoutfile]) )
-    if args.P > 0:
-        pdict = dict(P=args.P,t0=args.t0,tdur=args.tdur)
-    terra.multiCopyCut( outfile , newoutfile,pdict=pdict)
-    for d in dL:
-        d['outfile'] = newoutfile
-
-for d in dL:
-    exec("terra.%(name)s(d)" % d)
-
-
+    # Import here to save time when just calling help.
+    import terra
+    import pandas as pd
+    import sqlite3
+    args.func(args)

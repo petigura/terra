@@ -23,11 +23,14 @@ parser = ArgumentParser(description='Ensemble calibration')
 parser.add_argument('fitsdir',type=str,help='directory with fits files')
 parser.add_argument('-f',action='store_true',
                      help='Force re-creation of h5 checkpoint file')
+parser.add_argument('--algo',type=str,help='[PCA|ICA]',default='PCA')
 args = parser.parse_args()
 
 # Loading up all the fits files takes some time. The first order of
 # business is to create a checkpoint.
 dir = args.fitsdir
+algo = args.algo
+
 dirname = os.path.dirname(dir)
 h5file = "%s.h5" % (dirname)
 if not os.path.exists(h5file) or args.f:
@@ -74,7 +77,7 @@ dftr = pd.merge(dftr,targets.drop_duplicates())
 fdt = fdt[dftr.i]
 ec = cotrend.EnsembleCalibrator()
 ec.add_training_set(fdt,dftr)
-ec.robust_components(algo='PCA')
+ec.robust_components(algo=algo)
 
 ec.plot_basename = ec.plot_basename.replace('cotrend',dirname)
 cotrend.makeplots(ec,savefig=True)
