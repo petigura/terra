@@ -26,8 +26,9 @@ from config import *
 import config
 import h5plus
 import tval
-
-
+import config
+import keptoy
+from keptoy import P2a,a2tdur
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
@@ -306,6 +307,42 @@ def mtd(fm,twd):
 
     return dM
 
+def running_mean(fm,size):
+    fm = fm.copy()
+    fm.fill_value = 0
+    w = (~fm.mask).astype(float) # weights either 0 or 1
+    f = fm.filled()
+    assert (np.isnan(f)==False).all() ,'mask out nans'
+    
+    # total flux in bin
+    f_sum = nd.uniform_filter(f,size=size) * size 
+    # number of unmasked points in bin
+    f_count = nd.uniform_filter(w,size=size) * size
+    f_mean = ma.masked_array( f_sum / f_count, f_count < 0.5*size) 
+    return f_mean
+
+def ses_stats(fm):
+    """
+    Given a light curve what is the noise level on different timescales?
+    """
+    dL = []
+    for twd in [1,4,6,8,12]:
+        fom = ma.std(running_mean(fm,twd))
+        dL.append(['rms_%i-cad-mean' % twd, fom ,twd])
+
+        fom = ma.std(mtd(fm,twd))
+        dL.append(['rms_%i-cad-mtd' % twd, fom,twd])
+
+        fom = ma.median(ma.abs(running_mean(fm,twd)))
+        dL.append(['mad_%i-cad-mean' % twd, fom ,twd])
+
+        fom = ma.median(ma.abs(mtd(fm,twd)))
+        dL.append(['mad_%i-cad-mtd' % twd, fom,twd])
+
+    dL = pd.DataFrame(dL,columns='name value twd'.split())
+    dL['value']*=1e6
+    return dL
+
 def tdpep(t,fm,PcadG,twdG):
     """
     Transit-duration - Period - Epoch
@@ -533,9 +570,6 @@ def noise(t,fm,twdG):
     noiseG = np.array(noiseG)
     return noiseG
 
-import config
-import keptoy
-from keptoy import P2a,a2tdur
 
 def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
     """
@@ -783,38 +817,3 @@ def pebls(t,fm,P1,P2,alg,dv=False):
     SNR = np.hstack(SNR)
     return Parr,SNR
 
-def running_mean(fm,size):
-    fm = fm.copy()
-    fm.fill_value = 0
-    w = (~fm.mask).astype(float) # weights either 0 or 1
-    f = fm.filled()
-    assert (np.isnan(f)==False).all() ,'mask out nans'
-    
-    # total flux in bin
-    f_sum = nd.uniform_filter(f,size=size) * size 
-    # number of unmasked points in bin
-    f_count = nd.uniform_filter(w,size=size) * size
-    f_mean = ma.masked_array( f_sum / f_count, f_count < 0.5*size) 
-    return f_mean
-
-def ses_stats(fm):
-    """
-    Given a light curve what is the noise level on different timescales?
-    """
-    dL = []
-    for twd in [1,4,6,8,12]:
-        fom = ma.std(running_mean(fm,twd))
-        dL.append(['rms_%i-cad-mean' % twd, fom ,twd])
-
-        fom = ma.std(mtd(fm,twd))
-        dL.append(['rms_%i-cad-mtd' % twd, fom,twd])
-
-        fom = ma.median(ma.abs(running_mean(fm,twd)))
-        dL.append(['mad_%i-cad-mean' % twd, fom ,twd])
-
-        fom = ma.median(ma.abs(mtd(fm,twd)))
-        dL.append(['mad_%i-cad-mtd' % twd, fom,twd])
-
-    dL = pd.DataFrame(dL,columns='name value twd'.split())
-    dL['value']*=1e6
-    return dL

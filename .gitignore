@@ -9,3 +9,6 @@
 *.pdf
 *.pickle
 *#
+*.sqlite
+*.temp
+*.tot
