@@ -14,6 +14,10 @@ from astropy.io import fits
 from scipy import ndimage as nd
 from astropy import wcs
 
+from astropy.stats import median_absolute_deviation as mad
+#from photutils import daofind,aperture_photometry
+import numpy as np
+
 def scrape_headers(fL):
     df =[]
     for f in fL:
@@ -46,7 +50,6 @@ def plot_med_star(name,stretch='none'):
 
 Ceng_start_cad = 114
 C0_start_cad = 89347        
-
 
 def get_comb(f,name):
     if hasattr(name,'__iter__') is False:
@@ -165,9 +168,7 @@ def SAP_FLUX(i):
 #bkg_sigma = 1.48 * mad(image)   
 #from photutils import aperture_photometry
 
-from astropy.stats import median_absolute_deviation as mad
-from photutils import daofind,aperture_photometry
-import numpy as np
+
 
 def get_pos(cube,plot_diag=False):
     """

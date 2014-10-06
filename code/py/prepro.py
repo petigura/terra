@@ -14,9 +14,9 @@ from numpy import ma
 from scipy import ndimage as nd
 from matplotlib import mlab
 from matplotlib.mlab import csv2rec,rec_append_fields
-import pyfits
 import h5py
 import pandas as pd
+from astropy.io import fits
 
 import cotrend
 import config
@@ -60,7 +60,7 @@ def raw(h5,files,fields=[]):
     kicL = []
     qL   = []
     for f in files:
-        h = pyfits.open(f)
+        h = fits.open(f)
         hduL += [h]
         kicL += [h[0].header['KEPLERID'] ]
         qL   += [h[0].header['QUARTER'] ]
