@@ -12,8 +12,6 @@ import copy
 
 import numpy as np
 from numpy import ma
-import numpy.random as rand 
-from scipy import optimize
 from scipy import ndimage as nd
 from scipy.stats import ks_2samp
 
@@ -26,7 +24,6 @@ import os
 from matplotlib.cbook import is_string_like,is_numlike
 import keplerio
 import config
-from emcee import EnsembleSampler
 import pandas as pd
 
 def scar(res):
@@ -269,36 +266,228 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
 # tdur
 # climb
 
-def read_dv(h5,tpar=False):
+
+class DV(h5plus.iohelper):
     """
-    Read h5 file for data validation
-
-    1. Finds the highest SNR peak
-    2. Adds oft-used variables to top level
-
-    Parameters
-    ----------
-    h5   : h5 file (post grid-search)
-    tpar : alternative transit ephemeris dictionary with the following keys
-           t0 Pcad twd mean s2n noise
+    Data Validation Object
     """
-    h5.lc  = h5['/pp/cal'][:] # Convenience
-    h5.RES = h5['/it0/RES'][:]
+    def __init__(self,h5file):
+        """
+        Instantiate new data validation object from h5 file.
 
-    id  = np.argmax(h5.RES['s2n'])        
-    for k in 't0 Pcad twd mean s2n noise'.split():
-        if tpar==False:
-            h5.attrs[k] = h5.RES[k][id]
-        else:
-            h5.attrs[k] = tpar[k] 
+        Pulls in data from h5['/pp/cal'] and ['/it0/RES']
 
-    h5.attrs['tdur'] = h5.attrs['twd']*config.lc
-    h5.attrs['P']    = h5.attrs['Pcad']*config.lc
+        Default action is to choose the highest SNR peak. However, the
+        't0,'Pcad','twd','mean','s2n','noise' keys maybe changed post
+        instantiation
+        
+        Parameters
+        ----------
+        h5   : h5 file (post grid-search)
 
-    # Convenience
-    h5.fm = ma.masked_array(h5.lc['fcal'],h5.lc['fmask'])
-    h5.dM = tfind.mtd(h5.fm,int(h5.attrs['twd']))
-    h5.t  = h5.lc['t']
+        """
+
+        # Calls the __init__ constructor of h5plus.iohelper. Then we
+        # can do other things
+        super(DV,self).__init__()
+
+        h5 = h5py.File(h5file,'r')
+
+        self.add_dset('lc',h5['/pp/cal'][:],description='Light curve')
+        self.add_dset('RES',h5['/it0/RES'][:],description='Periodogram')
+
+        idmax = np.argmax(self.RES['s2n'])        
+        rmax = self.RES[idmax] # Peak SNR
+
+        self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
+        self.add_attr('Pcad', rmax['Pcad'], 
+                      description='Peak period [cadences]')
+        self.add_attr('t0', rmax['t0'], 
+                      description='Epoch')
+        self.add_attr('twd', rmax['twd'], 
+                      description='Peak duration [cadences]')
+        self.add_attr('mean', rmax['mean'], 
+                      description='Mean transit depth')
+        self.add_attr('noise', rmax['noise'],
+                      description='Mean light curve noise')
+
+        self.twd = int(self.twd)
+
+        self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
+        self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
+
+        # Convenience
+        self.fm = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
+        self.dM = tfind.mtd(self.fm,self.twd)
+        self.t  = self.lc['t']
+        h5.close()
+ 
+    #
+    # Functions for adding features to DV object
+    #
+    def at_grass(self):
+        """
+        Attach Grass Feature
+        
+        Breakup the periodogram into a bunch of bins and find the
+        highest point in each bin. Grass is the median height of the
+        top 5 peaks
+        """
+        ntop = 5 # Number of peaks to consider. Median of top 5 should
+                 # ignore the primary peak
+
+        fac = 1.4 # bin ranges from P/fac to P*fac.
+        nbins = 100
+        RES = self.RES
+
+        bins  = np.logspace(np.log10(self.P/fac),
+                            np.log10(self.P*fac),
+                            nbins+1)
+
+        xp,yp = findpks(RES['Pcad']*config.lc,RES['s2n'],bins)
+        grass = np.median(np.sort(yp)[-ntop:])
+        self.add_attr('grass',grass,description='SNR of nearby peaks')        
+
+    def at_SES(self):
+        """
+        Attach single event statistics
+
+        Finds the cadence closes to the transit midpoint. For each
+        cadence, record in dataset `SES` the following information:
+
+            ses    : Signle event statistic for single transit
+            tnum   : transit number (starts at 0)
+            season : What season did the transit occur in?
+
+        Also computes the median for odd/even transits and each season
+        individually.
+
+        Notes
+        -----
+        Aug 5, 2013 - Changed to strictly look at the point closest to the
+                      center of each transit. Before, I was searching for
+                      the max SES value within the transit range (allowed
+                      for TTVs)
+        """
+        t    = self.t
+        dM   = self.dM
+        rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
+
+        # Doesn't mean anything for K2
+        qrec = keplerio.qStartStop()
+        q = np.zeros(t.size) - 1
+        for r in qrec:
+            b = (t > r['tstart']) & (t < r['tstop'])
+            q[b] = r['q']
+        
+        season = np.mod(q,4)
+        dtype = [('ses',float),('tnum',int),('season',int)]
+        dM.fill_value = np.nan
+        rses  = np.array(zip(dM.filled(),rLbl['tLbl'],season),dtype=dtype )
+        rses  = rses[ rLbl['tLbl'] >= 0 ]
+
+        # If no good transits, break out
+        if rses.size==0:
+            return
+
+        self.add_dset('SES',rses,
+                      description='Record array with single event statistic')
+        self.add_attr('num_trans',rses.size,
+                      description='Number of good transits')
+
+        # Median SES, even/odd
+        for sfx,i in zip(['even','odd'],[0,1]):
+            medses =  np.median( rses['ses'][rses['tnum'] % 2 == i] ) 
+            self.add_attr('SES_%s' % sfx, medses,
+                          description='Median SES %s' % sfx)
+
+        # Median SES, different seasons
+        for i in range(4):
+            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
+            self.add_attr('SES_%i' % i, medses,
+                          description='Median SES [Season %i]' % i )
+
+    def at_phaseFold(self,ph,**PW_kw):
+        """ 
+        Attach locally detrended light curve
+
+        Parameters
+        ----------
+        ph : Phase [between 0 and 360]
+        PW_kw : dictionary of parameters passed to PF
+
+
+        """
+        # Epoch at arbitrary phase, ph
+        t0 = self.t0 + ph / 360. * self.P 
+        rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
+
+        # Attach the quarter, doesn't do anything for K2
+        qarr = keplerio.t2q( rPF['t'] ).astype(int)
+        rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
+        self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
+
+    def at_binPhaseFold(self,ph,bwmin):
+        """
+        Attach binned phase-folded light curve
+
+        Parameters
+        ----------
+        ph : Phase [between 0 and 360]
+
+        Note
+        ----
+        Must run at_phaseFold first
+
+        
+
+
+        h5 - h5 file with the following columns
+             lcPF0
+             lcPF180         
+        ph - phase to fold at.
+        bwmin - targe bin width (minutes)
+        """
+        key = 'lcPF%i' % ph
+        assert hasattr(self,key),'Must run at_phaseFold first' 
+        lcPF = getattr(self,key)
+
+        tPF  = lcPF['tPF']
+        f    = lcPF['f']
+
+        xmi,xma = tPF.min(),tPF.max() 
+        bw       = bwmin / 60./24. # converting minutes to days
+        nbins    = xma-xmi
+
+        nbins = int( np.round( (xma-xmi)/bw ) )
+        # Add a tiny bit to xma to get the last element
+        bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+        tb    = 0.5*(bins[1:]+bins[:-1])
+
+        blcPF =  np.array([tb],dtype=[('tb',float)])
+        dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
+        for k in dfuncs.keys():
+            func  = dfuncs[k]
+            yapply = bapply(tPF,f,bins,func)
+            blcPF = mlab.rec_append_fields(blcPF,k,yapply)
+
+        blcPF = blcPF.flatten()
+
+        d = dict(ph=ph,bwmin=bwmin,key=key)
+        name  = 'blc%(bwmin)iPF%(ph)i' % d
+        desc = 'Binned %(key)s light curve ph=%(ph)i, binsize=%(bwmin)i' % d
+        self.add_dset(name,blcPF,description=desc)
+
+#
+# Helper functions for DV class
+#
+
+def findpks(x,y,bins):
+    id    = np.digitize(x,bins)
+    uid   = np.unique(id)[1:-1] # only elements inside the bin range
+    mL    = [np.max(y[id==i]) for i in uid]
+    mid   = [ np.where((y==m) & (id==i))[0][0] for i,m in zip(uid,mL) ] 
+    return x[mid],y[mid]
 
 def checkHarmh5(h5):
     """
@@ -313,74 +502,6 @@ def checkHarmh5(h5):
         h5.attrs['P']    *= harm
         h5.attrs['Pcad'] *= harm
 
-def at_phaseFold(h5,ph):
-    """ 
-    Add locally detrended light curve
-
-    Parameters
-    ----------
-
-    h5 - h5 file with the following columns
-         mqcal
-    """
-
-    attrs = h5.attrs
-    
-    lc = h5['/pp/cal'][:]
-    t  = lc['t']
-    fm = ma.masked_array(lc['f'],lc['fmask'])
-
-    keys  = ['LDT_deg','cfrac','cpad','nCont']
-    kw    = {}
-    for k in keys:
-        kw[k] = attrs[k]
-
-    P,tdur = attrs['P'],attrs['tdur']
-    t0     = attrs['t0'] + ph / 360. * P 
-
-    rPF   = PF(t,fm,P,t0,tdur,**kw)
-    qarr = keplerio.t2q( rPF['t'] ).astype(int)
-    rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
-    h5['lcPF%i' % ph] = rPF
-
-def at_binPhaseFold(h5,ph,bwmin):
-    """
-    Add the binned quantities to the LC
-
-    h5 - h5 file with the following columns
-         lcPF0
-         lcPF180         
-    ph - phase to fold at.
-    bwmin - targe bin width (minutes)
-    """
-    lcPF = h5['lcPF%i' % ph][:]
-    tPF  = lcPF['tPF']
-    f    = lcPF['f']
-
-    xmi,xma = tPF.min(),tPF.max() 
-    bw       = bwmin / 60./24. # converting minutes to days
-    nbins    = xma-xmi
-
-    nbins = int( np.round( (xma-xmi)/bw ) )
-    # Add a tiny bit to xma to get the last element
-    bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
-    tb    = 0.5*(bins[1:]+bins[:-1])
-
-    blcPF =  np.array([tb],dtype=[('tb',float)])
-    dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
-    for k in dfuncs.keys():
-        func  = dfuncs[k]
-        yapply = bapply(tPF,f,bins,func)
-        blcPF = mlab.rec_append_fields(blcPF,k,yapply)
-
-    blcPF = blcPF.flatten()
-    
-    d = dict(ph=ph,bwmin=bwmin)
-    name  = 'blc%(bwmin)iPF%(ph)i' % d
-    
-    h5[ name ] = blcPF
-    for k in d.keys():
-        h5[ name ].attrs[k] = d[k]
 
 def at_fit(h5,runmcmc=True):
     """
@@ -488,65 +609,6 @@ def at_s2ncut(h5):
     h5.attrs['s2ncut_t0']   = r['t0cad'][i]*keptoy.lc + h5.t[0]
     h5.attrs['s2ncut_mean'] = r['mean'][i]
 
-def at_SES(h5):
-    """
-    Look at individual transits SES.
-    
-    Finds the cadence closes to the transit midpoint. For each
-    cadence, record in dataset `SES` the following information:
-
-        ses    : Depth of the transit
-        tnum   : transit number (starts at 0)
-        season : What season did the transit occur in?
-
-    Also computes the median for odd/even transits and each season
-    individually.
-
-    Notes
-    -----
-    Aug 5, 2013 - Changed to strictly look at the point closest to the
-                  center of each transit. Before, I was searching for
-                  the max SES value within the transit range (allowed
-                  for TTVs)
-    """
-    lc   = h5['/pp/cal'][:]
-    t    = lc['t']
-    fcal = ma.masked_array(lc['fcal'],lc['fmask'])
-    dM   = h5.dM
-
-    attrs = h5.attrs
-    rLbl = transLabel(t,attrs['P'],attrs['t0'],attrs['tdur']*2)
-    qrec = keplerio.qStartStop()
-    q = np.zeros(t.size) - 1
-    for r in qrec:
-        b = (t > r['tstart']) & (t < r['tstop'])
-        q[b] = r['q']
-
-    season = np.mod(q,4)
-    tRegLbl = rLbl['tRegLbl']
-
-    dtype = [('ses',float),('tnum',int),('season',int)]
-    dM.fill_value=np.nan
-    rses  = np.array(zip(dM.filled(),rLbl['tLbl'],season),dtype=dtype )
-    rses  = rses[rLbl['tLbl'] >=0]
-
-    h5.attrs['num_trans'] = 0
-
-    if rses.size > 0:
-        h5['SES'] = rses
-        h5.attrs['num_trans'] = rses.size
-        h5['tRegLbl'] = tRegLbl
-
-        # Median SES, even/odd
-        for sfx,i in zip(['even','odd'],[0,1]):
-            medses =  np.median( rses['ses'][rses['tnum'] % 2 == i] ) 
-            h5.attrs['SES_%s' %sfx] = medses
-
-        # Median SES, different seasons
-        for i in range(4):
-            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
-            h5.attrs['SES_%i' %i] = medses
-
 def at_rSNR(h5):
     """
     Robust Signal to Noise Ratio
@@ -585,40 +647,11 @@ def at_autocorr(h5):
     h5['corr'] = corr
     h5.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
 
-def at_grass(h5):
-    """
-    Start with the tallest SNR period. Compute the median height of
-    three nearby peaks?
-    """
 
-    P   = h5.attrs['P']
-    fac = 1.4 # bin ranges from P/fac to P*fac.
-    bins  = np.logspace(np.log10(P/fac),np.log10(P*fac),101)
-    xp,yp  =findpks(h5.RES['Pcad']*config.lc,h5.RES['s2n'],bins)
-
-    h5.attrs['grass'] = np.median(np.sort(yp)[-5:]) # enough to ignore
-                                                    # the primary peak
-
-def findpks(x,y,bins):
-    id    = np.digitize(x,bins)
-    uid   = np.unique(id)[1:-1] # only elements inside the bin range
-
-    mL    = [np.max(y[id==i]) for i in uid]
-    mid   = [ np.where((y==m) & (id==i))[0][0] for i,m in zip(uid,mL) ] 
-    return x[mid],y[mid]
 
 ######
 # IO #
 ######
-
-def write(h5,pkfile,**kwargs):
-    hpk = h5plus.File(pkfile,**kwargs)
-
-    for k in h5.attrs.keys():
-        hpk.attrs[k] = h5.attrs[k]
-    for k in h5.keys():
-        hpk.create_dataset(k,data=h5[k])
-    hpk.close()
 
 def flatten(h5,exclRE):
     """
@@ -838,317 +871,29 @@ def nT(t,mask,p):
 
     return tbool
 
-class TransitModel:
-    """
-    TransitModel
+PF_kw = dict(LDT_deg=3,cfrac=3,cpad=0.5,nCont=4)
+dv = DV('202073438.grid.h5')
+dv.at_grass()
+dv.at_SES()
+dv.at_phaseFold(0,**PF_kw)
+dv.at_phaseFold(180,**PF_kw)
+dv.at_binPhaseFold(0,10)
+dv.at_binPhaseFold(0,30)
+
+dv.climb = np.array([0.773,-0.679,1.14,-0.416])
+
+import transit_model as tm
+
+trans = tm.from_dv(dv,bin_period=1)
+trans.register()
+trans.pdict = trans.fit_lightcurve()[0]
+trans.MCMC()
+trans.to_hdf('test.h5','fit')
+trans = tm.read_hdf('test.h5','fit')
+print trans.get_MCMC_dict()
+
+
+
+
     
-    Simple class for fitting transit    
-    """
-    def __init__(self,t,f,ferr,climb,pdict,
-                 fixdict=dict(p=False,tau=False,b=False,dt=True)):
-        """
-        Constructor for transit model.
 
-        Parameters
-        ----------
-        t     : time array
-        f     : flux array
-        ferr  : errors
-        climb : size 4 array with non-linear limb-darkening components
-        pL    : Parameter list dictionary [ Rp/Rstar, tau, b, dt]. 
-        fix   : Same keys as above, determines which parameters to fix
-        """
-        # Protect input arrays 
-        self.t       = t.copy()
-        self.f       = f.copy()
-        self.ferr    = ferr.copy()
-        self.climb   = climb
-        self.pdict   = pdict
-        self.fixdict = fixdict
-
-        # Strip nans from t, y, and err
-        b = np.vstack( map(np.isnan, [t,f,ferr]) ) 
-        b = b.astype(int).sum(axis=0) == 0 
-        b = b & (ferr > 0.)
-
-        if b.sum() < b.size:
-            print "removing %i measurements " % (b.size - b.sum())
-            self.t    = t[b]
-            self.f    = f[b]
-            self.ferr = ferr[b]
-
-    def register(self):
-        """
-        Register light curve
-        
-        Transit center will usually be within 1 long cadence
-        measurement. We search for the best t0 over a finely sampled
-        grid that spans twice the transit duration. At each trial t0,
-        we find the best fitting MA model. We adopt the displacement
-        with the minimum overall Chi2.
-
-        """
-        # For the starting value to the optimization, use the current
-        # parameter vector.
-        pdict0 = copy.copy(self.pdict)
-        tau0   = pdict0['tau']
-
-        dt_per_lc = 3   # Number trial t0 per grid point
-        dtarr = np.linspace(-2*tau0,2*tau0,4*tau0/keptoy.lc*dt_per_lc)
-
-        def f(dt):
-            self.pdict['dt'] = dt
-            pdict,X2 = self.fit()
-            return X2
-
-        X2L = np.array( map(f,dtarr) )
-        if (~np.isfinite(X2L)).sum() != 0:
-            print "problem with registration: setting dt to 0.0"
-            self.pdict['dt'] = 0.
-        else:
-            self.pdict['dt'] = dtarr[np.argmin(X2L)]
-            print "registration: setting dt to %(dt).2f" % self.pdict
-
-    def fit(self):
-        """
-        Fit MA model to LC
-
-        Run the Nelder-Meade minimization routine to find the
-        best-fitting MA light curve. If we are holding impact
-        parameter fixed.
-        """
-        pL   = self.pdict2pL(self.pdict)
-        res  = optimize.fmin(self.chi2,pL,disp=False,full_output=True)
-        pdict = self.pL2pdict(res[0])
-        X2    = res[1]
-        return pdict,X2
-
-    def MCMC(self):
-        """
-        Run MCMC
-
-        Explore the parameter space around the current pL with MCMC
-
-        Adds the following attributes to the transit model structure:
-
-        upL0  : 3x3 array of the 15, 50, and 85-th percentiles of
-                Rp/Rstar, tau, and b
-        chain : nsamp x 3 array of the parameters tried in the MCMC chain.
-        fits  : Light curve fits selected randomly from the MCMC chain.
-        """
-        
-        # MCMC parameters
-        nwalkers = 10; ndims = 3
-        nburn   = 1000
-        niter   = 2000
-        print """\
-running MCMC
-------------
-%6i walkers
-%6i step burn in
-%6i step run
-""" % (nwalkers,nburn,niter)
-
-        # Initialize walkers
-        pL  = self.pdict2pL(self.pdict)
-        fltpars = [ k for k in self.pdict.keys() if not self.fixdict[k] ]
-        allpars = self.pdict.keys()
-        p0  = np.vstack([pL]*nwalkers) 
-        for i,name in zip(range(ndims),fltpars):
-            if name=='p':
-                p0[:,i] += 1e-4*rand.randn(nwalkers)
-            elif name=='tau':
-                p0[:,i] += 1e-2*pL[i]*rand.random(nwalkers)
-            elif name=='b':
-                p0[:,i] = 0.8*rand.random(nwalkers) + .1
-
-        # Burn in 
-        sampler = EnsembleSampler(nwalkers,ndims,self)
-        pos, prob, state = sampler.run_mcmc(p0, nburn)
-
-        # Real run
-        sampler.reset()
-        foo   = sampler.run_mcmc(pos, niter, rstate0=state)
-
-        chain  = pd.DataFrame(sampler.flatchain,columns=fltpars)
-        uncert = pd.DataFrame(index=['15,50,85'.split(',')],columns=allpars)
-        for k in self.pdict.keys():
-            if self.fixdict[k]:
-                chain[k]  = self.pdict[k]
-                uncert[k] = self.pdict[k]
-            else:
-                uncert[k] = np.percentile( chain[k], [15,50,85] )
-
-        self.chain  = chain.to_records(index=False)
-        self.uncert = uncert.to_records(index=False)
-
-        nsamp = 200
-        ntrial = sampler.flatchain.shape[0]
-        id = np.random.random_integers(0,ntrial-1,nsamp)
-
-        f = lambda i : self.MA( self.pL2pdict(sampler.flatchain[i]),self.t)
-        self.fits = np.vstack( map(f,id) )         
-
-    def __call__(self,pL):
-        """
-        Used for emcee MCMC routine
-        
-        pL : list of parameters used in the current MCMC trial
-        """
-        loglike = -self.chi2(pL)
-        return loglike
-
-
-    def chi2(self,pL):
-        pdict   = self.pL2pdict(pL)
-        f_model = self.MA(pdict,self.t)
-        resid   = (self.f - f_model)/self.ferr
-        X2 = (resid**2).sum()
-        if (pdict['tau'] < 0) or (pdict['tau'] > 2 ) :
-            X2=np.inf
-        if (pdict['b'] > 1) or (pdict['b'] < 0):
-            X2=np.inf
-        if abs(pdict['p'])<0.:
-            X2=np.inf
-        return X2
-
-    def pL2pdict(self,pL):
-        """
-        Covert a list of floating parameters to the standard parameter
-        dictionary.
-        """
-        pdict = {}
-        i = 0 
-        for k in self.pdict.keys():
-            if self.fixdict[k]:
-                pdict[k]=self.pdict[k]
-            else:
-                pdict[k]=pL[i]
-                i+=1
-
-        return pdict
-
-    def pdict2pL(self,pdict):
-        """
-        Create a list of the floating parameters
-        """
-        pL = []
-        for k in self.pdict.keys():
-            if self.fixdict[k] is False:
-                pL += [ pdict[k] ]
-
-        return pL
-    
-    def MA(self,pdict,t):
-        """
-        Mandel Agol Model.
-
-        Four free parameters taken from current pdict
-
-
-        pL can either have
-           3 parameters : p,tau,b
-           2 parameters : p,tau (b is taken from self.fixb)
-        """
-        pMA3 = [ pdict[k] for k in 'p tau b'.split() ] 
-        res = keptoy.MA(pMA3, self.climb, t - pdict['dt'], usamp=5)
-        return res
-
-def TM_read_h5(h5):
-    """
-    Read in the information from h5 dataset and return TransitModel
-    Instance.
-    """    
-    attrs = dict(h5.attrs)
-
-    if attrs['P'] < 50:
-        bPF  = h5['blc10PF0'][:]
-        t    = bPF['tb']
-        f    = bPF['med']
-        ferr = bPF['std'] / np.sqrt( bPF['count'] )
-        b1   = bPF['count']==1 # for 1 value std ==0 which is bad
-        ferr[b1] = ma.median(ma.masked_invalid(bPF['std']))
-    else:
-        lc   = h5['lcPF0'][:]
-        t    = lc['tPF']
-        f    = lc['f']
-        ferr = np.std( (f[1:]-f[:-1])*np.sqrt(2))
-        ferr = np.ones(lc.size)*ferr
-    try:
-        p0 = np.sqrt(1e-6*attrs['df'])
-    except:
-        p0 = np.sqrt(attrs['mean'])
-
-    # Initial guess for MA parameters.
-    pdict=dict(p=p0,tau= attrs['tdur']/2.,b=.3,dt=0.) 
-    # Find global best fit value
-    trans = TransitModel(t,f,ferr,attrs['climb'],pdict)
-    return trans
-
-
-
-def TM_to_h5(trans,h5):
-    """
-    Save results from the fit into an h5 group.
-    """
-    fitgrp = h5.create_group('fit')
-    fitgrp['fit'] = trans.MA(trans.pdict,trans.t)
-
-    fitgrp.create_group('pdict')
-    h5.dict2group('fit/pdict',trans.pdict)
-
-    dsL = 't,f,ferr,uncert,chain,fits'.split(',')
-    for ds in dsL:
-        if hasattr(trans,ds):
-            fitgrp[ds]  = getattr(trans,ds)
-
-def TM_getMCMCdict(h5):
-    """
-    Returns a dictionary with the best fit MCMC parameters.
-    """
-    keys = 'p,tau,b'.split(',')
-    ucrt = pd.DataFrame(h5['fit/uncert'][:],index=['15','50','85'])[keys].T
-    ucrt['med'] = ucrt['50']
-    ucrt['sig'] = (ucrt['85']-ucrt['15'])/2
-    
-    if ucrt.ix['b','85']-ucrt.ix['b','50'] > ucrt.ix['b','15']:
-        ucrt.ix['b','sig'] =None
-        ucrt.ix['b','med'] =ucrt.ix['b','85']
-
-    d = {}
-    for k in keys:
-        d[k]     = ucrt.ix[k,'med']
-        d['u'+k] = ucrt.ix[k,'sig']
-
-    for k in 'skic,P,t0'.split(','):   
-        d[k] = h5.attrs[k]
-    return d
-
-def TM_unitsMCMCdict(d0):
-    """
-    tau e[day] -> tau[hrs]
-    p [frac] -> p [percent]
-    """
-    d = copy.copy(d0)
-    
-    d['p']    *= 100.
-    d['up']   *= 100.
-    d['tau']  *= 24.
-    d['utau'] *= 24.
-    return d 
-
-def TM_stringMCMCdict(d0):
-    """
-    Convert MCMC parameter output to string
-    """
-    d = copy.copy(d0) 
-    keys = 'p,tau,b'.split(',')    
-    for k in keys:
-        for k1 in [k,'u'+k]:
-            d[k1] = "%.2f" % d0[k1]
-
-    if np.isnan(d0['ub']):
-        d['b']  = "<%(b)s" % d
-        d['ub'] = ""
-
-    return d

@@ -52,6 +52,93 @@ class File(h5py.File):
       for n in d.keys():
          self[name][n] = d[n]
 
+class iohelper(object):
+   """
+   Simple class from which to build other objects. 
+   
+   If we create an attribute we wish to save, use the add_attr function 
+   If we create a data set we wish to save, use the add_dset function 
+   """
+
+   def __init__(self):
+      self.attrs = {} # 
+      self.attrs_keys = [] # List of attributes to store as h5 attrs
+      self.attrs_desc = [] # Description of h5 attrs
+
+      self.dset_keys = [] # List of attributes to store as h5 datasets
+      self.dset_desc = [] # Description of h5 datasets
+
+   # 
+   # Book keeping functions
+   #
+   def add_attr(self,name,value,description=''):
+      """
+      Sets an attribute of DV object and records that we want this
+      attribute saved.
+      """
+      setattr(self,name,value)
+      self.attrs_keys.append(name)
+      self.attrs_desc.append(description)
+
+   def add_dset(self,name,value,description=''):
+      """
+      Sets an attribute of DV object and records that we want this
+      attribute saved as a h5 dataset.
+      """
+      setattr(self,name,value)
+      self.dset_keys.append(name)
+      self.dset_desc.append(description)
+
+   def get_valuedesc(self,k,keys_list,desc_list):
+      """
+      Get key and description
+      """
+      value = getattr(self,k)
+      i = keys_list.index(k)
+      desc = desc_list[i]
+      return value,desc
+
+   def to_hdf(self,h5file,group):
+      h5 = File(h5file)
+      group = h5.create_group(group)
+
+      for k in self.attrs_keys:
+         value,desc = self.get_valuedesc(
+            k,self.attrs_keys,self.attrs_desc)
+         group.attrs[k] = value
+         group.attrs[k+'_description'] = desc
+
+      for k in self.dset_keys:
+         value,desc = self.get_valuedesc(
+            k,self.dset_keys,self.dset_desc)
+         group[k] = value
+         group[k].attrs['description'] = desc
+      
+      group.attrs['attrs_keys'] = self.attrs_keys
+      group.attrs['dset_keys'] = self.dset_keys
+
+      group.attrs['attrs_desc'] = self.attrs_desc
+      group.attrs['dset_desc'] = self.dset_desc
+
+def read_iohelper(h5file,group):
+   io = iohelper()
+   h5 = h5py.File(h5file,'r')
+   group = h5[group]
+
+   io.attrs_keys = group.attrs['attrs_keys']
+   io.attrs_desc = group.attrs['attrs_desc']
+
+   io.dset_keys = group.attrs['dset_keys']
+   io.dset_desc = group.attrs['dset_desc']
+
+   for k in io.attrs_keys:
+      setattr(io,k,group.attrs[k])
+
+   for k in io.dset_keys:
+      setattr(io,k,group[k][:])
+
+   return io
+
 def add_attrs(h5,d):
    """
    Add elements of a dictionary as attributes to h5 file.

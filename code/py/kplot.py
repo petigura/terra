@@ -860,29 +860,5 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
 
     df.apply(plot,axis=1)
     return df
-class TransitModel(tval.TransitModel):
-    """
-    Simple plotting extension of the normal TransitModel class:
-    """
-    def plot(self):
-        gs = GridSpec(4,1)        
-        fig = gcf()
-        axTrans = fig.add_subplot(gs[1:])
-        self.plottrans()
-        yticksppm()
-        legend()
 
-        axRes   = fig.add_subplot(gs[0])
-        self.plotres()
-        yticksppm()
-        tight_layout()
-        legend()
 
-    def plottrans(self):
-        plot(self.t,self.f,'.',label='PF LC')
-        self.ffit = self.MA(self.pdict,self.t)
-        plot(self.t,self.ffit,lw=2,alpha=2,label='Fit')
-    def plotres(self):
-        plot(self.t,self.f-self.ffit,lw=1,alpha=1,label='Residuals')        
-
-    

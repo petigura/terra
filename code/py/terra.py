@@ -268,6 +268,9 @@ def dv(par):
             tval.at_binPhaseFold(h5,0,10)
             tval.at_binPhaseFold(h5,0,30)
 
+            # Oct 6. Made it to here... Keep working on the
+            # object-oriented implementation of DV
+
             tval.at_fit(h5)
             tval.at_med_filt(h5)
             tval.at_s2ncut(h5)
