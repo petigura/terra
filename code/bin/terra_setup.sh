@@ -13,8 +13,6 @@ echo "Setting up batch scripts"
 echo ""
 
 PARDB=$1 # Name of the parameter database
-TPSDIR=${HOME}/TPS/C0
-PHOTDIR=${K2_DIR}/photometry/C0/
 K2_SCRIPTS=${K2_DIR}/code/py/scripts
 
 read -ep "Enter output directory " TPSDIR
@@ -57,6 +55,7 @@ do
     echo "python ${K2_SCRIPTS}/terraWrap.py grid ${GRIDFILE} ${PARDB} ${epic}"
     echo "python ${K2_SCRIPTS}/terraWrap.py dv ${GRIDFILE} ${PARDB} ${epic}"
     echo "chmod -R o+rX ${STAROUTPUTDIR}"
+    echo "python ${K2_DIR}/code/py/scrape_terra.py ${GRIDFILE} ${TPSDIR}/scrape.db"
 done > ${SCRIPTSDIR}/terra.tot
 
 rm photfiles.temp epiclist.temp phot_epic_join.temp 

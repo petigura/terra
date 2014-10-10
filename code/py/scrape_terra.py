@@ -6,8 +6,9 @@ import glob
 import tval
 import os
 from argparse import ArgumentParser
-
-
+import numpy as np
+from cStringIO import StringIO as sio
+import tval
 
 
 # Table with fits column description
@@ -22,11 +23,11 @@ top_attrs="""\
 "grid_h5_filename","TERRA output h5 file"
 "grid_plot_filename","TERRA plot file name"
 """
-from cStringIO import StringIO as sio
+
+
 top_attrs = sio(top_attrs)
 top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
 top_attrs = top_attrs.dropna()
-import tval
 
 def dv_h5_scrape(h5file,verbose=True):
     """
@@ -45,8 +46,12 @@ def dv_h5_scrape(h5file,verbose=True):
         for k in top_attrs.field:
             writekey(d,k,k,lambda x : x)
 
-    dv = tval.read_hdf(h5file,'/dv')
-    d = dict(d,**dv.get_attrs_dict())
+    try:
+        dv = tval.read_hdf(h5file,'/dv')
+        d = dict(d,**dv.get_attrs_dict())   
+    except:
+        pass
+
     return d
 
 def dict2insert(d):
@@ -107,12 +112,15 @@ if __name__=='__main__':
         con.commit()
         con.close()
 
+    counter = 0
     for h5file in args.h5file:
-        d = dv_h5_scrape(args.h5file,verbose=True)
+        d = dv_h5_scrape(h5file,verbose=True)
         sqlcmd,values = dict2insert(d)
         con = sqlite3.connect(args.dbfile)
         cur = con.cursor()
         cur.execute(sqlcmd,values)
-
-    con.commit()
-    con.close()
+        counter +=1
+        if np.mod(counter,10)==0:
+            print counter
+        con.commit()
+        con.close()
