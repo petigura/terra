@@ -18,7 +18,7 @@ def dv(args):
     df = pd.read_sql('select * from dv',con,index_col='id')
     d = dict(df.ix[args.index])
     d['outfile'] = args.outfile
-    terra.dv(d)
+    terra.data_validation(d)
 
 if __name__=='__main__':
     from argparse import ArgumentParser

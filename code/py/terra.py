@@ -245,7 +245,7 @@ def data_validation(par):
     """
 
     par = dict(par) # If passing in pandas series, treat as dict
-    print "Running dv on %s" % par['outfile'].split('/')[-1]
+    print "Running data_validation on %s" % par['outfile'].split('/')[-1]
     par['update'] = True  # need to use h5plus for MCMC
 
     outfile = par['outfile']
@@ -253,8 +253,8 @@ def data_validation(par):
     PF_kw = dict( [ (k,par[k]) for k in PF_keys ] )
 
     dv = tval.DV( outfile )
-    epic = h5py.File(outfile).attrs['epic']
-    dv.add_attr('starname',str(int(epic)))
+    starname = h5py.File(outfile).attrs['grid_basedir'].split('/')[-1]
+    dv.add_attr('starname',starname)
     dv.climb = np.array( [ par['a%i' % i] for i in range(1,5)])
 
     dv.at_grass()
@@ -285,7 +285,7 @@ def data_validation(par):
         ext = 'pk'
         dv = tval.read_hdf(outfile,'/dv')
         dv.trans = tm.read_hdf(outfile,'/dv/fit')
-        tval_plotting.diag(dvo)
+        tval_plotting.diag(dv)
         figpath = par['outfile'].replace('.h5','.%s.png' % ext)
         plt.gcf().savefig(figpath)
         plt.close() 

@@ -784,7 +784,7 @@ top_attrs="""\
 "s2ncut","Cut out the transit and recompute s2n. Should be small."
 "grass","Median heights of 5 tallest peaks between [P/1.4,P*1.4]"
 """
-
+from cStringIO import StringIO as sio
 top_attrs = sio(top_attrs)
 top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
 top_attrs = top_attrs.dropna()
@@ -836,7 +836,3 @@ def scrape(h5file,verbose=True):
         writekey(d,'starname','epic',lambda x : str( int(x) ) )
 
     return d
-=======
-    
-
->>>>>>> 1ee4bc3f8bd4e8bfd2aa2d9f73ed88887aeac544

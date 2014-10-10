@@ -5,20 +5,13 @@ from matplotlib.pylab import *
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
-from kplot import wrapHelp,yticksppm
+from kplot import wrapHelp,yticksppm,tprop,bbox,annkw
 import transit_model as tm
 import tval
 import config
 
 import pandas as pd
 pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
-
-seasonColors = ['r','c','m','g']
-tprop = dict(name='monospace')
-
-bbox=dict(boxstyle="round", fc="w",alpha=.5,ec='none')
-annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light')
-
 rc('axes',color_cycle=['RoyalBlue','Tomato'])
 rc('font',size=8)
 

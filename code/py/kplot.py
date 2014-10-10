@@ -9,21 +9,23 @@ I define these functions in a seperate module so the classes
 themselves can be instanated with out import matplotlib which is not
 possible on some non-interactive platforms
 """
-
-from matplotlib.pylab import *
-from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-
-import tval
-import keplerio
-import sketch
-import config
 from scipy import ndimage as nd
 import numpy as np
 from numpy import ma
 from matplotlib import mlab
-import sys
-import tfind
+from matplotlib.pylab import *
+from matplotlib.gridspec import GridSpec
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+import pandas as pd
+
+import tval
+import sketch
+import config
+
+seasonColors = ['r','c','m','g']
+tprop = dict(name='monospace')
+bbox = dict(boxstyle="round", fc="w",alpha=.5,ec='none')
+annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light')
 
 def MC_diag(dv):
     fig = figure(figsize=(10,6))
