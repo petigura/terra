@@ -80,6 +80,11 @@ class DV(h5plus.iohelper):
         self.dM = tfind.mtd(self.fm,self.twd)
         self.t  = self.lc['t']
 
+
+    def get_attrs_dict(self):
+        # Just return a dictionary of all the attributes
+        return dict([(k,getattr(self,k)) for k in self.attrs_keys])
+
     #
     # Functions for adding features to DV object
     #
@@ -752,87 +757,3 @@ def nT(t,mask,p):
 
     return tbool
 
-
-# Table with fits column description
-top_attrs="""\
-#
-# Identifiers
-#
-"id","light curve identifier" 
-"starname","name of star in catalog"
-#
-# File paths
-#
-"phot_basedir","directory containing the photometry files"
-"phot_fits_filename","file name of the fits file with photometry info"
-"phot_plot_filename","diagnostic plots for photometry"
-"grid_basedir","directory with the TERRA output files"
-"grid_h5_filename","TERRA output h5 file"
-"grid_plot_filename","TERRA plot file name"
-#
-# Ephemerides
-#
-"P","Period of transit"
-"t0","time of transit"
-"tdur","duration of transit"
-"depth","depth of transit"
-#
-# Transit Features
-#
-"s2n","Signal to noise of transit"
-"num_trans","number of sucessful transits"
-"s2ncut","Cut out the transit and recompute s2n. Should be small."
-"grass","Median heights of 5 tallest peaks between [P/1.4,P*1.4]"
-"""
-from cStringIO import StringIO as sio
-top_attrs = sio(top_attrs)
-top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
-top_attrs = top_attrs.dropna()
-
-#class decoratorWithArguments(object):
-#    def __init__(self, arg1, arg2, arg3):
-#        """
-#        If there are decorator arguments, the function
-#        to be decorated is not passed to the constructor!
-#        """
-#        print "Inside __init__()"
-#        self.arg1 = arg1
-#        self.arg2 = arg2
-#        self.arg3 = arg3
-#
-#    def __call__(self, f):
-#        """
-#        If there are decorator arguments, __call__() is only called
-#        once, as part of the decoration process! You can only give
-#        it a single argument, which is the function object.
-#        """
-#        print "Inside __call__()"
-#        def wrapped_f(*args):
-#            print "Inside wrapped_f()"
-#            print "Decorator arguments:", self.arg1, self.arg2, self.arg3
-#            f(*args)
-#            print "After f(*args)"
-#        return wrapped_f
-
-def scrape(h5file,verbose=True):
-    """
-    Get important MetaData and features from h5 file. Push those into
-    a database
-    """
-    d = {}
-
-    with h5py.File(h5file,'r') as h5:
-
-        def writekey(d,dict_key,attrs_key,cast):
-            d[dict_key] = None
-            try:
-                d[dict_key] = cast(h5.attrs[attrs_key])
-            except KeyError:
-                print "KeyError %s" %attrs_key
-
-        for k in top_attrs.field:
-            writekey(d,k,k,lambda x : x)
-
-        writekey(d,'starname','epic',lambda x : str( int(x) ) )
-
-    return d
