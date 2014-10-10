@@ -22,12 +22,11 @@ import pandas as pd
 deltaPcad = 10
 from config import k2_dir
 import photometry
+import transit_model as tm
 
 #######################
 # Top Level Functions #
 #######################
-
-
 
 def h5F(par):
     """
@@ -197,7 +196,7 @@ def grid(par):
     
         tfind.grid(h5,parL) 
 
-def dv(par):
+def data_validation(par):
     """
     Data Validation
     
@@ -226,72 +225,60 @@ def dv(par):
     >>> import terra
     >>> ddv = {'LDT_deg': 3,'cfrac': 3, 'cpad': 0.5, 'nCont': 4, 
               'a1': 0.773,'a2': -0.679,'a3': 1.140, 'a4': -0.416, 
-              'outfile':'temp.grid.h5','skic': 7831530 }
-
-
-    >>> terra.dv(ddv)
+              'outfile':'202073438.grid.h5'}
+    >>> terra.data_validation(ddv)
 
     """
+
     par = dict(par) # If passing in pandas series, treat as dict
     print "Running dv on %s" % par['outfile'].split('/')[-1]
     par['update'] = True  # need to use h5plus for MCMC
 
-    with h5F(par) as h5:
-        if dict(h5.attrs).has_key('climb') == False:
-            climb = np.array( [ par['a%i' % i] for i in range(1,5) ]  ) 
-            h5.attrs['climb'] = climb
+    outfile = par['outfile']
+    PF_keys = 'LDT_deg cfrac cpad nCont'.split()
+    PF_kw = dict( [ (k,par[k]) for k in PF_keys ] )
 
-        keys = ['LDT_deg', 'cfrac', 'cpad', 'nCont']
-        for k in keys:
-            h5.attrs[k] = par[k]
+    dv = tval.DV( outfile )
+    epic = h5py.File(outfile).attrs['epic']
+    dv.add_attr('starname',str(int(epic)))
+    dv.climb = np.array( [ par['a%i' % i] for i in range(1,5)])
 
-        if dict(h5.attrs).has_key('epic') == False:
-            h5.attrs['epic']  = par['epic']
+    dv.at_grass()
+    dv.at_SES()
+    dv.at_phaseFold(0,**PF_kw)
+    dv.at_phaseFold(180,**PF_kw)
+    
+    for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
+        dv.at_binPhaseFold(ph,binsize)
 
-        h5.noPrintRE = '.*?file|climb|epic|.*?folder'
-        h5.noDiagRE  = \
-            '.*?file|climb|epic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-        h5.noDBRE    = 'climb'
+    dv.at_s2ncut()
+    dv.at_phaseFold_SecondaryEclipse()
+    dv.at_med_filt()
+    dv.at_autocorr()
 
-        # Attach attributes
-        tval.read_dv(h5)
+    trans = tm.from_dv(dv,bin_period=1)
+    trans.register()
+    trans.pdict = trans.fit_lightcurve()[0]
+    trans.MCMC()
 
-        tval.at_grass(h5) # How many nearby SNR peaks are there?
-#        tval.checkHarmh5(h5)
-        tval.at_SES(h5)   # How many acceptible transits are there?
+    # Save file and generate plot.
+    dv.to_hdf(outfile,'/dv')
+    trans.to_hdf(outfile,'/dv/fit')
 
-        
-        if h5.attrs['num_trans'] >=2:
-            tval.at_phaseFold(h5,0)
-            tval.at_phaseFold(h5,180)
+    if par['plot_diag']:
+        import tval_plotting
+        from matplotlib import pylab as plt
+        ext = 'pk'
+        dv = tval.read_hdf(outfile,'/dv')
+        dv.trans = tm.read_hdf(outfile,'/dv/fit')
+        tval_plotting.diag(dvo)
+        figpath = par['outfile'].replace('.h5','.%s.png' % ext)
+        plt.gcf().savefig(figpath)
+        plt.close() 
+        print "created %s" % figpath
 
-            tval.at_binPhaseFold(h5,0,10)
-            tval.at_binPhaseFold(h5,0,30)
 
-            # Oct 6. Made it to here... Keep working on the
-            # object-oriented implementation of DV
 
-            tval.at_fit(h5)
-            tval.at_med_filt(h5)
-            tval.at_s2ncut(h5)
-            tval.at_rSNR(h5)
-            tval.at_autocorr(h5)
-
-        plot_switch(h5,par)
-
-def plot_switch(h5,par):
-    ext = dict(plot_diag='pk',plot_lc='lc')
-    for k in ext.keys():
-        if par.has_key(k):
-            if par[k]:
-                from matplotlib import pylab as plt
-                import kplot
-                s = "kplot.%s(h5)" % k
-                exec(s)
-                figpath = par['outfile'].replace('.h5','.%s.png' % ext[k])
-                plt.gcf().savefig(figpath)
-                plt.close() 
-                print "created %s" % figpath
 
 def multiCopyCut(file0,file1,pdict=None):
     """

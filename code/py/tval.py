@@ -4,27 +4,322 @@ Transit Validation
 After the brute force period search yeilds candidate periods,
 functions in this module will check for transit-like signature.
 """
-from scipy.spatial import cKDTree
-import sqlite3
-import h5plus
-import re
-import copy
 
 import numpy as np
 from numpy import ma
 from scipy import ndimage as nd
-from scipy.stats import ks_2samp
+from scipy.spatial import cKDTree
+from matplotlib import mlab
+import h5py
+import pandas as pd
 
+import h5plus
 import FFA
 import keptoy
 import tfind
-from matplotlib import mlab
-import h5py
-import os
-from matplotlib.cbook import is_string_like,is_numlike
 import keplerio
 import config
-import pandas as pd
+
+class DV(h5plus.iohelper):
+    """
+    Data Validation Object
+    """
+    def __init__(self,h5file):
+        """
+        Instantiate new data validation object from h5 file.
+
+        Pulls in data from h5['/pp/cal'] and ['/it0/RES']
+
+        Default action is to choose the highest SNR peak. However, the
+        't0,'Pcad','twd','mean','s2n','noise' keys maybe changed post
+        instantiation
+        
+        Parameters
+        ----------
+        h5   : h5 file (post grid-search)
+        """
+
+        # Calls the __init__ constructor of h5plus.iohelper. Then we
+        # can do other things
+        super(DV,self).__init__()
+
+        h5 = h5py.File(h5file,'r')
+
+        self.add_dset('lc',h5['/pp/cal'][:],description='Light curve')
+        self.add_dset('RES',h5['/it0/RES'][:],description='Periodogram')
+
+        idmax = np.argmax(self.RES['s2n'])        
+        rmax = self.RES[idmax] # Peak SNR
+
+        self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
+        self.add_attr('Pcad', rmax['Pcad'], 
+                      description='Peak period [cadences]')
+        self.add_attr('t0', rmax['t0'], 
+                      description='Epoch')
+        self.add_attr('twd', rmax['twd'], 
+                      description='Peak duration [cadences]')
+        self.add_attr('mean', rmax['mean'], 
+                      description='Mean transit depth')
+        self.add_attr('noise', rmax['noise'],
+                      description='Mean light curve noise')
+
+        self.twd = int(self.twd)
+
+        self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
+        self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
+
+        # Convenience
+        self._attach_convenience()
+        h5.close()
+ 
+    def _attach_convenience(self):
+        self.fm = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
+        self.dM = tfind.mtd(self.fm,self.twd)
+        self.t  = self.lc['t']
+
+    #
+    # Functions for adding features to DV object
+    #
+    def at_grass(self):
+        """
+        Attach Grass Feature
+        
+        Breakup the periodogram into a bunch of bins and find the
+        highest point in each bin. Grass is the median height of the
+        top 5 peaks
+        """
+        ntop = 5 # Number of peaks to consider. Median of top 5 should
+                 # ignore the primary peak
+
+        fac = 1.4 # bin ranges from P/fac to P*fac.
+        nbins = 100
+        RES = self.RES
+
+        bins  = np.logspace(np.log10(self.P/fac),
+                            np.log10(self.P*fac),
+                            nbins+1)
+
+        xp,yp = findpks(RES['Pcad']*config.lc,RES['s2n'],bins)
+        grass = np.median(np.sort(yp)[-ntop:])
+        self.add_attr('grass',grass,description='SNR of nearby peaks')        
+
+    def at_SES(self):
+        """
+        Attach single event statistics
+
+        Finds the cadence closes to the transit midpoint. For each
+        cadence, record in dataset `SES` the following information:
+
+            ses    : Signle event statistic for single transit
+            tnum   : transit number (starts at 0)
+            season : What season did the transit occur in?
+
+        Also computes the median for odd/even transits and each season
+        individually.
+
+        Notes
+        -----
+        Aug 5, 2013 - Changed to strictly look at the point closest to the
+                      center of each transit. Before, I was searching for
+                      the max SES value within the transit range (allowed
+                      for TTVs)
+        """
+        t    = self.t
+        dM   = self.dM
+        rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
+
+        # Doesn't mean anything for K2
+        qrec = keplerio.qStartStop()
+        q = np.zeros(t.size) - 1
+        for r in qrec:
+            b = (t > r['tstart']) & (t < r['tstop'])
+            q[b] = r['q']
+        
+        season = np.mod(q,4)
+        dtype = [('ses',float),('tnum',int),('season',int)]
+        dM.fill_value = np.nan
+        rses  = np.array(zip(dM.filled(),rLbl['tLbl'],season),dtype=dtype )
+        rses  = rses[ rLbl['tLbl'] >= 0 ]
+
+        # If no good transits, break out
+        if rses.size==0:
+            return
+
+        self.add_dset('rLbl',rLbl,
+            description='Transit/continuum labeled (see transLabel doc string')
+        self.add_dset('SES',rses,
+                      description='Record array with single event statistic')
+        self.add_attr('num_trans',rses.size,
+                      description='Number of good transits')
+
+        # Median SES, even/odd
+        for sfx,i in zip(['even','odd'],[0,1]):
+            medses =  np.median( rses['ses'][rses['tnum'] % 2 == i] ) 
+            self.add_attr('SES_%s' % sfx, medses,
+                          description='Median SES %s' % sfx)
+
+        # Median SES, different seasons
+        for i in range(4):
+            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
+            self.add_attr('SES_%i' % i, medses,
+                          description='Median SES [Season %i]' % i )
+
+    def at_phaseFold(self,ph,**PF_kw):
+        """ 
+        Attach locally detrended light curve
+
+        Parameters
+        ----------
+        ph : Phase [between 0 and 360]
+        PW_kw : dictionary of parameters passed to PF
+        """
+        # Epoch at arbitrary phase, ph
+        t0 = self.t0 + ph / 360. * self.P 
+        rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
+
+        # Attach the quarter, doesn't do anything for K2
+        qarr = keplerio.t2q( rPF['t'] ).astype(int)
+        rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
+        self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
+
+    def at_binPhaseFold(self,ph,bwmin):
+        """
+        Attach binned phase-folded light curve
+
+        Parameters
+        ----------
+        ph : Phase [between 0 and 360]
+
+        Note
+        ----
+        Must run at_phaseFold first
+
+        h5 - h5 file with the following columns
+             lcPF0
+             lcPF180         
+        ph - phase to fold at.
+        bwmin - targe bin width (minutes)
+        """
+        key = 'lcPF%i' % ph
+        assert hasattr(self,key),'Must run at_phaseFold first' 
+        lcPF = getattr(self,key)
+
+        tPF  = lcPF['tPF']
+        f    = lcPF['f']
+
+        xmi,xma = tPF.min(),tPF.max() 
+        bw       = bwmin / 60./24. # converting minutes to days
+        nbins    = xma-xmi
+
+        nbins = int( np.round( (xma-xmi)/bw ) )
+        # Add a tiny bit to xma to get the last element
+        bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
+        tb    = 0.5*(bins[1:]+bins[:-1])
+
+        blcPF =  np.array([tb],dtype=[('tb',float)])
+        dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
+        for k in dfuncs.keys():
+            func  = dfuncs[k]
+            yapply = bapply(tPF,f,bins,func)
+            blcPF = mlab.rec_append_fields(blcPF,k,yapply)
+
+        blcPF = blcPF.flatten()
+
+        d = dict(ph=ph,bwmin=bwmin,key=key)
+        name  = 'blc%(bwmin)iPF%(ph)i' % d
+        desc = 'Binned %(key)s light curve ph=%(ph)i, binsize=%(bwmin)i' % d
+        self.add_dset(name,blcPF,description=desc)
+
+    def at_s2ncut(self):
+        """
+        Attach cut s2n statistics
+        """
+
+        # Notch out the transit and recompute
+        fmcut = self.fm.copy()
+        fmcut.mask = fmcut.mask | (self.rLbl['tRegLbl'] >= 0)
+        dMCut = tfind.mtd(fmcut,self.twd)
+
+        Pcad0 = np.floor(self.Pcad)
+        r = tfind.ep(dMCut, Pcad0)
+
+        i = np.nanargmax(r['mean'])
+        if i is np.nan:
+            s2n = np.nan
+        else:
+            s2n = r['mean'][i] / self.noise * np.sqrt(r['count'][i])
+
+        self.add_attr('s2ncut',s2n)
+        self.add_attr('s2ncut_t0',r['t0cad'][i]*keptoy.lc + self.t[0])
+        self.add_attr('s2ncut_mean',r['mean'][i])
+
+    def at_phaseFold_SecondaryEclipse(self):
+        """
+        Return phasefolded photometry around putative secondary eclipse
+        """
+
+        lcPF_SE = PF(self.t,self.fm,self.P,self.s2ncut_t0,self.tdur)
+        self.add_dset('lcPF_SE',lcPF_SE,
+                      description='Phase folded photometry (secondary eclipse)')
+        t0shft_SE = self.t0 - self.s2ncut_t0
+        ph = t0shft_SE / self.P * 360
+        self.add_attr('t0shft_SE',t0shft_SE,'Time offset of secondary eclipse')
+        self.add_attr('ph_SE',ph,'Phase offset of secondary eclipse')
+
+    def at_med_filt(self):
+        """Add median detrended lc"""
+        fmed = self.fm - nd.median_filter(self.fm, size=self.twd*3)
+
+        # Shift t-series so first transit is at t = 0 
+        dt = t0shft(self.t,self.P,self.t0)
+        tf = self.t + dt
+        phase = np.mod(tf + 0.25 * self.P, self.P) / self.P - 0.25
+        tPF = phase * self.P # Phase folded time
+
+        # bin up the points
+        for nbpt in [1,5]:
+            # Return bins of a so that nbpt fit in a transit
+            nbins = np.round( tPF.ptp()/self.tdur*nbpt ) 
+            bins =  np.linspace(tPF.min(),tPF.max(),nbins+1)
+            fmed = ma.masked_invalid(fmed)
+            btPF,bfmed = hbinavg(tPF[~fmed.mask],fmed[~fmed.mask],bins)
+            
+            rbmed = np.rec.fromarrays([btPF,bfmed],names=['t','f'])
+
+            self.add_dset('rbmed%i' % nbpt, rbmed, description='Binned phase-folded, median filtered timeseries, %i points per tdur'% nbpt) 
+
+        self.add_dset('fmed',fmed,description='Median detrended flux')
+
+    def at_autocorr(self):
+        """
+        Attach autocorrelation trace
+        """
+        bx5fft = np.fft.fft(self.rbmed5['f'] )
+        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
+        corr = corr.real
+        lag = np.fft.fftfreq(corr.size,1./corr.size)
+        lag = np.fft.fftshift(lag)
+        corr = np.fft.fftshift(corr)
+        b = np.abs(lag > 6) # Bigger than the size of the fit.
+        autor = max(corr[~b])/max(np.abs(corr[b]))
+
+        self.add_dset('lag',lag,description='Auto correlation lag')
+        self.add_dset('corr',corr,description='Auto correlation amplitude')
+        self.add_attr('autor',autor,description=\
+            'Ratio of second highest peak to primary autocorrelation peak')
+
+
+def read_hdf(h5file,group):
+    tm = h5plus.read_iohelper(h5file,group)
+    tm.__class__ = DV
+
+    # Convenience
+    tm._attach_convenience()
+    return tm 
+    
+#
+# Helper functions for DV class
+#
 
 def scar(res):
     """
@@ -261,469 +556,12 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
     lcPF['tPF'] += config.lc
     return lcPF
 
-# Must add the following attributes
-# 't0','Pcad','twd','mean','s2n','noise'
-# tdur
-# climb
-
-
-class DV(h5plus.iohelper):
-    """
-    Data Validation Object
-    """
-    def __init__(self,h5file):
-        """
-        Instantiate new data validation object from h5 file.
-
-        Pulls in data from h5['/pp/cal'] and ['/it0/RES']
-
-        Default action is to choose the highest SNR peak. However, the
-        't0,'Pcad','twd','mean','s2n','noise' keys maybe changed post
-        instantiation
-        
-        Parameters
-        ----------
-        h5   : h5 file (post grid-search)
-
-        """
-
-        # Calls the __init__ constructor of h5plus.iohelper. Then we
-        # can do other things
-        super(DV,self).__init__()
-
-        h5 = h5py.File(h5file,'r')
-
-        self.add_dset('lc',h5['/pp/cal'][:],description='Light curve')
-        self.add_dset('RES',h5['/it0/RES'][:],description='Periodogram')
-
-        idmax = np.argmax(self.RES['s2n'])        
-        rmax = self.RES[idmax] # Peak SNR
-
-        self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
-        self.add_attr('Pcad', rmax['Pcad'], 
-                      description='Peak period [cadences]')
-        self.add_attr('t0', rmax['t0'], 
-                      description='Epoch')
-        self.add_attr('twd', rmax['twd'], 
-                      description='Peak duration [cadences]')
-        self.add_attr('mean', rmax['mean'], 
-                      description='Mean transit depth')
-        self.add_attr('noise', rmax['noise'],
-                      description='Mean light curve noise')
-
-        self.twd = int(self.twd)
-
-        self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
-        self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
-
-        # Convenience
-        self.fm = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
-        self.dM = tfind.mtd(self.fm,self.twd)
-        self.t  = self.lc['t']
-        h5.close()
- 
-    #
-    # Functions for adding features to DV object
-    #
-    def at_grass(self):
-        """
-        Attach Grass Feature
-        
-        Breakup the periodogram into a bunch of bins and find the
-        highest point in each bin. Grass is the median height of the
-        top 5 peaks
-        """
-        ntop = 5 # Number of peaks to consider. Median of top 5 should
-                 # ignore the primary peak
-
-        fac = 1.4 # bin ranges from P/fac to P*fac.
-        nbins = 100
-        RES = self.RES
-
-        bins  = np.logspace(np.log10(self.P/fac),
-                            np.log10(self.P*fac),
-                            nbins+1)
-
-        xp,yp = findpks(RES['Pcad']*config.lc,RES['s2n'],bins)
-        grass = np.median(np.sort(yp)[-ntop:])
-        self.add_attr('grass',grass,description='SNR of nearby peaks')        
-
-    def at_SES(self):
-        """
-        Attach single event statistics
-
-        Finds the cadence closes to the transit midpoint. For each
-        cadence, record in dataset `SES` the following information:
-
-            ses    : Signle event statistic for single transit
-            tnum   : transit number (starts at 0)
-            season : What season did the transit occur in?
-
-        Also computes the median for odd/even transits and each season
-        individually.
-
-        Notes
-        -----
-        Aug 5, 2013 - Changed to strictly look at the point closest to the
-                      center of each transit. Before, I was searching for
-                      the max SES value within the transit range (allowed
-                      for TTVs)
-        """
-        t    = self.t
-        dM   = self.dM
-        rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
-
-        # Doesn't mean anything for K2
-        qrec = keplerio.qStartStop()
-        q = np.zeros(t.size) - 1
-        for r in qrec:
-            b = (t > r['tstart']) & (t < r['tstop'])
-            q[b] = r['q']
-        
-        season = np.mod(q,4)
-        dtype = [('ses',float),('tnum',int),('season',int)]
-        dM.fill_value = np.nan
-        rses  = np.array(zip(dM.filled(),rLbl['tLbl'],season),dtype=dtype )
-        rses  = rses[ rLbl['tLbl'] >= 0 ]
-
-        # If no good transits, break out
-        if rses.size==0:
-            return
-
-        self.add_dset('SES',rses,
-                      description='Record array with single event statistic')
-        self.add_attr('num_trans',rses.size,
-                      description='Number of good transits')
-
-        # Median SES, even/odd
-        for sfx,i in zip(['even','odd'],[0,1]):
-            medses =  np.median( rses['ses'][rses['tnum'] % 2 == i] ) 
-            self.add_attr('SES_%s' % sfx, medses,
-                          description='Median SES %s' % sfx)
-
-        # Median SES, different seasons
-        for i in range(4):
-            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
-            self.add_attr('SES_%i' % i, medses,
-                          description='Median SES [Season %i]' % i )
-
-    def at_phaseFold(self,ph,**PW_kw):
-        """ 
-        Attach locally detrended light curve
-
-        Parameters
-        ----------
-        ph : Phase [between 0 and 360]
-        PW_kw : dictionary of parameters passed to PF
-
-
-        """
-        # Epoch at arbitrary phase, ph
-        t0 = self.t0 + ph / 360. * self.P 
-        rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
-
-        # Attach the quarter, doesn't do anything for K2
-        qarr = keplerio.t2q( rPF['t'] ).astype(int)
-        rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
-        self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
-
-    def at_binPhaseFold(self,ph,bwmin):
-        """
-        Attach binned phase-folded light curve
-
-        Parameters
-        ----------
-        ph : Phase [between 0 and 360]
-
-        Note
-        ----
-        Must run at_phaseFold first
-
-        
-
-
-        h5 - h5 file with the following columns
-             lcPF0
-             lcPF180         
-        ph - phase to fold at.
-        bwmin - targe bin width (minutes)
-        """
-        key = 'lcPF%i' % ph
-        assert hasattr(self,key),'Must run at_phaseFold first' 
-        lcPF = getattr(self,key)
-
-        tPF  = lcPF['tPF']
-        f    = lcPF['f']
-
-        xmi,xma = tPF.min(),tPF.max() 
-        bw       = bwmin / 60./24. # converting minutes to days
-        nbins    = xma-xmi
-
-        nbins = int( np.round( (xma-xmi)/bw ) )
-        # Add a tiny bit to xma to get the last element
-        bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
-        tb    = 0.5*(bins[1:]+bins[:-1])
-
-        blcPF =  np.array([tb],dtype=[('tb',float)])
-        dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
-        for k in dfuncs.keys():
-            func  = dfuncs[k]
-            yapply = bapply(tPF,f,bins,func)
-            blcPF = mlab.rec_append_fields(blcPF,k,yapply)
-
-        blcPF = blcPF.flatten()
-
-        d = dict(ph=ph,bwmin=bwmin,key=key)
-        name  = 'blc%(bwmin)iPF%(ph)i' % d
-        desc = 'Binned %(key)s light curve ph=%(ph)i, binsize=%(bwmin)i' % d
-        self.add_dset(name,blcPF,description=desc)
-
-#
-# Helper functions for DV class
-#
-
 def findpks(x,y,bins):
     id    = np.digitize(x,bins)
     uid   = np.unique(id)[1:-1] # only elements inside the bin range
     mL    = [np.max(y[id==i]) for i in uid]
     mid   = [ np.where((y==m) & (id==i))[0][0] for i,m in zip(uid,mL) ] 
     return x[mid],y[mid]
-
-def checkHarmh5(h5):
-    """
-    If one of the harmonics has higher MES, update P,epoch
-    """
-    P = h5.attrs['P']
-    harmL,MESL = checkHarm(h5.dM,P,h5.t.ptp(),ver=False)
-    idma = np.nanargmax(MESL)
-    if idma != 0:
-        harm = harmL[idma]
-        print "%s P has higher MES" % harm
-        h5.attrs['P']    *= harm
-        h5.attrs['Pcad'] *= harm
-
-
-def at_fit(h5,runmcmc=True):
-    """
-    Attach Fit
-
-    Fit Mandel Agol (2002) to phase folded light curve. For short
-    period transits with many in-transit points, we fit median phase
-    folded flux binned up into 10-min bins to reduce computation time.
-
-    Light curves are fit using the following proceedure:
-    1. Registraion : best fit transit epcoh is determined by searching
-                     over a grid of transit epochs
-    2. Simplex Fit : transit epoch is frozen, and we use a simplex
-                     routine (fmin) to search over the remaining
-                     parameters.
-    3. MCMC        : If runmcmc is set, explore the posterior parameter space
-                     around the best fit results of 2.
-
-    Parameters
-    ----------
-    h5     : h5 file handle
-
-    Returns
-    -------
-    Modified h5 file. Add/update the following datasets in h5['fit/']
-    group:
-
-    fit/t     : time used in fit
-    fit/f     : flux used in fit
-    fit/fit   : best fit light curve determined by simplex algorithm
-    fit/chain : values used in MCMC chain post burn-in
-
-    And the corresponding attributes
-    fit.attrs['pL0']  : best fit parameters from simplex alg
-    fit.attrs['X2_0'] : chi2 of fit
-    fit.attrs['dt_0'] : Shift used in the regsitration.
-    """
-
-    attrs = dict(h5.attrs)
-    trans = TM_read_h5(h5)
-    trans.register()
-    trans.pdict = trans.fit()[0]
-    if runmcmc:
-        trans.MCMC()
-    TM_to_h5(trans,h5)
-
-def at_med_filt(h5):
-    """Add median detrended lc"""
-    lc = h5['/pp/cal']
-    fm = ma.masked_array(lc['fcal'],lc['fmask'])
-
-    t  = lc['t']
-    P  = h5.attrs['P']
-    t0 = h5.attrs['t0']
-    tdur= h5.attrs['tdur']
-    twd = h5.attrs['twd']
-    y = h5.fm-nd.median_filter(h5.fm,size=twd*3)
-    h5['fmed'] = y
-
-    # Shift t-series so first transit is at t = 0 
-    dt = t0shft(t,P,t0)
-    tf = t + dt
-    phase = np.mod(tf+P/4,P)/P-1./4
-    x = phase * P
-    h5['tPF'] = x
-
-    # bin up the points
-    for nbpt in [1,5]:
-        bins = get_bins(h5,x,nbpt)
-        y = ma.masked_invalid(y)
-        bx,by = hbinavg(x[~y.mask],y[~y.mask],bins)
-        h5['bx%i'%nbpt] = bx
-        h5['by%i'%nbpt] = by
-
-def get_bins(h5,x,nbpt):
-    """Return bins of a so that nbpt fit in a transit"""
-    nbins = np.round( x.ptp()/h5.attrs['tdur']*nbpt ) 
-    return np.linspace(x.min(),x.max(),nbins+1)
-
-def at_s2ncut(h5):
-    """
-    Cut out the transit and recomput S/N.  It s2ncut should be low.
-    """
-    attrs = h5.attrs
-
-    lbl = transLabel(h5.t,attrs['P'],attrs['t0'],attrs['tdur'])
-
-    # Notch out the transit and recompute
-    fmcut = h5.fm.copy()
-    fmcut.mask = fmcut.mask | (lbl['tRegLbl'] >= 0)
-
-    twd = int(attrs['twd'])
-    dMCut = tfind.mtd(fmcut,twd )    
-
-    Pcad0 = np.floor(attrs['Pcad'])
-    r = tfind.ep(dMCut, Pcad0)
-
-    i = np.nanargmax(r['mean'])
-    if i is np.nan:
-        s2n = np.nan
-    else:
-        s2n = r['mean'][i]/attrs['noise']*np.sqrt(r['count'][i])
-
-    h5.attrs['s2ncut']      = s2n
-    h5.attrs['s2ncut_t0']   = r['t0cad'][i]*keptoy.lc + h5.t[0]
-    h5.attrs['s2ncut_mean'] = r['mean'][i]
-
-def at_rSNR(h5):
-    """
-    Robust Signal to Noise Ratio
-    """
-    ses = h5['SES'][:]['ses'].copy()
-    ses.sort()
-    h5.attrs['clipSNR'] = np.mean(ses[:-3]) / h5.attrs['noise'] *np.sqrt(ses.size)
-    x = np.median(ses) 
-    h5.attrs['medSNR'] =  np.median(ses) / h5.attrs['noise'] *np.sqrt(ses.size)
-
-
-def at_s2n_known(h5,d):
-    """
-    When running a simulation, we know a priori where the transit
-    will fall.  This function attaches the s2n_known given the
-    closest P,t0,twd
-    """                
-    tup = s2n_known(d,h5.t,h5.fm)
-
-    h5.attrs['twd_close']   = tup[2]
-    h5.attrs['P_close']     = tup[3]
-    h5.attrs['phase_close'] = tup[4]
-    h5.attrs['s2n_close']   = tup[5]
-
-
-def at_autocorr(h5):
-    bx5fft = np.fft.fft(h5['by5'][:].flatten() )
-    corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
-    corr = corr.real
-    lag  = np.fft.fftfreq(corr.size,1./corr.size)
-    lag  = np.fft.fftshift(lag)
-    corr = np.fft.fftshift(corr)
-    b = np.abs(lag > 6) # Bigger than the size of the fit.
-
-    h5['lag'] = lag
-    h5['corr'] = corr
-    h5.attrs['autor'] = max(corr[~b])/max(np.abs(corr[b]))
-
-
-
-######
-# IO #
-######
-
-def flatten(h5,exclRE):
-    """
-    Return a flat dictionary with exclRE keys excluded.
-    """
-    pkeys = h5.attrs.keys() 
-    pkeys = [k for k in pkeys if re.match(exclRE,k) is None]
-    pkeys.sort()
-
-    d = {}
-    for k in pkeys:
-        v = h5.attrs[k]
-        if k.find('pL') != -1:
-            suffix = k.split('pL')[-1]
-            d['df'+suffix]  = v[0]**2
-            d['tau'+suffix] = v[1]
-            d['b'+suffix]   = v[2]
-        else:
-            d[k] = v
-    return d
-
-def pL2d(h5,pL):
-    return dict(df=pL[0],tau=pL[1],b=pL[2])
-
-def diag_leg(h5):
-    dprint = flatten(h5,h5.noDiagRE)
-    return dict2str(h5,dprint)
-
-def dict2str(h5,dprint):
-    """
-    """
-
-    strout = \
-"""
-%s
--------------
-""" % h5.attrs['skic']
-
-    keys = dprint.keys()
-    keys.sort()
-    for k in keys:
-        v = dprint[k]
-        if is_numlike(v):
-            if v<1e-3:
-                vstr = '%.4g [ppm] \n' % (v*1e6)
-            else:
-                vstr = '%.4g \n' % v
-        elif is_string_like(v):
-            vstr = v+'\n'
-
-        strout += k.ljust(12) + vstr
-
-    return strout
-
-def get_db(h5):
-    """
-    Return a dict to store as db
-    """
-    d = h5.flatten(h5.noDBRE)
-
-    dtype = []
-    for k in d.keys():
-        k = str(k) # no unicode
-        v = d[k]
-        if is_string_like(v):
-            typ = '|S100'
-        elif is_numlike(v):
-            typ = '<f8'
-        dtype += [(k,typ)]
-
-    t = tuple(d.values())
-    return np.array([t,],dtype=dtype)
 
 def bapply(x,y,bins,func):
     """
@@ -766,6 +604,34 @@ def hbinavg(x,y,bins):
     biny = bsum/bn
 
     return binx,biny
+
+# 
+# Hepler functions no longer used in terra. Not ready to delete yet.
+# 
+
+def at_rSNR(h5):
+    """
+    Robust Signal to Noise Ratio
+    """
+    ses = h5['SES'][:]['ses'].copy()
+    ses.sort()
+    h5.attrs['clipSNR'] = np.mean(ses[:-3]) / h5.attrs['noise'] *np.sqrt(ses.size)
+    x = np.median(ses) 
+    h5.attrs['medSNR'] =  np.median(ses) / h5.attrs['noise'] *np.sqrt(ses.size)
+
+def at_s2n_known(h5,d):
+    """
+    When running a simulation, we know a priori where the transit
+    will fall.  This function attaches the s2n_known given the
+    closest P,t0,twd
+    """                
+    tup = s2n_known(d,h5.t,h5.fm)
+
+    h5.attrs['twd_close']   = tup[2]
+    h5.attrs['P_close']     = tup[3]
+    h5.attrs['phase_close'] = tup[4]
+    h5.attrs['s2n_close']   = tup[5]
+
 
 def s2n_known(d,t,fm):
     """
@@ -821,6 +687,19 @@ def s2n_known(d,t,fm):
 
     return phase,s2nP,twd_close,P_close,phase_close,s2n_close
 
+def checkHarmh5(h5):
+    """
+    If one of the harmonics has higher MES, update P,epoch
+    """
+    P = h5.attrs['P']
+    harmL,MESL = checkHarm(h5.dM,P,h5.t.ptp(),ver=False)
+    idma = np.nanargmax(MESL)
+    if idma != 0:
+        harm = harmL[idma]
+        print "%s P has higher MES" % harm
+        h5.attrs['P']    *= harm
+        h5.attrs['Pcad'] *= harm
+
 def checkHarm(dM,P,tbase,harmL0=config.harmL,ver=True):
     """
     Evaluate S/N for (sub)/harmonics
@@ -871,26 +750,6 @@ def nT(t,mask,p):
 
     return tbool
 
-PF_kw = dict(LDT_deg=3,cfrac=3,cpad=0.5,nCont=4)
-dv = DV('202073438.grid.h5')
-dv.at_grass()
-dv.at_SES()
-dv.at_phaseFold(0,**PF_kw)
-dv.at_phaseFold(180,**PF_kw)
-dv.at_binPhaseFold(0,10)
-dv.at_binPhaseFold(0,30)
-
-dv.climb = np.array([0.773,-0.679,1.14,-0.416])
-
-import transit_model as tm
-
-trans = tm.from_dv(dv,bin_period=1)
-trans.register()
-trans.pdict = trans.fit_lightcurve()[0]
-trans.MCMC()
-trans.to_hdf('test.h5','fit')
-trans = tm.read_hdf('test.h5','fit')
-print trans.get_MCMC_dict()
 
 
 

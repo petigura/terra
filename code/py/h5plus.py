@@ -122,20 +122,21 @@ class iohelper(object):
 
 def read_iohelper(h5file,group):
    io = iohelper()
-   h5 = h5py.File(h5file,'r')
-   group = h5[group]
+   
+   with h5py.File(h5file,'r') as h5:
+      group = h5[group]
 
-   io.attrs_keys = group.attrs['attrs_keys']
-   io.attrs_desc = group.attrs['attrs_desc']
+      io.attrs_keys = group.attrs['attrs_keys']
+      io.attrs_desc = group.attrs['attrs_desc']
 
-   io.dset_keys = group.attrs['dset_keys']
-   io.dset_desc = group.attrs['dset_desc']
+      io.dset_keys = group.attrs['dset_keys']
+      io.dset_desc = group.attrs['dset_desc']
 
-   for k in io.attrs_keys:
-      setattr(io,k,group.attrs[k])
+      for k in io.attrs_keys:
+         setattr(io,k,group.attrs[k])
 
-   for k in io.dset_keys:
-      setattr(io,k,group[k][:])
+      for k in io.dset_keys:
+         setattr(io,k,group[k][:])
 
    return io
 

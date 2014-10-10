@@ -11,7 +11,40 @@ class TransitModel(h5plus.iohelper):
     TransitModel
     
     Simple class for fitting transit    
+
+    Fit Mandel Agol (2002) to phase folded light curve. For short
+    period transits with many in-transit points, we fit median phase
+    folded flux binned up into 10-min bins to reduce computation time.
+
+    Light curves are fit using the following proceedure:
+    1. Registraion : best fit transit epcoh is determined by searching
+                     over a grid of transit epochs
+    2. Simplex Fit : transit epoch is frozen, and we use a simplex
+                     routine (fmin) to search over the remaining
+                     parameters.
+    3. MCMC        : If runmcmc is set, explore the posterior parameter space
+                     around the best fit results of 2.
+
+    Parameters
+    ----------
+    h5     : h5 file handle
+
+    Returns
+    -------
+    Modified h5 file. Add/update the following datasets in h5['fit/']
+    group:
+
+    fit/t     : time used in fit
+    fit/f     : flux used in fit
+    fit/fit   : best fit light curve determined by simplex algorithm
+    fit/chain : values used in MCMC chain post burn-in
+
+    And the corresponding attributes
+    fit.attrs['pL0']  : best fit parameters from simplex alg
+    fit.attrs['X2_0'] : chi2 of fit
+    fit.attrs['dt_0'] : Shift used in the regsitration.
     """
+
     def __init__(self,t,f,ferr,climb,pdict,
                  fixdict=dict(p=False,tau=False,b=False,dt=True)):
         """
@@ -248,6 +281,12 @@ running MCMC
         return d
 
     def to_hdf(self,h5file,group):
+        """
+        TODO
+        ----
+        Should define these as attributes in when they are created.
+
+        """
         self.fit = self.MA(self.pdict,self.t)
         self.add_dset('fit',self.fit,description='Best fitting light curve')
         self.add_dset('t',self.t,description='time')
@@ -256,7 +295,6 @@ running MCMC
         self.add_dset('uncert',self.uncert,description='uncertainties')
         self.add_dset('chain',self.chain,description='MCMC chain')
         self.add_dset('fits',self.fits,description='Fits from MCMC chain')
-        
         self.add_attr('p',self.pdict['p'],
                        description='Planet star radius ratio')
         self.add_attr('tau',self.pdict['tau'],
