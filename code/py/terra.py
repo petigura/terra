@@ -27,8 +27,6 @@ import photometry
 # Top Level Functions #
 #######################
 
-
-
 def h5F(par):
     """
     If the update kw is set, open h5 file as a h5plus object.
@@ -98,29 +96,41 @@ def pp(par):
     print "creating %(outfile)s" % par
     print "Running pp on %s" % par['outfile'].split('/')[-1]
 
+    path_phot = par['path_phot']
+    path_phot = os.path.abspath(path_phot) # Expand full path
+    
+    outfile = par['outfile']
+    outfile = os.path.abspath(outfile)
 
     with h5F(par) as h5:
-        lc = photometry.read_crossfield_fits(par['path_phot'])
+        lc = photometry.read_crossfield_fits(path_phot)
 
         h5.create_group('pp')
         h5['/pp/cal'] = lc
+
         if par['type'].find('mc') != -1:
             inj(h5,par)
 
         lc = h5['/pp/cal'][:]
         lc = prepro.rdt(lc) # detrend light curve
         
-        del h5['/pp/cal']
 
         # Hack to get around no calibration step
         for k in 'fcal fit'.split():
             lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
         lc['fcal'] = lc['f']
 
+        del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
-#        prepro.cal(h5,par)
+        # prepro.cal(h5,par)
 
+        # Store path information
+        h5.attrs['phot_basedir'] = os.path.dirname(path_phot)
+        h5.attrs['phot_fits_filename'] = os.path.basename(path_phot)
 
+        
+        h5.attrs['grid_basedir'] = os.path.dirname(outfile)
+        h5.attrs['grid_h5_filename'] = os.path.basename(outfile)
 
         if par.has_key('plot_lc'):
             if par['plot_lc']:
@@ -130,6 +140,8 @@ def pp(par):
                 figpath = par['outfile'].replace('.h5','.lc.png')
                 plt.gcf().savefig(figpath)
                 plt.close() 
+
+            h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
 
 
 def raw(h5,files,fields=[]):
@@ -257,9 +269,8 @@ def dv(par):
         tval.read_dv(h5)
 
         tval.at_grass(h5) # How many nearby SNR peaks are there?
-#        tval.checkHarmh5(h5)
+        # tval.checkHarmh5(h5)
         tval.at_SES(h5)   # How many acceptible transits are there?
-
         
         if h5.attrs['num_trans'] >=2:
             tval.at_phaseFold(h5,0)
@@ -289,6 +300,7 @@ def plot_switch(h5,par):
                 plt.gcf().savefig(figpath)
                 plt.close() 
                 print "created %s" % figpath
+                h5.attrs['grid_plot_filename'] = os.path.basename(figpath)
 
 def multiCopyCut(file0,file1,pdict=None):
     """

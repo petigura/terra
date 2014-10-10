@@ -4,11 +4,11 @@ Transit Validation
 After the brute force period search yeilds candidate periods,
 functions in this module will check for transit-like signature.
 """
-from scipy.spatial import cKDTree
-import sqlite3
-import h5plus
+
 import re
 import copy
+from cStringIO import StringIO as sio
+import os
 
 import numpy as np
 from numpy import ma
@@ -16,18 +16,20 @@ import numpy.random as rand
 from scipy import optimize
 from scipy import ndimage as nd
 from scipy.stats import ks_2samp
-
-import FFA
-import keptoy
-import tfind
-from matplotlib import mlab
+from scipy.spatial import cKDTree
 import h5py
-import os
+from matplotlib import mlab
 from matplotlib.cbook import is_string_like,is_numlike
-import keplerio
-import config
 from emcee import EnsembleSampler
 import pandas as pd
+
+import FFA
+
+import keptoy
+import tfind
+import keplerio
+import config
+import h5plus
 
 def scar(res):
     """
@@ -44,7 +46,6 @@ def scar(res):
     
     """
 
-    
     bcut = res['s2n']> np.percentile(res['s2n'],90)
     x = res['Pcad'][bcut]
     x -= min(x)
@@ -293,8 +294,10 @@ def read_dv(h5,tpar=False):
         else:
             h5.attrs[k] = tpar[k] 
 
+    h5.attrs['depth'] = h5.attrs['mean'] 
+    import pdb;pdb.set_trace()
     h5.attrs['tdur'] = h5.attrs['twd']*config.lc
-    h5.attrs['P']    = h5.attrs['Pcad']*config.lc
+    h5.attrs['P'] = h5.attrs['Pcad']*config.lc
 
     # Convenience
     h5.fm = ma.masked_array(h5.lc['fcal'],h5.lc['fmask'])
@@ -464,7 +467,9 @@ def get_bins(h5,x,nbpt):
 
 def at_s2ncut(h5):
     """
-    Cut out the transit and recomput S/N.  It s2ncut should be low.
+    Add s2ncut feature.
+
+    Cut out the transit and recompute s2n. Should be small.
     """
     attrs = h5.attrs
 
@@ -559,7 +564,6 @@ def at_rSNR(h5):
     x = np.median(ses) 
     h5.attrs['medSNR'] =  np.median(ses) / h5.attrs['noise'] *np.sqrt(ses.size)
 
-
 def at_s2n_known(h5,d):
     """
     When running a simulation, we know a priori where the transit
@@ -589,8 +593,9 @@ def at_autocorr(h5):
 
 def at_grass(h5):
     """
-    Start with the tallest SNR period. Compute the median height of
-    three nearby peaks?
+    Add the `grass` feature
+
+    Median heights of 5 tallest peaks between [P/1.4,P*1.4]
     """
 
     P   = h5.attrs['P']
@@ -1108,7 +1113,7 @@ def TM_getMCMCdict(h5):
     """
     Returns a dictionary with the best fit MCMC parameters.
     """
-    keys = 'p,tau,b'.split(',')
+    keys = 'p tau b'.split()
     ucrt = pd.DataFrame(h5['fit/uncert'][:],index=['15','50','85'])[keys].T
     ucrt['med'] = ucrt['50']
     ucrt['sig'] = (ucrt['85']-ucrt['15'])/2
@@ -1122,8 +1127,9 @@ def TM_getMCMCdict(h5):
         d[k]     = ucrt.ix[k,'med']
         d['u'+k] = ucrt.ix[k,'sig']
 
-    for k in 'skic,P,t0'.split(','):   
+    for k in 'skic P t0'.split():   
         d[k] = h5.attrs[k]
+
     return d
 
 def TM_unitsMCMCdict(d0):
@@ -1152,5 +1158,89 @@ def TM_stringMCMCdict(d0):
     if np.isnan(d0['ub']):
         d['b']  = "<%(b)s" % d
         d['ub'] = ""
+
+    return d
+
+# Table with fits column description
+top_attrs="""\
+#
+# Identifiers
+#
+"id","light curve identifier" 
+"starname","name of star in catalog"
+#
+# File paths
+#
+"phot_basedir","directory containing the photometry files"
+"phot_fits_filename","file name of the fits file with photometry info"
+"phot_plot_filename","diagnostic plots for photometry"
+"grid_basedir","directory with the TERRA output files"
+"grid_h5_filename","TERRA output h5 file"
+"grid_plot_filename","TERRA plot file name"
+#
+# Ephemerides
+#
+"P","Period of transit"
+"t0","time of transit"
+"tdur","duration of transit"
+"depth","depth of transit"
+#
+# Transit Features
+#
+"s2n","Signal to noise of transit"
+"num_trans","number of sucessful transits"
+"s2ncut","Cut out the transit and recompute s2n. Should be small."
+"grass","Median heights of 5 tallest peaks between [P/1.4,P*1.4]"
+"""
+
+top_attrs = sio(top_attrs)
+top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
+top_attrs = top_attrs.dropna()
+
+#class decoratorWithArguments(object):
+#    def __init__(self, arg1, arg2, arg3):
+#        """
+#        If there are decorator arguments, the function
+#        to be decorated is not passed to the constructor!
+#        """
+#        print "Inside __init__()"
+#        self.arg1 = arg1
+#        self.arg2 = arg2
+#        self.arg3 = arg3
+#
+#    def __call__(self, f):
+#        """
+#        If there are decorator arguments, __call__() is only called
+#        once, as part of the decoration process! You can only give
+#        it a single argument, which is the function object.
+#        """
+#        print "Inside __call__()"
+#        def wrapped_f(*args):
+#            print "Inside wrapped_f()"
+#            print "Decorator arguments:", self.arg1, self.arg2, self.arg3
+#            f(*args)
+#            print "After f(*args)"
+#        return wrapped_f
+
+def scrape(h5file,verbose=True):
+    """
+    Get important MetaData and features from h5 file. Push those into
+    a database
+    """
+    d = {}
+
+    with h5py.File(h5file,'r') as h5:
+
+        def writekey(d,dict_key,attrs_key,cast):
+            d[dict_key] = None
+            try:
+                d[dict_key] = cast(h5.attrs[attrs_key])
+            except KeyError:
+                print "KeyError %s" %attrs_key
+
+        for k in top_attrs.field:
+            writekey(d,k,k,lambda x : x)
+
+        writekey(d,'starname','epic',lambda x : str( int(x) ) )
 
     return d
