@@ -101,8 +101,8 @@ def plot_diag(h5,tpar=False):
     axPFzoom   = fig.add_subplot(gs[1,2:4],sharex=axPF,)
     axPF180    = fig.add_subplot(gs[1,4:6],sharex=axPF)
     axPFSec    = fig.add_subplot(gs[1,6:8],sharex=axPF)
-    axSingSES      = fig.add_subplot(gs[1,-2])
-    axSeason       = fig.add_subplot(gs[1,-1])
+    axSingSES  = fig.add_subplot(gs[1,-2])
+    axSeason   = fig.add_subplot(gs[1,-1])
 
     # Last row
     axStack        = fig.add_subplot(gs[2:8 ,0:8])
@@ -151,7 +151,6 @@ grass %(grass).2f""" % d
     sca(axSeason)
     plotSeason(h5)
 
-
     # Bottom row
     sca(axStack)
     plotSES(h5)
@@ -169,22 +168,10 @@ grass %(grass).2f""" % d
         gca().yaxis.set_visible(False)
         pass
 
-    if tpar==False:
-        h5.noPrintRE = '.*?file|climb|epic|.*?folder'
-        h5.noDiagRE  = \
-            '.*?file|climb|epic|KS.|Pcad|X2.|mean_cut|.*?180|.*?folder'
-        h5.noDBRE    = 'climb'
-        s = pd.Series(tval.flatten(h5,h5.noDiagRE))
-        s = "%i\n%s" % (h5.attrs['epic'], s.__str__())
-    else:
-        s='%i\n-------\n' % h5.attrs['epic']
-        for k in 'P t0 tdur mean s2n noise twd'.split():
-            s += '%s %s\n' % (k,h5.attrs[k])
 
     bbkw = dict(visible=True,fc='white',alpha=0.5)
     tight_layout()
     gcf().subplots_adjust(hspace=0.4)
-
 
 def plotSec(h5):
     """

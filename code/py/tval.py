@@ -240,8 +240,7 @@ def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
 
 
     cfrac, cpad : passed to transLabel
-    deg         : passed to LDT
-    deg  : degree of the polynomial fitter
+    deg  : degree of the polynomial fitter (passed to LDT)
 
     Returns
     -------
@@ -463,7 +462,6 @@ def get_bins(h5,x,nbpt):
     """Return bins of a so that nbpt fit in a transit"""
     nbins = np.round( x.ptp()/h5.attrs['tdur']*nbpt ) 
     return np.linspace(x.min(),x.max(),nbins+1)
-
 
 def at_s2ncut(h5):
     """
