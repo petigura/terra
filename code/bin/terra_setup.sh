@@ -1,6 +1,12 @@
 # Shell script to facilitate creation of batch jobs for TERRA.
 #!/usr/bin/env bash
 
+echo "Script name: $0"
+echo "$# arguments "
+if [ "$#" -ne 1 ]; 
+    then echo "signature: terra_setup.sh pars.sqlite"
+    exit 1
+fi
 
 echo ""
 echo "Setting up batch scripts"

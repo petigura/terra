@@ -14,7 +14,6 @@ from matplotlib.pylab import *
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
-import terra
 import tval
 import keplerio
 import sketch
@@ -26,173 +25,7 @@ from matplotlib import mlab
 import sys
 import tfind
 
-import pandas as pd
-pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
-
-seasonColors = ['r','c','m','g']
-tprop = dict(name='monospace')
-
-bbox=dict(boxstyle="round", fc="w",alpha=.5,ec='none')
-annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light')
-
-rc('axes',color_cycle=['RoyalBlue','Tomato'])
-rc('font',size=8)
-
-def AddAnchored(*args,**kwargs):
-    # Hack to get rid of warnings
-    for k in 'ha va'.split():
-        if kwargs['prop'].has_key(k):
-            kwargs['prop'].pop(k)
-
-    at = AnchoredText(*args,**kwargs)
-    gca().add_artist(at)
-
-def plot_diag(h5,tpar=False):
-    """
-    Print a 1-page diagnostic plot of a given h5.
-    
-    Right now, we recompute the single transit statistics on the
-    fly. By default, we show the highest SNR event. We can fold on
-    arbitrary ephmeris by setting the tpar keyword.
-
-    Parameters
-    ----------
-    h5   : h5 file after going through terra.dv
-    tpar : Dictionary with alternate ephemeris specified by:
-           Pcad - Period [cadences] (float)
-           t0   - transit epoch [days] (float)
-           twd  - width of transit [cadences]
-           mean - depth of transit [float]
-           noise 
-           s2n
-    """
-    tval.read_dv(h5,tpar=tpar)
-
-    try:
-        del h5['SES']
-        del h5['tRegLbl']
-    except:
-        pass
-
-    tval.at_SES(h5)
-
-    if (tpar!=False) & (h5.attrs['num_trans'] >=2):
-        tval.at_phaseFold(h5,0)
-        tval.at_phaseFold(h5,180)
-
-        tval.at_binPhaseFold(h5,0,10)
-        tval.at_binPhaseFold(h5,0,30)
-        
-        tval.at_fit(h5,runmcmc=False)
-        tval.at_med_filt(h5)
-        tval.at_s2ncut(h5)
-        tval.at_rSNR(h5)
-        tval.at_autocorr(h5)
-
-    fig = figure(figsize=(20,12))
-    gs = GridSpec(8,10)
-
-    # Top row
-    axPeriodogram  = fig.add_subplot(gs[0,0:8])
-    axAutoCorr = fig.add_subplot(gs[0,8])
-
-    # Second row
-    axPF       = fig.add_subplot(gs[1,0:2])
-    axPFzoom   = fig.add_subplot(gs[1,2:4],sharex=axPF,)
-    axPF180    = fig.add_subplot(gs[1,4:6],sharex=axPF)
-    axPFSec    = fig.add_subplot(gs[1,6:8],sharex=axPF)
-    axSingSES  = fig.add_subplot(gs[1,-2])
-    axSeason   = fig.add_subplot(gs[1,-1])
-
-    # Last row
-    axStack        = fig.add_subplot(gs[2:8 ,0:8])
-    axStackZoom    = fig.add_subplot(gs[2:8 ,8:])
-
-    # Top row
-    sca(axPeriodogram)
-    plotPeriodogram(h5)
-
-    sca(axAutoCorr)
-    plotAutoCorr(h5)
-    AddAnchored("ACF",prop=tprop,frameon=True,loc=2)    
-
-    d = dict(h5.attrs)
-    s = """
-EPIC-%(epic)i
-
-P     %(P).3f 
-t0    %(t0).2f 
-tdur  %(tdur).2f 
-SNR   %(s2n).2f
-grass %(grass).2f""" % d
-    text(1.2,0,s,family='monospace',size='large',transform=gca().transAxes)
-
-    # Second row
-    sca(axPF)
-    plotPF(h5,0,diag=True)
-    ylabel('Flux')
-    AddAnchored("Phased",prop=tprop,frameon=True,loc=3)
-
-    sca(axPFzoom)
-    plotPF(h5,0,diag=True,zoom=True)
-    AddAnchored("Phased Zoom",prop=tprop,frameon=True,loc=3)
-
-    sca(axPF180)
-    plotPF(h5,180,diag=True)
-    AddAnchored("Phased 180",prop=tprop,frameon=True,loc=3)
-
-    sca(axPFSec)
-    plotSec(h5)
-    AddAnchored("Secondary\nEclipse",prop=tprop,frameon=True,loc=3)
-
-    sca(axSingSES)
-    plotSingSES(h5)
-
-    sca(axSeason)
-    plotSeason(h5)
-
-    # Bottom row
-    sca(axStack)
-    plotSES(h5)
-    xlabel('Phase')
-    AddAnchored("SES Stack",prop=tprop,frameon=True,loc=2)
-
-    sca(axStackZoom)
-    if h5.attrs['num_trans'] < 20: 
-        plotCalWrap(h5)
-        xlabel('t-t0')
-        AddAnchored("Transit Stack",prop=tprop,frameon=True,loc=2)
-    else:
-        AddAnchored("Transit Stack\nToo Many Transits",prop=tprop,frameon=True,loc=2)
-        gca().xaxis.set_visible(False)
-        gca().yaxis.set_visible(False)
-        pass
-
-
-    bbkw = dict(visible=True,fc='white',alpha=0.5)
-    tight_layout()
-    gcf().subplots_adjust(hspace=0.4)
-
-def plotSec(h5):
-    """
-    Plot secondary eclipse
-    """
-
-    tval.at_s2ncut(h5)
-    at = h5.attrs
-
-    rPF = tval.PF(h5.t,h5.fm,at['P'],at['s2ncut_t0'],at['tdur'])
-    plot(rPF['tPF'],rPF['f'])
-
-    t0shft = at['t0'] - at['s2ncut_t0']
-    ph = t0shft / at['P'] * 360
-
-    title = 'ph = %.1f' % ph
-    AddAnchored(title,prop=tprop, frameon=False,loc=4)
-    xl   ='t - (t0 + %.1f) [days]' % t0shft
-    xlabel(xl)
-
-def MC_diag(h5):
+def MC_diag(dv):
     fig = figure(figsize=(10,6))
     gs = GridSpec(8,5)
 
@@ -200,12 +33,12 @@ def MC_diag(h5):
     axFitClean = fig.add_subplot(gs[1:4,0:2])
     axFitFull   = fig.add_subplot(gs[4:,0:2],sharex=axFitClean)
 
-    plotfitchain(h5,axFitResid,axFitClean)
+    plotfitchain(dv,axFitResid,axFitClean)
 
     sca(axFitResid)
     yticksppm()
     sca(axFitFull)
-    plotPF(h5,0)
+    plotPF(dv,0)
 
     for ax in [axFitResid,axFitClean,axFitFull]:
         sca(ax)
@@ -217,17 +50,17 @@ def MC_diag(h5):
     axbp = fig.add_subplot(gs[:4,2:4])
     sca(axbp)
     gca().xaxis.set_visible(False)
-    plot_bp_covar(h5)
+    plot__covar(dv)
     ylim(0,0.1)
     xlim(0,1)
     ytickspercen()
     
     axbpzoom = fig.add_subplot(gs[4:,2:4])
     sca(axbpzoom)
-    plot_bp_covar(h5)
+    plot_bp_covar(dv)
     ytickspercen()
 
-    d  = tval.TM_getMCMCdict(h5)
+    d  = tval.TM_getMCMCdict(dv)
     d  = tval.TM_unitsMCMCdict(d)
     sd = tval.TM_stringMCMCdict(d)
 
@@ -246,20 +79,13 @@ b   %(b)s +/- %(ub)s
     tight_layout()
     fig.subplots_adjust(hspace=0.0001)
 
-def plot_PF_paper(h5):
-    """
-    
-    """
-    plotPF(h5,0)
-
-
-def plotfitchain(h5,ax1,ax2):
+def plotfitchain(dv,ax1,ax2):
     """
     Plot the median 10-min points 
     Plot the best fit
     Show the range of fits
     """
-    fitgrp = h5['fit']
+    fitgrp = dv['fit']
     t      = fitgrp['t'][:]
     f      = fitgrp['f'][:]
     fit    = fitgrp['fit'][:]
@@ -272,17 +98,16 @@ def plotfitchain(h5,ax1,ax2):
     plot(t,fit,'r--',lw=3,alpha=0.4)
     # Show the range of fit from MCMC
 
-    yL = h5['fit/fits'][:]
+    yL = dv['fit/fits'][:]
     lo,up  = np.percentile(yL,[15,85],axis=0)
     fill_between(t, lo, up, where=up>=lo, facecolor='r',alpha=.5,lw=0)
 
-
-def plot_bp_covar(h5):
+def plot_bp_covar(dv):
     """
     Plot the covariance between impact parameter, b, and radius ratio, p.
     """
-    chain = h5['fit/chain'][:]
-    uncert = h5['fit/uncert'][:]
+    chain = dv['fit/chain'][:]
+    uncert = dv['fit/uncert'][:]
 
     plot( abs(chain['b']), chain['p'], 'o', mew=0, alpha=.2, ms=2)
     
@@ -294,7 +119,6 @@ def plot_bp_covar(h5):
 
     xlabel('b')
     ylabel('Rp/Rstar %')
-
 
 def yticksppm():
     """
@@ -316,20 +140,9 @@ def ytickspercen():
     yticks(yt/1e2,syt)
 
 
-def plotSingSES(h5):    
+def plotSeason(dv):
     cax = gca()
-    rses = h5['SES']
-    plot(rses['tnum'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
-    cax.xaxis.set_visible(False)
-    AddAnchored('Transit SES',prop=tprop, frameon=False,loc=3)
-    xl = xlim()
-    xlim(xl[0]-1,xl[-1]+1)
-    yl = ylim()
-    ylim(-100,yl[1])
-
-def plotSeason(h5):
-    cax = gca()
-    rses = h5['SES']
+    rses = dv['SES']
     cax.plot(rses['season'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
     cax.xaxis.set_visible(False)
     AddAnchored('Season SES',prop=tprop,  frameon=False,loc=3)
@@ -337,7 +150,7 @@ def plotSeason(h5):
     yl = ylim()
     ylim(-100,yl[1])
 
-def plotScar(h5):
+def plotScar(dv):
     """
     Plot scar plot
 
@@ -346,7 +159,7 @@ def plotScar(h5):
     r : res record array containing s2n,Pcad,t0cad, column
     
     """
-    r,lc = h5.RES,h5.lc
+    r,lc = dv.RES,dv.lc
     bcut = r['s2n']> np.percentile(r['s2n'],90)
     x = r['Pcad'][bcut]
     x -= min(x)
@@ -356,8 +169,8 @@ def plotScar(h5):
     gca().xaxis.set_visible(False)
     gca().yaxis.set_visible(False)
 
-def plotCDF(h5):
-    lc = h5['/pp/mqcal'][:]
+def plotCDF(dv):
+    lc = dv['/pp/mqcal'][:]
     sig = nd.median_filter(np.abs(lc['dM3']),200)
     plot(np.sort(sig))
     sig = nd.median_filter(np.abs(lc['dM6']),200)
@@ -367,158 +180,23 @@ def plotCDF(h5):
     gca().xaxis.set_visible(False)
     gca().yaxis.set_visible(False)
 
-def plotAutoCorr(pk):
-    xlabel('Displacement')
-    plot(pk['lag'],pk['corr'])
-    gca().xaxis.set_visible(False)
-    gca().yaxis.set_visible(False)
-
-def plotPF(h5,ph,diag=False,zoom=False):
-    PF = h5['lcPF%i' % ph]
-    x  = PF['tPF']
-
-    @handelKeyError
-    def plot_phase_folded():
-        if zoom==False:
-            plot(x,PF['f'],'.',ms=2,color='k')
-        bPF = h5['blc30PF%i' % ph][:]
-        t   = bPF['tb']
-        f   = bPF['med']
-        plot(t,f,'+',ms=5,mew=1.5,color='Chartreuse')
-
-    @handelKeyError
-    def plot_fit():
-        fitgrp = h5['fit']
-        t    = fitgrp['t']
-        f    = fitgrp['f']
-        ffit = fitgrp['fit'][:]
-        plot(t,ffit,'--',color='Tomato',lw=3,alpha=1)
-
-    plot_phase_folded()
-    if ph==0:
-        plot_fit()
-        title='ph = 0'
-        xl   ='t - t0 [days]'
-    else:
-        title='ph = 180'
-        xl   ='t - (t0 + P/2) [days]'
-    
-    depth = h5.attrs['mean']
-    if depth < 1e-4:
-        ylim(-5*depth,5*depth)
-
-    if zoom==True:
-        autoscale(axis='y')
-    if diag:
-        AddAnchored(title,prop=tprop,frameon=False,loc=4)
-    
-    autoscale('x')    
-    xlabel(xl)
-
-def handelKeyError(func):
-    """
-    Cut down on the number of try except statements
-    """
-    def handelProblems():
-        try:
-            func()
-        except KeyError:
-            print "%s: KeyError" %  func.__name__ 
-    return handelProblems
-
-def wrapHelp(h5,x,ym,d):
-    try: 
-        df = h5['fit/pdict/p'][()]**2
-    except:
-        df = h5.attrs['mean']
-
-    d['step'] = 3*df*1e6
-    d['P']    = h5.attrs['P']
-    d['t0']   = h5.attrs['t0']
-
-    stack(x,ym,**d)
-    pltkw   = dict(alpha=0.2)
-    stack(x,ym.data,pltkw=pltkw,**d)    
-    autoscale(tight=True)
-
-def plotCalWrap(h5):
-    d = dict(time=True)
-
-    res,lc = h5.RES,h5.lc
-    ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
-    wrapHelp(h5,lc['t'],ym,d)
-    ylabel('SES (ppm)')
-    xlim(-2,2)
-    axvline(0, alpha=.1,lw=10,color='m',zorder=1)
-
-    gca().yaxis.set_visible(False)
-
-def plotSES(h5):
-    d = dict(time=False)
-
-    twd = int(h5.attrs['twd'])
-
-    res,lc = h5.RES,h5.lc
-    fcal = ma.masked_array(lc['fcal'],lc['fmask'])
-    dM = tfind.mtd(fcal,twd)
-
-    fm = ma.masked_array(dM*1e6,lc['fmask'])
-    wrapHelp(h5,lc['t'],fm,d)
-    ylabel('SES (ppm) [%.1f hour]' % (twd/2.0))
-    axvline(0, alpha=.1,lw=10,color='m',zorder=1)
-    axvline(.5,alpha=.1,lw=10,color='m',zorder=1)
-
-    if lc.dtype.names.count('finj')==1:
-        finjkw = dict(color='m',mew=2,marker=7,ms=5,lw=0,mfc='none')
-        ym =  ma.masked_array(fm.data, lc['finj'] < -1e-6 ) 
-        t  =  lc['t']
-        id = [s.start for s in  ma.clump_masked(ym)]
-        stack(t[id] ,ym.data[id] + 100,pltkw=finjkw,**d)
-
-def plotPeriodogram(h5):
-    cax = gca()
-    res,lc = h5.RES,h5.lc
-    x = res['Pcad']*config.lc
-    y = res['s2n']
-
-    semilogx()
-    xt = [0.1,0.2,0.5,1,2,5,10,20,50,100,200,400]
-
-    xt = [ 0. ,  0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9] + \
-         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] +\
-         [ 0, 10, 20, 30, 40, 50, 60, 70, 80, 90] +\
-         [  0, 100, 200, 300, 400, 500, 600, 700, 800, 900]
-
-    xticks(xt,xt)
-    at = AnchoredText('Periodogram',prop=tprop, frameon=True,loc=2)
-    cax.add_artist(at)
-    ylabel('SNR')
-    cax.xaxis.set_ticks_position('top')
-    cax.xaxis.set_label_position('top') 
-    xlabel('Period [days]')
-    
-    plot(x,y)
-    id = np.argsort( np.abs(x - h5.attrs['P']) )[0]
-    plot(x[id],y[id],'ro')
-    autoscale(axis='x',tight=True)
-
-def plotMed(h5):
-    lc = h5.lc
+def plotMed(dv):
+    lc = dv.lc
     t = lc['t']
-    fmed = ma.masked_array(h5['fmed'][:],lc['fmask'])
-    P = h5.attrs['P']
-    t0 = h5.attrs['t0']
-    df = h5.attrs['df']
+    fmed = ma.masked_array(dv['fmed'][:],lc['fmask'])
+    P = dv.attrs['P']
+    t0 = dv.attrs['t0']
+    df = dv.attrs['df']
     stack(t,fmed*1e6,P,t0,step=5*df)
     autoscale(tight=True)
 
-def morton(h5):
+def morton(dv):
     """
-    Print a 1-page diagnostic plot of a given h5.
+    Print a 1-page diagnostic plot of a given dv.
     """
-    P  = h5.attrs['P']
-    t0 = h5.attrs['t0']
-    df = h5.attrs['df']
+    P  = dv.attrs['P']
+    t0 = dv.attrs['t0']
+    df = dv.attrs['df']
 
     fig = figure(figsize=(20,12))
     gs = GridSpec(4,3)
@@ -531,8 +209,8 @@ def morton(h5):
     for ax,ph in zip([axPF0,axPF180],[0,180]):
         sca(ax)        
 
-        PF  = h5['lcPF%i'%ph]
-        bPF = h5['blc30PF%i' % ph ]
+        PF  = dv['lcPF%i'%ph]
+        bPF = dv['blc30PF%i' % ph ]
 
         plot(PF['tPF'],PF['f'],',',color='k')
         plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
@@ -557,7 +235,7 @@ def morton(h5):
 
     for season in range(4):
         try:
-            PF = h5['PF_Season%i' % season ][:]
+            PF = dv['PF_Season%i' % season ][:]
             plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
         except:
             pass
@@ -568,13 +246,13 @@ def morton(h5):
     cax.yaxis.set_visible(False)
     cax.add_artist(at)
     sca(axStack)
-    plotManyTrans(h5)
+    plotManyTrans(dv)
  
     gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
 
-def plotManyTrans(h5):
-    PF = h5['lcPF0'][:]
-    numTrans = (PF['t'] / h5.attrs['P']).astype(int) # number of the transit
+def plotManyTrans(dv):
+    PF = dv['lcPF0'][:]
+    numTrans = (PF['t'] / dv.attrs['P']).astype(int) # number of the transit
     iTrans   = np.digitize(numTrans,np.unique(numTrans))
     xL,yL,qL = [],[],[]
 
@@ -586,7 +264,7 @@ def plotManyTrans(h5):
     nTrans = len(xL)
     kw = {}
     kw['wData'] = np.nanmax([x.ptp() for x in xL]) * 1.1
-    kw['hData'] = h5.attrs['df'] * 1e-6
+    kw['hData'] = dv.attrs['df'] * 1e-6
 
     mad = np.median(np.abs(np.hstack(yL)))
     hStepData = 6 * mad
@@ -658,11 +336,11 @@ def rebin(xL,yL,bfac):
         iStart+=bfac
     return xL2,yL2
 
-def qstackplot(h5,func):
+def qstackplot(dv,func):
     """
 
     """
-    qL = [int(i[0][1:]) for i in h5['/raw'].items()]
+    qL = [int(i[0][1:]) for i in dv['/raw'].items()]
 
     qmi,qma = min(qL),max(qL)
     for i in range(qmi,qma+1):
@@ -672,7 +350,7 @@ def qstackplot(h5,func):
             label = False
 
         if qL.count(i)==1:
-            func(h5,i,label)
+            func(dv,i,label)
 
 def helper(i):
     season = (i+1) % 4    
@@ -697,17 +375,17 @@ def addtrans(raw,y,label,plot):
         plot(t[id] ,ym[id] + 0.001,**finjkw)
 
 
-def plotraw(h5):
+def plotraw(dv):
     """
     """
 
-    qlc = h5['/pp/cal'][:]
+    qlc = dv['/pp/cal'][:]
     t   = qlc['t']
     fm = ma.masked_array(qlc['f'],qlc['fmask'])
     plot(t,fm,label='Raw Photometry')
 
-def plotcal(h5):
-    qlc = h5['/pp/cal'][:]
+def plotcal(dv):
+    qlc = dv['/pp/cal'][:]
     t   = qlc['t']
 
     fdt  = ma.masked_array(qlc['fdt'],qlc['fmask'])
@@ -718,23 +396,23 @@ def plotcal(h5):
     plot(t ,fcal -0.001,color='k',label='Calibrated Photometry')
     legend()
 
-def plotdt(h5):
-    qlc = h5['/pp/cal'][:]
+def plotdt(dv):
+    qlc = dv['/pp/cal'][:]
     t   = qlc['t']
     fdt = ma.masked_array(qlc['fdt'],qlc['fmask'])
     plot(t,fdt,label='Detrended Photometry')
 
 
-def plot_lc(h5):
+def plot_lc(dv):
     fig,axL = subplots(nrows=2,figsize=(20,12),sharex=True)
 
     sca(axL[0])
-    plotraw(h5)
+    plotraw(dv)
     legend()
 
     sca(axL[1])
-    plotdt(h5)
-    plotcal(h5)
+    plotdt(dv)
+    plotcal(dv)
     legend()
     setp(fig,tight_layout=True)
 
@@ -813,13 +491,31 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
  
     return sb
 
+
+def wrapHelp(dv,x,ym,d):
+    stackkw = dict(step=3*dv.mean*1e6,P=dv.P,t0=dv.t0)
+    stack(x,ym,**stackkw)
+    pltkw = dict(alpha=0.2)
+    stack(x,ym.data,pltkw=pltkw,**stackkw)    
+    autoscale(tight=True)
+
 def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     """
-    Plot the SES    
+    Stack a long time series.
 
-    time : plot time since mid transit 
-    
-    set colors by changing the 'axes.colorcycle'
+    Parameters
+    ----------
+    t : time (independent variable)
+    y : y (dependent variable)
+    P : Period at which to break time series
+    t0 : time of transit (put at phase = 0.25)
+    time : plot time since mid transit (as opposed to phase)
+    step : spacing between the traces
+    maxhlines : maximum number of horizontal lines
+
+    Notes
+    -----
+    Will alternate colors of the traces according to the axes.colorcycle
     """
     ax = gca()
     t = t.copy()
@@ -834,7 +530,6 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     label = np.floor(t/P+1./4).astype(int) 
     labelL = unique(label)
 
-
     df  = pd.DataFrame(labelL,columns=['label'])
 
     row,col = np.modf(1.*df.label/maxhlines)
@@ -844,7 +539,6 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     df['xshft'] = col
     df['yshft'] = -df.row*step
     df['tmid']  = df['label']*P-dt
-
 
     def plot(x):
         blabel = label==x['label']
@@ -860,29 +554,5 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
 
     df.apply(plot,axis=1)
     return df
-class TransitModel(tval.TransitModel):
-    """
-    Simple plotting extension of the normal TransitModel class:
-    """
-    def plot(self):
-        gs = GridSpec(4,1)        
-        fig = gcf()
-        axTrans = fig.add_subplot(gs[1:])
-        self.plottrans()
-        yticksppm()
-        legend()
 
-        axRes   = fig.add_subplot(gs[0])
-        self.plotres()
-        yticksppm()
-        tight_layout()
-        legend()
 
-    def plottrans(self):
-        plot(self.t,self.f,'.',label='PF LC')
-        self.ffit = self.MA(self.pdict,self.t)
-        plot(self.t,self.ffit,lw=2,alpha=2,label='Fit')
-    def plotres(self):
-        plot(self.t,self.f-self.ffit,lw=1,alpha=1,label='Residuals')        
-
-    
