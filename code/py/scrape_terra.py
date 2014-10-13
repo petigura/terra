@@ -9,7 +9,8 @@ from argparse import ArgumentParser
 import numpy as np
 from cStringIO import StringIO as sio
 import tval
-
+import transit_model as tm
+import h5plus
 
 # Table with fits column description
 top_attrs="""\
@@ -24,7 +25,6 @@ top_attrs="""\
 "grid_plot_filename","TERRA plot file name"
 """
 
-
 top_attrs = sio(top_attrs)
 top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
 top_attrs = top_attrs.dropna()
@@ -36,22 +36,32 @@ def dv_h5_scrape(h5file,verbose=True):
     d = {}
 
     with h5py.File(h5file,'r') as h5:
-        def writekey(d,dict_key,attrs_key,cast):
+        def writekey(d,dict_key,attrs_key):
             d[dict_key] = None
             try:
-                d[dict_key] = cast(h5.attrs[attrs_key])
+                d[dict_key] = h5.attrs[attrs_key]
             except KeyError:
                 print "KeyError %s" %attrs_key
 
         for k in top_attrs.field:
-            writekey(d,k,k,lambda x : x)
+            writekey(d,k,k)
 
-    try:
-        dv = tval.read_hdf(h5file,'/dv')
-        d = dict(d,**dv.get_attrs_dict())   
-    except:
-        pass
+    def append_attrs_dict(d,h5file,groupname,prefix=''):
+        try:
+            io = h5plus.read_iohelper(h5file,groupname)
+            d2 = io.get_attrs_dict()
+            oldkeys = d2.keys()
+            newkeys = [prefix+o for o in oldkeys]
+            d2 = dict([(nk,d2[ok]) for nk,ok in zip(newkeys,oldkeys)])
+            return dict(d,**d2)
+        except:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print "%s: %s: %s" %  (groupname,exc_type,exc_value)
 
+    d = append_attrs_dict(d,h5file,'/dv')
+    d = append_attrs_dict(d,h5file,'/dv/fit',prefix='fit_')
+    print d
+            
     return d
 
 def dict2insert(d):
@@ -60,42 +70,6 @@ def dict2insert(d):
     sqlcmd = 'INSERT INTO candidate %s VALUES %s' % (names,strtup)
     values = tuple(d.values())
     return sqlcmd,values
-
-schema = """
-CREATE TABLE candidate (
-  grid_basedir TEXT,
-  grid_h5_filename TEXT,
-  grid_plot_filename TEXT,
-  id REAL,
-  outfile REAL,
-  phot_basedir TEXT,
-  phot_fits_filename TEXT,
-  phot_plot_filename TEXT,
-  s2n REAL,
-  s2ncut REAL,
-  starname TEXT,
-  t0 REAL,
-  tdur REAL,
-  noise REAL, 
-  SES_3 REAL, 
-  SES_2 REAL, 
-  SES_1 REAL, 
-  SES_0 REAL, 
-  autor REAL, 
-  s2ncut_t0 REAL, 
-  SES_even REAL, 
-  ph_SE REAL, 
-  t0shft_SE REAL, 
-  twd INT, 
-  SES_odd REAL, 
-  P REAL, 
-  Pcad REAL, 
-  grass REAL,
-  s2ncut_mean REAL, 
-  num_trans INT,
-  mean REAL
-);
-"""
 
 if __name__=='__main__':
     p = ArgumentParser(description='Scrape attributes from grid.h5 files')
@@ -106,6 +80,10 @@ if __name__=='__main__':
     # If table doesn't exist yet, create it.
     import os.path
     if not os.path.isfile(args.dbfile):
+        schemafile = os.path.join(os.environ['K2_DIR'],
+                              'code/py/candidate_schema.sql')
+        with open(schemafile) as f:
+            schema = f.read()
         con = sqlite3.connect(args.dbfile)
         cur = con.cursor()
         cur.execute(schema)

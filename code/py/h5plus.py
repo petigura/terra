@@ -98,27 +98,32 @@ class iohelper(object):
       desc = desc_list[i]
       return value,desc
 
+   def get_attrs_dict(self):
+      # Just return a dictionary of all the attributes
+      return dict([(k,getattr(self,k)) for k in self.attrs_keys])
+
    def to_hdf(self,h5file,group):
-      h5 = File(h5file)
-      group = h5.create_group(group)
+      with File(h5file) as h5:
+         group = h5.create_group(group)
 
-      for k in self.attrs_keys:
-         value,desc = self.get_valuedesc(
-            k,self.attrs_keys,self.attrs_desc)
-         group.attrs[k] = value
-         group.attrs[k+'_description'] = desc
+         for k in self.attrs_keys:
+            value,desc = self.get_valuedesc(
+               k,self.attrs_keys,self.attrs_desc)
+            group.attrs[k] = value
+            group.attrs[k+'_description'] = desc
 
-      for k in self.dset_keys:
-         value,desc = self.get_valuedesc(
-            k,self.dset_keys,self.dset_desc)
-         group[k] = value
-         group[k].attrs['description'] = desc
+         for k in self.dset_keys:
+            value,desc = self.get_valuedesc(
+               k,self.dset_keys,self.dset_desc)
+            group[k] = value
+            group[k].attrs['description'] = desc
+
+         group.attrs['attrs_keys'] = self.attrs_keys
+         group.attrs['dset_keys'] = self.dset_keys
+
+         group.attrs['attrs_desc'] = self.attrs_desc
+         group.attrs['dset_desc'] = self.dset_desc
       
-      group.attrs['attrs_keys'] = self.attrs_keys
-      group.attrs['dset_keys'] = self.dset_keys
-
-      group.attrs['attrs_desc'] = self.attrs_desc
-      group.attrs['dset_desc'] = self.dset_desc
 
 def read_iohelper(h5file,group):
    io = iohelper()

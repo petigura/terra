@@ -290,7 +290,8 @@ def data_validation(par):
         plt.gcf().savefig(figpath)
         plt.close() 
         print "created %s" % figpath
-
+        with h5py.File(outfile) as h5:
+            h5.attrs['grid_plot_filename'] = os.path.basename(figpath)        
 
 def multiCopyCut(file0,file1,pdict=None):
     """

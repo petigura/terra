@@ -81,10 +81,6 @@ class DV(h5plus.iohelper):
         self.t  = self.lc['t']
 
 
-    def get_attrs_dict(self):
-        # Just return a dictionary of all the attributes
-        return dict([(k,getattr(self,k)) for k in self.attrs_keys])
-
     #
     # Functions for adding features to DV object
     #
@@ -315,6 +311,8 @@ class DV(h5plus.iohelper):
         self.add_dset('corr',corr,description='Auto correlation amplitude')
         self.add_attr('autor',autor,description=\
             'Ratio of second highest peak to primary autocorrelation peak')
+
+
 
 
 def read_hdf(h5file,group):

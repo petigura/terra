@@ -6,6 +6,8 @@ import pandas as pd
 import h5plus 
 import keptoy
 
+import sys
+
 class TransitModel(h5plus.iohelper):
     """
     TransitModel
@@ -62,23 +64,29 @@ class TransitModel(h5plus.iohelper):
         super(TransitModel,self).__init__()
 
         # Protect input arrays 
-        self.t       = t.copy()
-        self.f       = f.copy()
-        self.ferr    = ferr.copy()
-        self.climb   = climb
-        self.pdict   = pdict
-        self.fixdict = fixdict
+        t = t.copy()
+        f = f.copy()
+        ferr = ferr.copy()
 
-        # Strip nans from t, y, and err
+       # Strip nans from t, y, and err
         b = np.vstack( map(np.isnan, [t,f,ferr]) ) 
         b = b.astype(int).sum(axis=0) == 0 
         b = b & (ferr > 0.)
 
         if b.sum() < b.size:
             print "removing %i measurements " % (b.size - b.sum())
-            self.t    = t[b]
-            self.f    = f[b]
-            self.ferr = ferr[b]
+            t = t[b]
+            f = f[b]
+            ferr = ferr[b]
+
+        self.climb   = climb
+        self.pdict   = pdict
+        self.fixdict = fixdict
+        self.add_dset('t',t,description='time')
+        self.add_dset('f',f,description='flux')
+        self.add_dset('ferr',ferr,description='error on flux')
+        self.add_attr('completed_mcmc',0,
+                      description='Sucessful MCMC Run? 0/1=N/Y')
 
     def register(self):
         """
@@ -128,6 +136,19 @@ class TransitModel(h5plus.iohelper):
         X2    = res[1]
         return pdict,X2
 
+    def handel_error(func):
+        """
+        Cut down on the number of try except statements
+        """
+        def wrapped(self):
+            try:
+                func(self)
+            except:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                print "%s: %s: %s" %  (func.__name__,exc_type,exc_value)
+        return wrapped
+
+    @handel_error
     def MCMC(self):
         """
         Run MCMC
@@ -184,15 +205,20 @@ running MCMC
             else:
                 uncert[k] = np.percentile( chain[k], [15,50,85] )
 
-        self.chain  = chain.to_records(index=False)
-        self.uncert = uncert.to_records(index=False)
-
         nsamp = 200
         ntrial = sampler.flatchain.shape[0]
         id = np.random.random_integers(0,ntrial-1,nsamp)
 
         f = lambda i : self.MA( self.pL2pdict(sampler.flatchain[i]),self.t)
-        self.fits = np.vstack( map(f,id) )         
+        fits = np.vstack( map(f,id) )         
+
+        uncert = uncert.to_records(index=False)
+        chain = chain.to_records(index=False)
+
+        self.add_dset('uncert',uncert,description='uncertainties')
+        self.add_dset('chain',chain,description='MCMC chain')
+        self.add_dset('fits',fits,description='Fits from MCMC chain')
+        self.completed_mcmc = 1 # Note that MCMC was sucessful
 
     def __call__(self,pL):
         """
@@ -202,7 +228,6 @@ running MCMC
         """
         loglike = -self.chi2(pL)
         return loglike
-
 
     def chi2(self,pL):
         pdict   = self.pL2pdict(pL)
@@ -289,12 +314,6 @@ running MCMC
         """
         self.fit = self.MA(self.pdict,self.t)
         self.add_dset('fit',self.fit,description='Best fitting light curve')
-        self.add_dset('t',self.t,description='time')
-        self.add_dset('f',self.f,description='flux')
-        self.add_dset('ferr',self.ferr,description='error on flux')
-        self.add_dset('uncert',self.uncert,description='uncertainties')
-        self.add_dset('chain',self.chain,description='MCMC chain')
-        self.add_dset('fits',self.fits,description='Fits from MCMC chain')
         self.add_attr('p',self.pdict['p'],
                        description='Planet star radius ratio')
         self.add_attr('tau',self.pdict['tau'],
@@ -310,9 +329,6 @@ def read_hdf(h5file,group):
     tm = h5plus.read_iohelper(h5file,group)
     tm.__class__ = TransitModel
     return tm 
-    
-
-
 
 def TM_unitsMCMCdict(d0):
     """
