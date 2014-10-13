@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <title>{{ title }}</title>
+  <meta name="description" content="{{ description }}" />
+</head>
+
+<div id="image">
+  <a href={{phot_url}}>
+  <img src={{phot_url}} width="1000" height="600">
+  </a>
+</div>
+
+<body>
+<table>
+{% for key, value in table.iteritems() %}
+    <tr>
+         <th> {{ key }}
+	 <td> {{ value}}
+    </tr>
+{% endfor %}
+</table>
+
+</body>
+
+
+</html>
