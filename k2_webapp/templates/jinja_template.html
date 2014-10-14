@@ -9,13 +9,26 @@
 
 <div id="image">
   <a href={{phot_url}}>
-  <img src={{phot_url}} width="1000" height="600">
+  <img src={{phot_url}} width="1500" height="900">
   </a>
 </div>
 
 <body>
 <table>
 {% for key, value in table.iteritems() %}
+    <tr>
+         <th> {{ key }}
+	 <td> {{ value}}
+    </tr>
+{% endfor %}
+</table>
+
+</p><p>
+
+
+
+<table>
+{% for key, value in tablelong.iteritems() %}
     <tr>
          <th> {{ key }}
 	 <td> {{ value}}
