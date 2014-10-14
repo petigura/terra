@@ -5,6 +5,7 @@ import sqlite3
 import os.path
 import pandas as pd
 app = Flask(__name__)
+dbpath = os.environ['K2WEBAPP_DB']
 
 #con = psycopg2.connect(host='your_hostname', user='your username', password='your_password', database='your dbname')
 
@@ -17,10 +18,14 @@ def hello():
 
 @app.route('/epic/<starname>')
 def display_plots(starname):
-#    pgcon = psycopg2.connect(host='scidb2.nersc.gov', user='kp2_admin', password='H6bY6tME', database='kp2')
-#    cursor = pgcon.cursor()
-#    con = sqlite3.connect('/project/projectdirs/m1669/www/K2/TPS/C0_10-10/scrape.db')
-    con = sqlite3.connect('scrape.db')
+    # Old code for postgresql
+    # pgcon = psycopg2.connect(host='scidb2.nersc.gov', user='kp2_admin', 
+    # password='H6bY6tME', database='kp2')
+    # cursor = pgcon.cursor()
+
+    # con = sqlite3.connect('/project/projectdirs/m1669/www/K2/TPS/C0_10-10/scrape.db')
+    print "connecting to database %s" % dbpath 
+    con = sqlite3.connect(dbpath)
     cursor = con.cursor()
 
     query = "select grid_basedir from candidate where starname=?" 
