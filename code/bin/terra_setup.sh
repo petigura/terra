@@ -2,7 +2,6 @@
 #!/usr/bin/env bash
 
 echo "Script name: $0"
-echo "$# arguments "
 if [ "$#" -ne 1 ]; 
     then echo "signature: terra_setup.sh pars.sqlite"
     exit 1
@@ -15,15 +14,19 @@ echo ""
 PARDB=$1 # Name of the parameter database
 K2_SCRIPTS=${K2_DIR}/code/py/scripts
 
-read -ep "Enter output directory " TPSDIR
+read -ep "Enter output directory: " TPSDIR
 SCRIPTSDIR=${TPSDIR}/scripts
 OUTPUTDIR=${TPSDIR}/output
+
+echo mkdir -p ${TPSDIR}
+echo mkdir -p ${SCRIPTSDIR}
+echo mkdir -p ${OUTPUTDIR}
 
 mkdir -p ${TPSDIR}
 mkdir -p ${SCRIPTSDIR}
 mkdir -p ${OUTPUTDIR}
 
-read -ep "Enter photometry directory" PHOTDIR
+read -ep "Enter photometry directory: " PHOTDIR
 
 # Generate a list of the EPIC IDs
 find ${PHOTDIR} -name "*.fits" |
@@ -46,12 +49,17 @@ for epic in `cat phot_epic_join.temp`
 do
     STAROUTPUTDIR=${OUTPUTDIR}/${epic}
     GRIDFILE=${STAROUTPUTDIR}/${epic}.grid.h5
-    FITSFILE=${PHOTDIR}/${epic}.fits
+#    LCFILE=${PHOTDIR}/${epic}.fits
+    LCFILE=${PHOTDIR}/output/${epic}.h5
+
+
     echo "# TERRA #"
     echo ". $HOME/k2_setup.sh"
     echo "cd $K2_DIR"
     echo "mkdir -p ${STAROUTPUTDIR}"
-    echo "python ${K2_SCRIPTS}/terraWrap.py pp ${FITSFILE} ${GRIDFILE} ${PARDB} ${epic}"
+    echo "python ${K2_SCRIPTS}/terraWrap.py pp ${LCFILE} ${GRIDFILE} ${PARDB} ${epic}"
+
+
     echo "python ${K2_SCRIPTS}/terraWrap.py grid ${GRIDFILE} ${PARDB} ${epic}"
     echo "python ${K2_SCRIPTS}/terraWrap.py dv ${GRIDFILE} ${PARDB} ${epic}"
     echo "chmod -R o+rX ${STAROUTPUTDIR}"

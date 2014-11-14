@@ -104,7 +104,7 @@ def pp(par):
     outfile = os.path.abspath(outfile)
 
     with h5F(par) as h5:
-        lc = photometry.read_crossfield_fits(path_phot)
+        lc = photometry.read_photometry(path_phot)
 
         h5.create_group('pp')
         h5['/pp/cal'] = lc

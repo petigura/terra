@@ -27,7 +27,9 @@ if __name__=='__main__':
     subparsers = p.add_subparsers()
 
     p_pp = subparsers.add_parser('pp', help='Run the preprocessing module')
-    p_pp.add_argument('path_phot',type=str,help='photometry file <*.fits>')
+    p_pp.add_argument(
+        'path_phot',type=str,help='photometry file *.fits | *.h5')
+
     p_pp.add_argument('outfile',type=str,help='output file <*.grid.h5>')
     p_pp.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
     p_pp.add_argument('index',type=str,help='photometry id')
@@ -48,9 +50,8 @@ if __name__=='__main__':
     args = p.parse_args()
 
     # Import here to save time when just calling help.
-    import matplotlib
-    matplotlib.use('Agg')
     import terra
     import pandas as pd
     import sqlite3
+
     args.func(args)

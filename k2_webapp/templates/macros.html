@@ -1,0 +1,9 @@
+{% macro plot_list(imagepars) %}
+{% for url,w in imagepars %}
+<div id="image">
+  <a href={{url}}>
+  <img src={{url}} width={{w}}>
+  </a>
+</div>
+{% endfor %}
+{% endmacro %}

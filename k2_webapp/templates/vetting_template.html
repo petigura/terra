@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-
-  <title>{{ title }}</title>
-  <meta name="description" content="{{ description }}" />
+  <title>K2 Vetting</title>
 </head>
 
-<div id="image">
-  <a href={{phot_url}}>
-  <img src={{phot_url}} width="1500" height="900">
-  </a>
-</div>
+<form method="post" action="{{ url_for('hello') }}">
+<input type="submit" name="isreal" value="Real">
+<input type="submit" name="isfake" value="Not real">
+</form>
+
+{% from 'macros.html' import plot_list %}
+{{plot_list(tps_imagepars)}}
+{{plot_list(phot_imagepars)}}
 
 <body>
 <table>
@@ -24,8 +25,6 @@
 </table>
 
 </p><p>
-
-
 
 <table>
 {% for key, value in tablelong.iteritems() %}

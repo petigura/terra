@@ -328,6 +328,7 @@ def Ceng2C0(lc0):
 import glob
 from pdplus import LittleEndian as LE
 
+
 ts,_,_,_,_,_ = read_k2_fits(
     '%(K2_DIR)s/pixel/C0/ktwo200000818-c00_lpd-targ.fits' % os.environ)
 
@@ -349,13 +350,12 @@ import cPickle as pickle
 from pixel_decorrelation import baseObject
 
 keys = 'cad cleanFlux noThrusterFiring'.split()
-def read_crossfield_fits(path,k2_camp='C0'):
+def read_photometry_crossfield(path,k2_camp='C0'):
     if k2_camp=='Ceng':
         lc = read_cal('Ceng.cal.h5',60017809)
         lc0 = pd.DataFrame(lc)
     elif k2_camp=='C0':
         lc0 = lc0_C0
-
 
     keys = 'cad cleanFlux noThrusterFiring'.split()
     if path.count('.pickle') > 0:
@@ -387,3 +387,24 @@ def read_crossfield_fits(path,k2_camp='C0'):
     #lc = lc.drop(dropkeys,axis=1)
     lc = np.array(lc.to_records(index=False))
     return lc 
+
+
+def read_photometry(path):
+    """
+    Path to photometry
+    """
+
+    print "reading in %s" %path
+    if (path.count('.pickle') + path.count('.fits')) > 0:
+        lc = read_photometry_crossfield(path)
+    if path.count('.h5') > 0:
+        lc = pd.read_hdf(path,'lc0')
+        lc['f'] = lc['fdt_time_xy']
+
+        lc0 = lc0_C0['cad t'.split()]
+        lc = pd.merge(lc0,lc.drop('t',axis=1),on='cad',how='left')
+        lc['fmask'] = (lc['fmask']!=False)
+
+        lc = np.array(lc.to_records(index=False))
+    print "lc.size " + str(lc.size)
+    return lc
