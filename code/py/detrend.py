@@ -12,7 +12,7 @@ dmi = 1.    # remove strips of data that are less than 1 day long.
 gmi = 1/24. # Let's not worry about gaps that are 1 hour long
 nq = 8
 
-def GPdt(xi,x,y):
+def GPdt(xi,x,y,corrlen=5):
     """
     Gaussian Process-based detrending
 
@@ -23,7 +23,6 @@ def GPdt(xi,x,y):
         """
         GP squared exponential kernel
         """
-        corrlen = 5. # Assume measurements are correlated with this scale
         sqdist  = np.sum(a**2,1).reshape(-1,1) + \
                   np.sum(b**2,1) - \
                   2*np.dot(a, b.T)

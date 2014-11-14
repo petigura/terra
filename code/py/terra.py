@@ -112,14 +112,14 @@ def pp(par):
         if par['type'].find('mc') != -1:
             inj(h5,par)
 
-        lc = h5['/pp/cal'][:]
-        lc = prepro.rdt(lc) # detrend light curve
-        
-
         # Hack to get around no calibration step
         for k in 'fcal fit'.split():
             lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
         lc['fcal'] = lc['f']
+
+        isOutlier = prepro.isOutlier(fcal,method='two-sided')
+        lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
+        lc['fmask'] = lc['fmask'] | lc['isOutlier']
 
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc

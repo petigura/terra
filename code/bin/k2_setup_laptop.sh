@@ -11,5 +11,6 @@ export PATH=${PATH}:${K2_DIR}/code/bin/
 export PATH=${PATH}:${K2_DIR}/code/py/
 export K2PHOTFILES=${K2PHOT_DIR}/k2photfiles/
 export K2WEBAPP_DB=${K2_DIR}/scrape.db
+
 cd $K2_DIR
 

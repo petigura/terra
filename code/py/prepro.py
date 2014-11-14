@@ -459,7 +459,7 @@ def isStep(r,fmask):
             
     return step,isStep
 
-def isOutlier(f):
+def isOutlier(f,method='two-sided'):
     """
     Is Outlier
 
@@ -474,29 +474,18 @@ def isOutlier(f):
     mask : Boolean array. True is outlier.
     """
 
-    medf = nd.median_filter(f,size=4)
-    resf = f - medf
-    good = ~np.isnan(resf)
-    resfcomp = resf[good]
-    lo,up = np.percentile(resfcomp,0.1),np.percentile(resfcomp,99.9)    
-    return good & ( (resf > up) | (resf < lo) )
-
-def isCR(f):
-    """
-    Is Cosmic Ray
-
-    Identifies single outliers that are > 5 sigma surronding measurements
-
-    Returns
-    -------
-    cr : Boolean array. True is cosmic ray
-    """
-
     fmed = nd.median_filter(f,size=4)
     fhpf = f-fmed
-    sig = 1.48*np.median(np.abs(fhpf))
-    cr = fhpf > 10*sig
-    return cr
+
+    if method.count('sided') > 0:
+        sig = 1.48*np.median(np.abs(fhpf))        
+    if method=='two-sided':
+        return np.abs(fhpf) > 10*sig
+    if method=='one-sided':
+        return fhpf > 10*sig
+    if method=='percentile':
+        lo,up = np.percentile(fhpf,[0.1,99.9])
+        return (fhpf > up) | (fhpf < lo)
 
 
 def noiseyReg(t,dM,thresh=2):
