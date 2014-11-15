@@ -6,6 +6,11 @@ import os.path
 import pandas as pd
 from cStringIO import StringIO as sio
 import copy
+import k2_catalogs
+
+cat = k2_catalogs.read_cat()
+cat.index = cat.epic.astype(str)
+catshort = cat.iloc[::10]
 
 host = os.environ['K2WEBAPP_HOST']
 app = Flask(__name__)
@@ -69,13 +74,16 @@ def tps_imagepars(starname):
     print imagepars
     return imagepars
 
+
 @app.route('/vetting/<starname>')
 def display_vetting(starname):
     dbpath = os.path.join(tps_basedir0,'scrape.db')
     print "connecting to database %s" % dbpath 
     con = sqlite3.connect(dbpath)
     cursor = con.cursor()
-    df = pd.read_sql("select * from candidate where starname=%s" % starname,con)
+    query = "select * from candidate where starname=%s" % starname
+    print query
+    df = pd.read_sql(query,con)
     con.close()
 
     if len(df)==0:
@@ -90,10 +98,26 @@ def display_vetting(starname):
         "tps_imagepars":tps_imagepars(starname),
         "phot_imagepars":phot_imagepars(starname),
         "table":table,
-        "tablelong":tablelong
+        "tablelong":tablelong,
+        "cattable":cat.ix[starname]
     }
-
+    
+    chartkw = dict(
+        coords = cat['ra dec'.split()].itertuples(index=False),
+        starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False),
+        starname = starname
+    )
+    
+    templateVars = dict(templateVars,**chartkw)
+    print templateVars
     return render_template('vetting_template.html',**templateVars)
+
+@app.route('/')
+@app.route('/<starname>/')
+def index(starname):
+    coords = cat['ra dec'.split()].itertuples(index=False)
+    starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False)
+    return render_template('index.html',coords=coords,starname=starname,starcoords=starcoords)
 
 # Insert decision of real / not real into data base 
 @app.route('/hello/',methods=['POST'])
