@@ -1,19 +1,8 @@
-{% from 'macros.html' import plot_list %}
-{% from 'macros.html' import table_list %}
-
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>K2 Vetting</title>
-
-    <!-- 1. Add JQuery and Highcharts in the head of your page -->
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
-    <script src="http://code.highcharts.com/highcharts.js"></script>
-         
-    <!-- 2. You can add print and export feature by adding this line -->
-    <script src="http://code.highcharts.com/modules/exporting.js"></script>
-
 </head>
 
 <form method="post" action="{{ url_for('hello') }}">
@@ -21,19 +10,32 @@
 <input type="submit" name="isfake" value="Not real">
 </form>
 
-{% from 'macros.html' import  scatter_coords %}
-{{ scatter_coords(starname,starcoords,coords) }}
-<div id="scatter" style="width: 450px; height: 450px; margin: 0 auto"></div>
-
-{{table_list(cattable)}}
-
+{% from 'macros.html' import plot_list %}
 {{plot_list(tps_imagepars)}}
 {{plot_list(phot_imagepars)}}
 
+<body>
+<table>
+{% for key, value in table.iteritems() %}
+    <tr>
+         <th> {{ key }}
+	 <td> {{ value}}
+    </tr>
+{% endfor %}
+</table>
 
-{{table_list(table)}}
-{{table_list(tablelong)}}
+</p><p>
 
+<table>
+{% for key, value in tablelong.iteritems() %}
+    <tr>
+         <th> {{ key }}
+	 <td> {{ value}}
+    </tr>
+{% endfor %}
+</table>
+
+</body>
 
 
 </html>
