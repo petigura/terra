@@ -388,6 +388,9 @@ def read_photometry_crossfield(path,k2_camp='C0'):
     lc = np.array(lc.to_records(index=False))
     return lc 
 
+import os
+dfmaskpath = os.path.join(os.environ['K2PHOTFILES'],'C0_fmask_theta.h5')
+dfmask = pd.read_hdf(dfmaskpath,'dfmask')
 
 def read_photometry(path):
     """
@@ -404,6 +407,9 @@ def read_photometry(path):
         lc0 = lc0_C0['cad t'.split()]
         lc = pd.merge(lc0,lc.drop('t',axis=1),on='cad',how='left')
         lc['fmask'] = (lc['fmask']!=False)
+
+        lc = pd.merge(lc,dfmask,on='cad')
+        lc['fmask'] = lc['pmask']
 
         lc = np.array(lc.to_records(index=False))
     print "lc.size " + str(lc.size)

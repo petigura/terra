@@ -13,6 +13,7 @@ CREATE TABLE candidate (
   t0 REAL,
   tdur REAL,
   noise REAL, 
+  f_not_normalized_med REAL,
   SES_3 REAL, 
   SES_2 REAL, 
   SES_1 REAL, 

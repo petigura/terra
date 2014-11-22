@@ -113,13 +113,17 @@ def pp(par):
             inj(h5,par)
 
         # Hack to get around no calibration step
-        for k in 'fcal fit'.split():
+        for k in 'fcal fit fdt'.split():
             lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
         lc['fcal'] = lc['f']
+        lc['fdt'] = lc['f']
 
-        isOutlier = prepro.isOutlier(fcal,method='two-sided')
+        fcal = ma.masked_array(lc['fcal'],lc['fmask'])
+        fcal.fill_value=0
+
+        isOutlier = prepro.isOutlier(fcal.filled(),method='two-sided')
         lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
-        lc['fmask'] = lc['fmask'] | lc['isOutlier']
+        lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
 
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
