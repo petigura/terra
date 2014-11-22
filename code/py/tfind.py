@@ -8,6 +8,8 @@ Future work: implement a general linear function that works along folded columns
 """
 import sys
 import time
+import itertools
+
 
 import scipy
 from scipy import ndimage as nd
@@ -22,6 +24,8 @@ import BLS_cext
 import keptoy
 import keplerio
 import FFA_cext as FFA
+import fold
+
 from config import *
 import config
 import h5plus
@@ -29,6 +33,7 @@ import tval
 import config
 import keptoy
 from keptoy import P2a,a2tdur
+import terra
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
@@ -46,40 +51,62 @@ P2 = int(np.floor(config.P2/keptoy.lc))
 maCadCnt = int( np.floor(config.maCadCnt) )
 cut = 5e3
 
-def grid(h5,parL):
-    """
-    Run the grid search
+def read_hdf(kwargs):
+    with terra.h5F(kwargs) as h5:
+        lc  = h5['/pp/cal'][:]
 
-    Parameters
-    ----------
-    h5   : h5 file. Will results will go in the it0 group.
-    parL : List of dictionaries each with the following keys:
-           Pcad1 - Lower bound of period search (integer # of cadences)
-           Pcad2 - Upper bound + 1
-           twdG  - Range of trial durations to search over
-    """
+    f = lc[ kwargs['fluxField'] ]
+    mask = lc[ kwargs['fluxMask'] ] 
 
-    lc  = h5['/pp/cal'][:]
+    grid = Grid()
+    grid.t = lc['t']
+    grid.fm = ma.masked_array(f,mask,fill_value=0,copy=True)
+    return grid
 
-    f    = lc[ h5.attrs['fluxField'] ]
-    mask = lc[ h5.attrs['fluxMask'] ] 
-    t    = lc['t']
+class Grid(object):
+    def set_parL(self,parL):
+        """
+        Set grid search parameters
 
-    print "running from %i to %i cadences, in %i segments" \
-        % (parL[0]['Pcad1'],parL[-1]['Pcad2'],len(parL))
+        Parameters
+        ----------
+        parL : List of dictionaries each with the following keys:
+               - Pcad1 : Lower bound of period search (integer # of cadences)
+               - Pcad2 : Upper bound + 1
+               - twdG  : Range of trial durations to search over
+        """
+        print pd.DataFrame(parL)
+        self.parL = parL
+        
+    def periodogram(self,mode='std'):
+        if mode=='std':
+            pgram = map(self.pgram_std,self.parL)
+            pgram = pd.concat(pgram)
+            pgram = pgram.sort(['Pcad','s2n'])
+            pgram = pgram.groupby('Pcad',as_index=False).last()
+        if mode=='ffa':
+            pgram = map(self.pgram_ffa,self.parL)
+            pgram = np.hstack(pgram)
+            pgram = pd.DataFrame(pgram)
 
-    rL = []
-    for par in parL:        
-        fm    = ma.masked_array(f,mask,fill_value=0,copy=True)
-        PcadG = np.arange(par['Pcad1'],par['Pcad2'])
-        rtd   = tdpep(t,fm,PcadG,par['twdG'])
-        r     = tdmarg(rtd)
-        rL.append(r)
+        self.pgram = pgram
+        return pgram
 
-    r = np.hstack(rL)
-    it0 = h5.create_group('it0')
-    it0 = h5['it0']
-    it0['RES']   = r
+    def pgram_ffa(self,par):
+        rtd = tdpep(self.t,self.fm,par)
+        r = tdmarg(rtd)
+        return r
+
+    def pgram_std(self,par):
+        pgram = tdpep_std(self.t,self.fm,par)
+        return pgram
+
+    def to_hdf(self,kwargs):
+        with terra.h5F(kwargs) as h5:
+            it0 = h5.create_group('it0')
+            it0 = h5['it0']
+            it0['RES'] = np.array(self.pgram.to_records(index=False))
+
 
 def itOutRej(h5):
     """
@@ -343,7 +370,7 @@ def ses_stats(fm):
     dL['value']*=1e6
     return dL
 
-def tdpep(t,fm,PcadG,twdG):
+def tdpep(t,fm,par):
     """
     Transit-duration - Period - Epoch
 
@@ -365,8 +392,9 @@ def tdpep(t,fm,PcadG,twdG):
           - twd
           - fields in rep
     """
-    assert fm.fill_value ==0
-
+    PcadG = np.arange(par['Pcad1'],par['Pcad2'])
+    twdG = par['twdG']
+    assert fm.fill_value==0
     # Determine the grid of periods that corresponds to integer
     # multiples of cadence values
 
@@ -377,20 +405,16 @@ def tdpep(t,fm,PcadG,twdG):
         twd = twdG[i]
         dM  = mtd(fm,twd)
 
-        # Compute MES over period grid
         func = lambda Pcad: ep(dM,Pcad)
         rep = map(func,PcadG)
         rep = np.hstack(rep)
-
         r   = np.empty(rep.size, dtype=tddtype)
         for k in epdtype.names:
             r[k] = rep[k]
-
-        r['noise'] = ma.median( ma.abs(dM) )        
+        r['noise'] = ma.median( ma.abs(dM) )
         r['twd']   = twd
-        r['t0']    = r['t0cad']*lc + t[0]
+        r['t0']    = r['t0cad']*lc + t[0]        
         rtd.append(r) 
-
     rtd = np.vstack(rtd)
     rtd['s2n'] = rtd['mean']/rtd['noise']*np.sqrt(rtd['count'])
     return rtd
@@ -411,15 +435,14 @@ def ep(dM,Pcad0):
     - 'Pcad'   : Periods that the FFA computed MES 
     """
     
-    t0cad,Pcad,meanF,countF = fold(dM,Pcad0)
+    t0cad,Pcad,meanF,countF = fold_ffa(dM,Pcad0)
     rep = epmarg(t0cad,Pcad,meanF,countF)
     return rep
 
-def fold(dM,Pcad0):
+def fold_ffa(dM,Pcad0):
     """
     Fold on M periods from Pcad0 to Pcad+1 where M is N / Pcad0
     rounded up to the nearest power of 2.
-
     Parameters
     ----------
     dM    : Transit depth estimator
@@ -429,15 +452,11 @@ def fold(dM,Pcad0):
     -------
     t0cad : Array with the trial epochs  [0, ...,  P0]
     Pcad  : Array with the trial periods [P0, ..., P0]
-
     meanF  : Average of the folded columns (does not count masked items)
     countF : Number of non-masked items.    
-
-
     Notes
     -----
     meanF and coundF have the following shape:
-
         ep1 ep2 ep3 ... epP1
         --- --- ---     ----
     P0 |  .   .   .       .
@@ -466,6 +485,117 @@ def fold(dM,Pcad0):
     countF = FFA.FFA(mask) # Number of valid data points
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
+
+
+
+
+
+
+def tdpep_std(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    PcadG = np.arange(par['Pcad1'],par['Pcad2'])
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
+
+    icad = np.arange(ncad)
+
+    data = list(itertools.product(par['twdG'],PcadG))
+    pgram = pd.DataFrame(data=data,columns='twd Pcad'.split())
+    pgram['s2n'] = 0.0
+    pgram['c'] = 0.0
+    pgram['mean'] = 0.0
+    pgram['std'] = 0.0
+    pgram['noise'] = 0.0
+    pgram['t0'] = 0.0
+
+    idx = 0 
+    for twd in par['twdG']:
+        dM = mtd(fm,twd)
+        dM.fill_value=0
+
+        noise = ma.median( ma.abs(dM) )[0]
+
+        for Pcad in PcadG:
+            row,col = fold.wrap_icad(icad,Pcad)
+            c,s,ss = fold.fold_ma(dM.data,dM.mask.astype(int),col)
+
+            # Compute first and second moments
+            mean = s/c
+            std = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
+            s2n = s / np.sqrt(c) / noise            
+
+            # Non-linear part.
+            # - Require 3 or more transits
+            # - Require Consistency among transits
+            b = (c >= 3) & (std < 5 * noise)
+            if np.any(b):
+                s2n = s2n[b]
+                colmax = np.argmax(s2n)
+                pgram.at[idx,'s2n'] = s2n[colmax]
+                pgram.at[idx,'c'] = c[b][colmax]
+                pgram.at[idx,'mean'] = mean[b][colmax]
+                pgram.at[idx,'std'] = std[b][colmax]
+                pgram.at[idx,'t0'] = colmax * Pcad + t[0]
+                pgram.at[idx,'noise'] = noise
+            else:
+                s2n = 0 
+
+            idx+=1
+
+    return pgram
+
+
+def get_frac_Pcad(P):
+    """
+    Return all the fractional periods between P1 and P1 + 1
+    """
+    #    step = 0.25 * P1 * twd / tbase
+    step = 1./P1
+    return np.arange(P,P+1,step)
+
+
+
+def ep2(dM,Pcad0):
+    """
+    """
+    dMW = FFA_cext.XWrap(dM,Pcad0,pow2=True)
+    M   = dMW.shape[0]  # number of rows
+
+    idCol = np.arange(Pcad0,dtype=int)   # id of each column
+    idRow = np.arange(M,dtype=int)       # id of each row
+
+    t0cad = idCol.astype(float)
+    Pcad  = Pcad0 + idRow.astype(float) / (M - 1)
+    Pcad = Pcad[:-1]
+
+    def f(PPcad):
+        dMW = FFA.XWrap(dM,PPcad)
+        dMW.fill_value=0
+
+
+
+        df = pd.DataFrame(t0cad,columns=['t0cad'])
+        df['count'] = dMW.count(axis=0)
+        df['mean'] = dMW.mean(axis=0)
+        df['std'] = dMW.std(axis=0)
+        df['Pcad'] = PPcad
+        return df
+
+
+    df = pd.concat(map(f,Pcad))
+    df = df.drop(df.query('count <= 2').index)
+    df['s2n'] = df['mean'] / df['std']
+    df = df.sort(['Pcad','s2n'])
+
+    #if len(df.query('count <= 2').index) >0:
+    #    import pdb;pdb.set_trace()
+
+    df = df.groupby('Pcad',as_index=False).last()
+    
+    return df
+
 
 def epmarg(t0cad,Pcad,meanF,countF):
     """
@@ -519,47 +649,6 @@ def cadCount(cad,res):
     c,b = np.histogram(cadLL,bins=np.linspace(cadmi,cadma+1,cad.size+1))
     return c
 
-def tdpep2(t,fm,Pcad0,twdG,noiseG):
-    """
-
-    The cubes are 3D datasets with 
-    sCube[i,j,k] 
-    - i Specifies twdG
-    - j Specifies period
-    - k specifies epoch
-
-    """
-    assert fm.fill_value ==0
-
-    # Determine the grid of periods that corresponds to integer
-    # multiples of cadence values
-
-    ntwd  = len(twdG)
-    fmW = FFA.XWrap2(fm,Pcad0,pow2=True)
-    mask = (~fmW.mask).astype(float)
-    fmW.fill_value=0
-
-
-    # Period grid
-    M   = fmW.shape[0]  # number of rows
-    idRow = np.arange(M,dtype=int)       # id of each row
-    Pcad  = Pcad0 + idRow.astype(float) / (M - 1)
-
-    # epoch grid
-    idCol = np.arange(Pcad0,dtype=int)   # id of each column    
-
-    XsumP  = FFA.FFA(fmW.filled()).astype(float)
-    XcntP  = FFA.FFA(mask).astype(float)
-
-#    resL = []
-    return FBLS.cmaxDelTt0(XsumP,XcntP,Pcad0,twdG,noiseG,twdG.size)
-#        resL.append(res)
-        
-#    names = 's2nMa,iMa,kMa'.split(',')
-#    types = [float,int,int]
-#    res = np.array(resL,dtype=zip(names,types)  )
-
-#    return res
 
 def noise(t,fm,twdG):
     # Constant estimation fof the noise for deltaT

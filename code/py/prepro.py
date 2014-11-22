@@ -26,7 +26,6 @@ import detrend
 import h5plus
 import keplerio
 import tfind
-import photometry 
 
 kepdir     = os.environ['KEPDIR']
 cbvdir     = os.path.join(kepdir,'CBV/')

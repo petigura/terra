@@ -199,16 +199,12 @@ def grid(par):
     names = 'P1 P2 Pcad1 Pcad2 delT1 delT2 twdG'.split()
     parL = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
     df = pd.DataFrame(parL,columns=names)
-
-    print "Running grid on %s" % par['outfile'].split('/')[-1]
-    print df.to_string()
-
     parL = [dict(df.ix[i]) for i in df.index]
-    with h5F(par) as h5:     
-        h5.attrs['fluxField']  = par['fluxField']
-        h5.attrs['fluxMask']   = par['fluxMask']
-    
-        tfind.grid(h5,parL) 
+
+    grid = tfind.read_hdf(par)
+    grid.set_parL(parL)    
+    pgram_std = grid.periodogram(mode='std')    
+    grid.to_hdf(par)
 
 def data_validation(par):
     """
@@ -367,7 +363,6 @@ def pardict_print(pardict):
     if pardict.has_key('pngStore'):
         print pardict['pngStore']
     print ""
-
             
 def plot(h5out,pardict):
     import matplotlib

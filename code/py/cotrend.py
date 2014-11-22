@@ -17,7 +17,6 @@ import h5py
 import tfind
 import detrend
 import keplerio
-import photometry
 import prepro
 import stellar
 import h5plus
