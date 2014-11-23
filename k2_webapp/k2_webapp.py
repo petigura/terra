@@ -10,7 +10,6 @@ import k2_catalogs
 
 cat = k2_catalogs.read_cat()
 cat.index = cat.epic.astype(str)
-catshort = cat.iloc[::10]
 
 host = os.environ['K2WEBAPP_HOST']
 app = Flask(__name__)
@@ -66,12 +65,10 @@ def tps_imagepars(starname):
         "/project/projectdirs/m1669/www/",
         "http://portal.nersc.gov/project/m1669/")                         
 
-    print tps_basedir
     tps_basedir = os.path.join(tps_basedir,'output/%s/%s' % (starname,starname))
 
     tps_plots['url'] = tps_basedir + tps_plots['ext']
     imagepars = list(tps_plots['url width'.split()].itertuples(index=False))
-    print imagepars
     return imagepars
 
 
@@ -81,19 +78,27 @@ def display_vetting(starname):
     print "connecting to database %s" % dbpath 
     con = sqlite3.connect(dbpath)
     cursor = con.cursor()
-    query = "select * from candidate where starname=%s" % starname
+    query = """
+SELECT * from candidate 
+GROUP BY starname
+HAVING id=MAX(id)
+AND starname=%s""" % starname
+
     print query
     df = pd.read_sql(query,con)
     con.close()
 
     if len(df)==0:
         return "Star %s not in %s" % (starname,tps_basedir0)
+    if len(df)>1:
+        return "Row returned must be unique"
 
-    print df
-    table = dict(df['P t0 tdur s2n grass num_trans'.split()].iloc[0])
-    tablelong = dict(df.iloc[0])
+    table = df['P t0 tdur s2n grass num_trans'.split()]
+    tablelong = df
+
+    table,tablelong = map(lambda x : dict(x.iloc[0]),[table,tablelong])
+
     table['Depth [ppt]'] = 1e3*tablelong['mean']
-
     templateVars = { 
         "tps_imagepars":tps_imagepars(starname),
         "phot_imagepars":phot_imagepars(starname),
@@ -109,7 +114,6 @@ def display_vetting(starname):
     )
     
     templateVars = dict(templateVars,**chartkw)
-    print templateVars
     return render_template('vetting_template.html',**templateVars)
 
 @app.route('/')
