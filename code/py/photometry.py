@@ -13,6 +13,8 @@ import os
 from astropy.io import fits
 from scipy import ndimage as nd
 from astropy import wcs
+from pdplus import LittleEndian as LE
+
 
 from astropy.stats import median_absolute_deviation as mad
 #from photutils import daofind,aperture_photometry
@@ -331,6 +333,7 @@ from pdplus import LittleEndian as LE
 
 ts,_,_,_,_,_ = read_k2_fits(
     '%(K2_DIR)s/pixel/C0/ktwo200000818-c00_lpd-targ.fits' % os.environ)
+ts = LE(ts)
 
 namemap={'TIME':'t','CADENCENO':'cad'}
 keys = namemap.values() + ['QUALITY']
