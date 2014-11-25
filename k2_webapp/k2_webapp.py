@@ -1,12 +1,13 @@
 #!/usr/bin/env python 
+
 from flask import Flask, render_template, request, url_for
-import psycopg2
 import sqlite3
 import os.path
 import pandas as pd
 from cStringIO import StringIO as sio
 import copy
 import k2_catalogs
+from time import strftime
 
 cat = k2_catalogs.read_cat()
 cat.index = cat.epic.astype(str)
@@ -72,30 +73,77 @@ def tps_imagepars(starname):
     return imagepars
 
 
-@app.route('/vetting/<starname>')
-def display_vetting(starname):
+def is_eKOI_string(d):
+    """
+    Return a string explaining the disposition status of eKOI
+
+    Parameters
+    -----------
+    d : dictionary with 
+        - is_eKOI
+        - is_eKOI_date
+    """
+
+    if d['is_eKOI']==None:
+        outstr = "No disposition" % d
+    else:
+        if d['is_eKOI']==1:
+            outstr = "Designated as eKOI on %(is_eKOI_date)s " % d
+        if d['is_eKOI']==0:
+            outstr = "Designated as not eKOI on %(is_eKOI_date)s " % d
+
+    return  outstr
+        
+@app.route('/vetting/<starname_url>',methods=['GET','POST'])
+def display_vetting(starname_url):
     dbpath = os.path.join(tps_basedir0,'scrape.db')
     print "connecting to database %s" % dbpath 
+
+    # Grab the unique id for candidate #
     con = sqlite3.connect(dbpath)
-    cursor = con.cursor()
+    cur = con.cursor()
     query = """
-SELECT * from candidate 
+SELECT id from candidate 
 GROUP BY starname
 HAVING id=MAX(id)
-AND starname=%s""" % starname
+AND starname=%s""" % starname_url
+    cur.execute(query)
+    id, = cur.fetchone()
 
-    print query
+    # Capture output from form.
+    keys = request.form.keys()
+    if len(keys)==0:
+        pass
+    if (keys.count('is_eKOI')==1) or (keys.count('not_eKOI')==1):
+        if keys.count('is_eKOI')==1:
+            d = dict(is_eKOI=1)
+        if keys.count('not_eKOI')==1:
+            d = dict(is_eKOI=0)
+        d['is_eKOI_date']=strftime("%Y-%m-%d %H:%M:%S")
+
+        con = sqlite3.connect(dbpath)
+        cur = con.cursor()
+        sqlcmd = "UPDATE candidate SET is_eKOI=?,is_eKOI_date=? WHERE id=?"
+        values = (d['is_eKOI'],d['is_eKOI_date'],id)
+        cur.execute(sqlcmd,values)
+        con.commit()
+        con.close()
+
+    con = sqlite3.connect(dbpath)
+    query = "SELECT * from candidate WHERE id=%i" % id
     df = pd.read_sql(query,con)
     con.close()
+
+    starname = starname_url
 
     if len(df)==0:
         return "Star %s not in %s" % (starname,tps_basedir0)
     if len(df)>1:
         return "Row returned must be unique"
 
+    dfdict = dict(df.iloc[0] )
     table = df['P t0 tdur s2n grass num_trans'.split()]
     tablelong = df
-
     table,tablelong = map(lambda x : dict(x.iloc[0]),[table,tablelong])
 
     table['Depth [ppt]'] = 1e3*tablelong['mean']
@@ -105,7 +153,7 @@ AND starname=%s""" % starname
         "table":table,
         "tablelong":tablelong,
         "cattable":cat.ix[starname]
-    }
+   }
     
     chartkw = dict(
         coords = cat['ra dec'.split()].itertuples(index=False),
@@ -114,6 +162,8 @@ AND starname=%s""" % starname
     )
     
     templateVars = dict(templateVars,**chartkw)
+    templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
+
     return render_template('vetting_template.html',**templateVars)
 
 @app.route('/')
