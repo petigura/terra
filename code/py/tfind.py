@@ -30,7 +30,6 @@ tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
-
 def read_hdf(kwargs):
     with terra.h5F(kwargs) as h5:
         lc  = h5['/pp/cal'][:]
@@ -326,34 +325,41 @@ def tdpep_std(t,fm,par):
     pgram['t0'] = 0.0
 
     idx = 0 
+
+    # dtype of the record array returned from tdpep()
+    dtype = [
+        ('c',int),('mean',float),('std',float),('s2n',float),('t0',float) ] 
+
     for twd in par['twdG']:
         dM = mtd(fm,twd)
         dM.fill_value=0
-
         noise = ma.median( ma.abs(dM) )[0]
 
         for Pcad in PcadG:
             row,col = fold.wrap_icad(icad,Pcad)
-            c,s,ss = fold.fold_ma(dM.data,dM.mask.astype(int),col)
+            ncol = np.max(col) + 1 # Starts from 0
+            
+            r = np.empty(ncol,dtype)
+            c,s,ss = fold.fold_col(dM.data,dM.mask.astype(int),col)
 
             # Compute first and second moments
-            mean = s/c
-            std = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
-            s2n = s / np.sqrt(c) / noise            
+            r['mean'] = s/c
+            r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
+            r['s2n'] = s / np.sqrt(c) / noise            
+            r['c'] = c
+            r['t0'] = np.arange(ncol) * config.lc + t[0]
 
             # Non-linear part.
             # - Require 3 or more transits
             # - Require Consistency among transits
-            b = (c >= 3) & (std < 5 * noise)
+            b = (r['c'] >= 3) & (r['std'] < 5 * noise)
             if np.any(b):
-                s2n = s2n[b]
-                colmax = np.argmax(s2n)
-                pgram.at[idx,'s2n'] = s2n[colmax]
-                pgram.at[idx,'c'] = c[b][colmax]
-                pgram.at[idx,'mean'] = mean[b][colmax]
-                pgram.at[idx,'std'] = std[b][colmax]
-                pgram.at[idx,'t0'] = colmax * Pcad + t[0]
+                imax = np.argmax(r['s2n'][b])
+
                 pgram.at[idx,'noise'] = noise
+                for k in 'c mean std s2n t0'.split():
+                    pgram.at[idx,k] = r[k][imax]
+
             else:
                 s2n = 0 
 
