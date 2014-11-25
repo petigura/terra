@@ -52,14 +52,11 @@ do
 #    LCFILE=${PHOTDIR}/${epic}.fits
     LCFILE=${PHOTDIR}/output/${epic}.h5
 
-
-    echo "# TERRA #"
+    echo "# TERRA ${epic} #"
     echo ". $HOME/k2_setup.sh"
     echo "cd $K2_DIR"
     echo "mkdir -p ${STAROUTPUTDIR}"
     echo "python ${K2_SCRIPTS}/terraWrap.py pp ${LCFILE} ${GRIDFILE} ${PARDB} ${epic}"
-
-
     echo "python ${K2_SCRIPTS}/terraWrap.py grid ${GRIDFILE} ${PARDB} ${epic}"
     echo "python ${K2_SCRIPTS}/terraWrap.py dv ${GRIDFILE} ${PARDB} ${epic}"
     echo "chmod -R o+rX ${STAROUTPUTDIR}"
