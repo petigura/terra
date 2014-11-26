@@ -3,12 +3,10 @@ import h5py
 import sys
 import sqlite3
 import glob
-import tval
 import os
 from argparse import ArgumentParser
 import numpy as np
 from cStringIO import StringIO as sio
-import tval
 import transit_model as tm
 import h5plus
 

@@ -13,6 +13,7 @@ from matplotlib.pylab import *
 import pandas as pd
 from astropy import wcs
 from astropy.io import fits
+from pdplus import LittleEndian as LE
 from astropy.stats import median_absolute_deviation as mad
 import h5py
 
@@ -301,6 +302,7 @@ def Ceng2C0(lc0):
 
 ts,_,_,_,_,_ = read_k2_fits(
     '%(K2_DIR)s/pixel/C0/ktwo200000818-c00_lpd-targ.fits' % os.environ)
+ts = LE(ts)
 
 namemap={'TIME':'t','CADENCENO':'cad'}
 keys = namemap.values() + ['QUALITY']
