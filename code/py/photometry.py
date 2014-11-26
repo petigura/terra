@@ -3,20 +3,22 @@ Module for performing photometry of K2 data.
 
 
 """
-import h5py
+import os
+
+import numpy as np
 from numpy import ma
+from scipy import ndimage as nd
+from scipy import optimize
 from matplotlib.pylab import *
 import pandas as pd
-#import prepro
-import os
-#from config import k2_dir,path_phot
-from astropy.io import fits
-from scipy import ndimage as nd
 from astropy import wcs
-
+from astropy.io import fits
 from astropy.stats import median_absolute_deviation as mad
-#from photutils import daofind,aperture_photometry
-import numpy as np
+import h5py
+
+import k2_catalogs
+import glob
+from pdplus import LittleEndian as LE
 
 def scrape_headers(fL):
     df =[]
@@ -33,9 +35,6 @@ def scrape_headers(fL):
             d['ycen'] = ycen
             df+=[d]
     return df
-
-
-
 
 def plot_med_star(name,stretch='none'):
     ts,cube = read_pix(path_pix,name)
@@ -103,11 +102,6 @@ def read_k2_fits(f,K2_CAMP='C0'):
     b = ts['CADENCENO'] >= start_cad
     return ts[b],cube[b],aper,head0,head1,head2        
 
-
-
-
-
-
 def read_pix(f,name):
     """
     Read in K2 pixel data from h5 repo.
@@ -163,13 +157,6 @@ def SAP_FLUX(i):
 
     return brightest[1]
 
-#from astropy.stats import median_absolute_deviation as mad
-#from photutils import daofind
-#bkg_sigma = 1.48 * mad(image)   
-#from photutils import aperture_photometry
-
-
-
 def get_pos(cube,plot_diag=False):
     """
     """
@@ -179,10 +166,6 @@ def get_pos(cube,plot_diag=False):
 
     x,y = np.mgrid[:image.shape[0],:image.shape[1]]
     image_clip = image.copy()
-
-#    bin =  (15 <= x) & (x <= 35) & (15 <= y) & (y <= 35) 
-#    image_clip[~bin] = 0 
-
 
     # Perform median subtraction
     bkg_sigma = 1.48 * mad(image)   
@@ -270,38 +253,29 @@ def r2fm(r,field):
     """
     return ma.masked_array(r[field],r['fmask'])
 
-from scipy.optimize import fmin
-import stellar
 
-def phot_vs_kepmag(plot_diag=False):
-    with h5py.File(path_phot,'r') as h5:
-        fraw = h5['dt']['fraw']
-        epic = h5['epic'][:]
+cat = k2_catalogs.read_cat()
+cat['epic'] = cat.epic.astype(str)
 
-    fmed = np.median(fraw,axis=1)
-    b = fmed > 1 
-    epic = epic[b]
-
-    df0 = stellar.read_cat()
-    df0.index = df0.epic
+def phot_vs_kepmag(df0,plot_diag=False):
     df = df0.copy()
+    
+    df = pd.merge(
+        df,cat['epic kepmag'.split()],left_on='starname',right_on='epic')
 
-    df = df.ix[epic]
-    df['logfmed'] = log10(fmed[b])
+    df['logfmed'] = np.log10(df['f_not_normalized_med'])
 
-    # Fit a line (robust) to log(flux) and kepmag
     p0 = [-1,14]
     obj = lambda p : np.sum(abs(df.logfmed - polyval(p,df.kepmag)))
-    p1 = fmin(obj,p0,disp=0)
+    p1 = optimize.fmin(obj,p0,disp=0)
+    df['logfmed_fit'] = np.polyval(p1,df['kepmag'])
 
-    df['logfmed_resid'] = df.logfmed - polyval(p1,df.kepmag)
     if plot_diag:
         plot(df.kepmag,df.logfmed,'.')
         kepmagi = linspace(9,20,100)
         plot(kepmagi,polyval(p1,kepmagi),lw=2)
         setp(gca(),xlabel='Kepmag',ylabel='Flux')
-
-    return pd.concat([df0,df['logfmed logfmed_resid'.split()]],axis=1)
+    return df
 
 def Ceng2C0(lc0):
     """
@@ -323,10 +297,6 @@ def Ceng2C0(lc0):
         lcC0['t'][s]+=tbase*i
         lcC0['cad'][s]+=lc['cad'].ptp()*i
     return lcC0
-
-
-import glob
-from pdplus import LittleEndian as LE
 
 
 ts,_,_,_,_,_ = read_k2_fits(
@@ -388,7 +358,6 @@ def read_photometry_crossfield(path,k2_camp='C0'):
     lc = np.array(lc.to_records(index=False))
     return lc 
 
-import os
 dfmaskpath = os.path.join(os.environ['K2PHOTFILES'],'C0_fmask_theta.h5')
 dfmask = pd.read_hdf(dfmaskpath,'dfmask')
 
