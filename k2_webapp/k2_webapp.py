@@ -93,9 +93,8 @@ def is_eKOI_string(d):
             outstr = "Designated as not eKOI on %(is_eKOI_date)s " % d
 
     return  outstr
-        
-@app.route('/vetting/<starname_url>',methods=['GET','POST'])
-def display_vetting(starname_url):
+
+def get_display_vetting_templateVars(starname_url):
     dbpath = os.path.join(tps_basedir0,'scrape.db')
     print "connecting to database %s" % dbpath 
 
@@ -163,20 +162,25 @@ AND starname=%s""" % starname_url
     
     templateVars = dict(templateVars,**chartkw)
     templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
+    return templateVars
 
-    return render_template('vetting_template.html',**templateVars)
 
-@app.route('/')
-@app.route('/<starname>/')
-def index(starname):
-    coords = cat['ra dec'.split()].itertuples(index=False)
-    starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False)
-    return render_template('index.html',coords=coords,starname=starname,starcoords=starcoords)
+        
+@app.route('/vetting/<starname_url>',methods=['GET','POST'])
+def display_vetting(starname_url):
+    templateVars = get_display_vetting_templateVars(starname_url)
+    html = render_template('vetting_template.html',**templateVars)
 
-# Insert decision of real / not real into data base 
-@app.route('/hello/',methods=['POST'])
-def hello():
-    return request.form['isreal']
+    return html
+
+@app.route('/vetting/list',methods=['GET','POST'])
+def display_vetting_list():
+
+    starname_list = '202092659 202091740 202135853 202087553 202068686 202072485 202126877 202126880 202094117'.split()
+    starname_url = starname_list[0]
+    templateVars = get_display_vetting_templateVars(starname_url)    
+    templateVars['starname_list'] = starname_list
+    return render_template('vetting_session_template.html',**templateVars)
 
 if __name__=="__main__":
     app.run(host=host,port=25000,debug=True)

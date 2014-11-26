@@ -1,0 +1,31 @@
+
+
+<html lang="en">
+  <head>
+    {% block head %}
+    <meta charset="UTF-8" />
+    <title> {% block title %} {% endblock %}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet" media="screen">
+    <style>
+      .container {
+      max-width: 1000px;
+      }
+    </style>
+
+    <!-- 1. Add JQuery and Highcharts in the head of your page -->
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+    <script src="http://code.highcharts.com/highcharts.js"></script>
+    
+    <!-- 2. You can add print and export feature by adding this line -->
+    <script src="http://code.highcharts.com/modules/exporting.js"></script>
+    {% endblock %}
+
+
+  </head>
+  <body>
+    {% block content %}
+    {% endblock %}
+  </body>
+</html>

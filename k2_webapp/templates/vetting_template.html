@@ -1,58 +1,32 @@
+{% extends "base.html" %}
 {% from 'macros.html' import plot_list %}
 {% from 'macros.html' import table_list %}
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>K2 Vetting</title>
+{% block title %} K2 Vetting {% endblock %}
+{% block head %}
+  {{ super() }}
+{% endblock %}
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet" media="screen">
-    <style>
-      .container {
-      max-width: 1000px;
-      }
-    </style>
+{% block content %}
+  {{ super() }}
 
-    <!-- 1. Add JQuery and Highcharts in the head of your page -->
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
-    <script src="http://code.highcharts.com/highcharts.js"></script>
-    
-    <!-- 2. You can add print and export feature by adding this line -->
-    <script src="http://code.highcharts.com/modules/exporting.js"></script>
-  </head>
-
-  <body>
-
-    <div class="container">
+  <div class="container">
       <h1>Vetting {{ starname }}</h1>
       <form method="post" >
 	<input type="submit" name="is_eKOI" value="eKOI">
 	<input type="submit" name="not_eKOI" value="Not eKOI">
 	{{ is_eKOI_string }} 
       </form>
+  </div>
 
-    </div>
+  {{table_list(cattable)}}
+  {% from 'macros.html' import  scatter_coords %}
+  {{ scatter_coords(starname,starcoords,coords) }}
+  <div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
 
-<!--
-    <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
-    <script src="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
--->
+  {{plot_list(tps_imagepars)}}
+  {{plot_list(phot_imagepars)}}
+  {{table_list(table)}}
+  {{table_list(tablelong)}}
 
-
-
-
-   {{table_list(cattable)}}
-
-    {% from 'macros.html' import  scatter_coords %}
-    {{ scatter_coords(starname,starcoords,coords) }}
-    <div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
-
-   {{plot_list(tps_imagepars)}}
-   {{plot_list(phot_imagepars)}}
-   {{table_list(table)}}
-   {{table_list(tablelong)}}
-
-  </body>
-</html>
+{% endblock %}

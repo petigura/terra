@@ -1,0 +1,17 @@
+{% extends "vetting_template.html" %}
+{% block title %} Vetting Session {% endblock %}
+{% block content %}
+
+  <div class="container">
+      {% for star in starname_list %}
+        {{ star }} 
+      {% endfor %}
+
+      <form method="post" >
+	<input type="submit" name="is_eKOI" value="Prev">
+	<input type="submit" name="not_eKOI" value="Next">
+      </form>
+  </div>
+
+  {{ super() }}
+{% endblock content %}
