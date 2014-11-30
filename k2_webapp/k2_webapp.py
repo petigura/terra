@@ -1,22 +1,32 @@
 #!/usr/bin/env python 
-
-from flask import Flask, render_template, request, url_for
+from cStringIO import StringIO as sio
 import sqlite3
 import os.path
-import pandas as pd
-from cStringIO import StringIO as sio
 import copy
-import k2_catalogs
 from time import strftime
+
+from flask import Flask #  creating a flask application,
+from flask import render_template # render a HTML template with the given context variables
+from flask import request # access the request object which contains the request data
+from flask import url_for # get the URL corresponding to a view
+from flask import session # store and retrieve session variables in every view
+from flask import redirect # redirect to a given URL
+from flask import request # access the request object which contains the request data
+from flask import flash  # to display messages in the template
+
+import pandas as pd
+import k2_catalogs
 
 cat = k2_catalogs.read_cat()
 cat.index = cat.epic.astype(str)
 
 host = os.environ['K2WEBAPP_HOST']
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 
 tps_basedir0 = '/project/projectdirs/m1669/www/K2/TPS/C0_11-12/'
 phot_basedir0 = '/project/projectdirs/m1669/www/K2/photometry/C0_11-12/'
+dbpath = os.path.join(tps_basedir0,'scrape.db')
 
 phot_plots = """\
 width ext
@@ -35,7 +45,6 @@ def phot_imagepars(starname):
         "/project/projectdirs/m1669/www/",
         "http://portal.nersc.gov/project/m1669/")                         
     phot_basename = os.path.join(phot_basedir,'output',starname)
-
     phot_plots['url'] = phot_basename + phot_plots['ext']
     imagepars = list(phot_plots['url width'.split()].itertuples(index=False))
     return imagepars
@@ -43,9 +52,7 @@ def phot_imagepars(starname):
 @app.route('/photometry/<starname>')
 def display_photometry(starname):
     imagepars = phot_imagepars(starname)
-    templateVars = { 
-        "imagepars":imagepars,
-                 }
+    templateVars = {"imagepars":imagepars}
     return render_template('photometry_template.html',**templateVars)
 
 tps_plots = """\
@@ -60,18 +67,13 @@ def tps_imagepars(starname):
     Return image parameters given the starname
     """
     tps_basedir = copy.copy(tps_basedir0)
-
-    
     tps_basedir = tps_basedir.replace(
         "/project/projectdirs/m1669/www/",
         "http://portal.nersc.gov/project/m1669/")                         
-
     tps_basedir = os.path.join(tps_basedir,'output/%s/%s' % (starname,starname))
-
     tps_plots['url'] = tps_basedir + tps_plots['ext']
     imagepars = list(tps_plots['url width'.split()].itertuples(index=False))
     return imagepars
-
 
 def is_eKOI_string(d):
     """
@@ -95,7 +97,6 @@ def is_eKOI_string(d):
     return  outstr
 
 def get_display_vetting_templateVars(starname_url):
-    dbpath = os.path.join(tps_basedir0,'scrape.db')
     print "connecting to database %s" % dbpath 
 
     # Grab the unique id for candidate #
@@ -153,9 +154,11 @@ AND starname=%s""" % starname_url
         "tablelong":tablelong,
         "cattable":cat.ix[starname]
    }
-    
+ 
+    coords = cat['ra dec'.split()].itertuples(index=False)
+    coords = map(list,coords)
     chartkw = dict(
-        coords = cat['ra dec'.split()].itertuples(index=False),
+        coords = coords,
         starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False),
         starname = starname
     )
@@ -163,8 +166,6 @@ AND starname=%s""" % starname_url
     templateVars = dict(templateVars,**chartkw)
     templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
     return templateVars
-
-
         
 @app.route('/vetting/<starname_url>',methods=['GET','POST'])
 def display_vetting(starname_url):
@@ -175,12 +176,70 @@ def display_vetting(starname_url):
 
 @app.route('/vetting/list',methods=['GET','POST'])
 def display_vetting_list():
+    # Handle button input
+    if request.method == "POST":
+        keys = request.form.keys()
+        if keys.count('starname_list')==1:
+            starname_list = request.form.get('starname_list', '').split()
+            session['starname_list'] = map(str,starname_list)
+            session['nstars'] = len(starname_list)
+        if keys.count('prev')==1:
+            session["starlist_index"]-=1
+        if keys.count('next')==1:
+            session["starlist_index"]+=1
+        if keys.count('clear')==1:
+            session.clear()
 
-    starname_list = '202092659 202091740 202135853 202087553 202068686 202072485 202126877 202126880 202094117'.split()
-    starname_url = starname_list[0]
-    templateVars = get_display_vetting_templateVars(starname_url)    
-    templateVars['starname_list'] = starname_list
-    return render_template('vetting_session_template.html',**templateVars)
+    # Default behavior when the page is first loaded
+    if "starname_list" not in session:
+        return render_template('vetting_session_start_template.html')    
+    if len(session["starname_list"])==0:
+        return render_template('vetting_session_start_template.html')    
+    if "starlist_index" not in session:
+        session["starlist_index"] = 0
+
+    if session['starlist_index'] < 0:
+        session['starlist_index'] = 0 
+    if session['starlist_index'] >= session['nstars']:
+        session['starlist_index'] = session['nstars']-1
+
+    res = query_starname_list(session['starname_list'])
+    starname_current = res.iloc[ session['starlist_index']]['starname']
+    res['starname_current'] = (res['starname']==starname_current)
+    res = res.to_dict('records')
+    
+    templateVars = get_display_vetting_templateVars(starname_current)    
+    templateVars['res'] = res
+    template = render_template('vetting_session_template.html',**templateVars)    
+    return template
+
+def query_starname_list(starname_list):
+    # Grab the unique id for candidate #
+
+    con = sqlite3.connect(dbpath)
+    with con:
+        cur = con.cursor()
+        query = """
+SELECT starname,is_eKOI from candidate 
+GROUP BY starname
+HAVING id=MAX(id)
+AND starname in %s""" % str(tuple(starname_list))
+        cur.execute(query)
+        res = cur.fetchall()
+    
+    res = pd.DataFrame(res,columns=['starname','is_eKOI'])
+    res.index = res.starname
+    res = res.ix[starname_list]
+    res['color'] = res.is_eKOI.apply(is_eKOI_to_color)
+    return res
+
+def is_eKOI_to_color(is_eKOI):
+    if is_eKOI==None:
+        return 'black'
+    elif is_eKOI==1:
+        return 'green'
+    elif is_eKOI==0:
+        return 'red'
 
 if __name__=="__main__":
     app.run(host=host,port=25000,debug=True)

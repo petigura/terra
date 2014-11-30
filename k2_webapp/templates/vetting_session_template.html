@@ -3,15 +3,21 @@
 {% block content %}
 
   <div class="container">
-      {% for star in starname_list %}
-        {{ star }} 
+      {% for star in res %}
+      <font color='{{ star['color'] }}'> 
+        {% if star['starname_current'] %}
+          <b> {{star['starname']}} </b>
+        {% else %}
+	  {{star['starname']}} 
+        {% endif %}
+      </font> 
       {% endfor %}
 
       <form method="post" >
-	<input type="submit" name="is_eKOI" value="Prev">
-	<input type="submit" name="not_eKOI" value="Next">
+	<input class="btn btn-primary" type="submit" name="prev" value="Prev">
+	<input class="btn btn-primary" type="submit" name="next" value="Next">
+	<input class="btn btn-primary" type="submit" name="clear" value="clear">
       </form>
   </div>
-
   {{ super() }}
 {% endblock content %}

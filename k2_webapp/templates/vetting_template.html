@@ -5,9 +5,14 @@
 {% block title %} K2 Vetting {% endblock %}
 {% block head %}
   {{ super() }}
+
+
 {% endblock %}
 
 {% block content %}
+
+
+
   {{ super() }}
 
   <div class="container">
@@ -21,12 +26,16 @@
 
   {{table_list(cattable)}}
   {% from 'macros.html' import  scatter_coords %}
+
   {{ scatter_coords(starname,starcoords,coords) }}
   <div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
+
 
   {{plot_list(tps_imagepars)}}
   {{plot_list(phot_imagepars)}}
   {{table_list(table)}}
   {{table_list(tablelong)}}
+
+
 
 {% endblock %}
