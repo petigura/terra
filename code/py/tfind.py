@@ -323,12 +323,20 @@ def tdpep_std(t,fm,par):
     pgram['std'] = 0.0
     pgram['noise'] = 0.0
     pgram['t0'] = 0.0
+    pgram['colmax'] = -1
 
     idx = 0 
 
     # dtype of the record array returned from tdpep()
     dtype = [
-        ('c',int),('mean',float),('std',float),('s2n',float),('t0',float) ] 
+        ('c',int),
+        ('mean',float),
+        ('std',float),
+        ('s2n',float),
+        ('col',int),
+        ('t0',float)] 
+
+
 
     for twd in par['twdG']:
         dM = mtd(fm,twd)
@@ -347,21 +355,22 @@ def tdpep_std(t,fm,par):
             r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
             r['s2n'] = s / np.sqrt(c) / noise            
             r['c'] = c
-            r['t0'] = np.arange(ncol) * config.lc + t[0]
+            r['col'] = np.arange(ncol) 
+            r['t0'] = r['col'] * config.lc + t[0]
 
             # Non-linear part.
             # - Require 3 or more transits
             # - Require Consistency among transits
             b = (r['c'] >= 3) & (r['std'] < 5 * noise)
             if np.any(b):
-                imax = np.argmax(r['s2n'][b])
+                r = r[b] # Cut the columns that don't pass
 
+                imax = np.argmax(r['s2n'])
                 pgram.at[idx,'noise'] = noise
+                pgram.at[idx,'colmax'] = r['col'][imax]
                 for k in 'c mean std s2n t0'.split():
                     pgram.at[idx,k] = r[k][imax]
 
-            else:
-                s2n = 0 
 
             idx+=1
 

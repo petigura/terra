@@ -2,8 +2,6 @@
 Pre-Processing
 
 Process photometry before running the grid search.
-
->>> Computational Module; No Plotting <<<
 """
 import os
 

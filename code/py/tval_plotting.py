@@ -43,7 +43,6 @@ def diag(dv,tpar=False):
            noise 
            s2n
     """
-
     fig = figure(figsize=(20,12))
     gs = GridSpec(8,10)
 

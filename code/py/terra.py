@@ -121,9 +121,13 @@ def pp(par):
         fcal = ma.masked_array(lc['fcal'],lc['fmask'])
         fcal.fill_value=0
 
-        isOutlier = prepro.isOutlier(fcal.filled(),method='two-sided')
+#        isOutlier = prepro.isOutlier(fcal.filled(),method='two-sided')
+
+        isOutlier = np.zeros(fcal.size).astype(bool)
+
         lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
         lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
+
 
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
@@ -208,7 +212,6 @@ def grid(par):
     grid = tfind.read_hdf(par)
     grid.set_parL(parL)    
     pgram_std = grid.periodogram(mode='std')    
-    
     grid.to_hdf(par)
 
 def data_validation(par):
@@ -296,7 +299,7 @@ def data_validation(par):
 
 def multiCopyCut(file0,file1,pdict=None):
     """
-    Multi Planet Copy Cut
+]    Multi Planet Copy Cut
 
     Copys the calibrated light curve to file1. Cuts the transit out.
     """
