@@ -216,27 +216,22 @@ class DV(h5plus.iohelper):
         key = 'lcPF%i' % ph
         assert hasattr(self,key),'Must run at_phaseFold first' 
         lcPF = getattr(self,key)
+        lcPF = pd.DataFrame(lcPF['tPF f'.split()])
 
-        tPF  = lcPF['tPF']
-        f    = lcPF['f']
-
-        xmi,xma = tPF.min(),tPF.max() 
-        bw       = bwmin / 60./24. # converting minutes to days
-        nbins    = xma-xmi
-
-        nbins = int( np.round( (xma-xmi)/bw ) )
         # Add a tiny bit to xma to get the last element
-        bins  = np.linspace(xmi,xma+bw*0.001,nbins+1 )
-        tb    = 0.5*(bins[1:]+bins[:-1])
+        bw = bwmin / 60./24. # converting minutes to days
+        xmi,xma = lcPF.tPF.min(),lcPF.tPF.max() 
+        nbins = int( np.round( (xma-xmi)/bw ) )
+        bins = np.linspace(xmi-0.001,xma,nbins+1)
+        tb = 0.5*(bins[1:]+bins[:-1])
 
-        blcPF =  np.array([tb],dtype=[('tb',float)])
-        dfuncs = {'count':ma.count,'mean':ma.mean,'med':ma.median,'std':ma.std}
-        for k in dfuncs.keys():
-            func  = dfuncs[k]
-            yapply = bapply(tPF,f,bins,func)
-            blcPF = mlab.rec_append_fields(blcPF,k,yapply)
-
-        blcPF = blcPF.flatten()
+        # Compute info along columns
+        g = df.groupby(pd.cut(df.tPF,bins))
+        blcPF = g['f'].agg([np.size, np.mean, np.std, np.median])
+        blcPF['tb'] = tb
+        blcPF = blcPF.rename(columns={'size':'count','median':'med'})
+        blcPF = blcPF.dropna()
+        blcPF = blcPF.to_records(index=False)
 
         d = dict(ph=ph,bwmin=bwmin,key=key)
         name  = 'blc%(bwmin)iPF%(ph)i' % d
