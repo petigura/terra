@@ -226,7 +226,7 @@ class DV(h5plus.iohelper):
         tb = 0.5*(bins[1:]+bins[:-1])
 
         # Compute info along columns
-        g = df.groupby(pd.cut(df.tPF,bins))
+        g = lcPF.groupby(pd.cut(lcPF.tPF,bins))
         blcPF = g['f'].agg([np.size, np.mean, np.std, np.median])
         blcPF['tb'] = tb
         blcPF = blcPF.rename(columns={'size':'count','median':'med'})
