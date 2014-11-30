@@ -1,23 +1,36 @@
 {% extends "vetting_template.html" %}
 {% block title %} Vetting Session {% endblock %}
-{% block content %}
 
-  <div class="container">
-      {% for star in res %}
-      <font color='{{ star['color'] }}'> 
-        {% if star['starname_current'] %}
-          <b> {{star['starname']}} </b>
-        {% else %}
-	  {{star['starname']}} 
-        {% endif %}
-      </font> 
-      {% endfor %}
 
-      <form method="post" >
-	<input class="btn btn-primary" type="submit" name="prev" value="Prev">
-	<input class="btn btn-primary" type="submit" name="next" value="Next">
-	<input class="btn btn-primary" type="submit" name="clear" value="clear">
-      </form>
-  </div>
-  {{ super() }}
-{% endblock content %}
+{% block sidebar %}
+{{ super() }}
+<div class="container">
+  {% for star in res %}
+  <font color='{{ star['color'] }}'> 
+    {% if star['starname_current'] %}
+    <b> {{star['starname']}} </b>
+    {% else %}
+    {{star['starname']}} 
+    {% endif %}
+  </font> 
+  {% endfor %}
+
+</div>
+{% endblock %}
+
+{% block main %}
+
+  {% block buttons %}  
+    {{ super() }}
+    <form method="post" >
+      <input class="btn btn-primary" type="submit" name="prev" value="Prev">
+      <input class="btn btn-primary" type="submit" name="next" value="Next">
+      <input class="btn btn-primary" type="submit" name="clear" value="clear">
+    </form>
+  {% endblock %}
+
+  {% block content %}
+    {{ super() }}
+  {% endblock %}
+
+{% endblock %}

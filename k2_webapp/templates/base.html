@@ -23,12 +23,48 @@
     {% endblock %}
 
 
+    <style>
+    #header {
+    background:#ddd;
+    }
+    
+    #nav {
+    background:#c99;
+    }
+    
+    #main {
+    float:left;
+    width:1000px;
+    }
+    
+    #sidebar {
+    float:right;
+    width:350px;
+    }
+    
+    #wrap {
+    width:1350px;
+    margin:0 auto;
+    }
+    </style>
+
   </head>
   <body>
+    <div id="wrap">
+      <div id="header">
+      {% block header %}
+      {% endblock %}
+      </div>
 
-    {% block content %}
-    {% endblock %}
+      <div id="main">
+      {% block main %}
+      {% endblock %}
+      </div>
 
-
+      <div id="sidebar">
+	{% block sidebar %}
+	{% endblock %}
+      </div>
+    </div>
   </body>
 </html>

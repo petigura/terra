@@ -171,7 +171,7 @@ AND starname=%s""" % starname_url
 def display_vetting(starname_url):
     templateVars = get_display_vetting_templateVars(starname_url)
     html = render_template('vetting_template.html',**templateVars)
-
+    print html
     return html
 
 @app.route('/vetting/list',methods=['GET','POST'])
