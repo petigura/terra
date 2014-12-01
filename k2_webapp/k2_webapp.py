@@ -5,6 +5,8 @@ import os.path
 import copy
 from time import strftime
 
+import numpy as np
+
 from flask import Flask #  creating a flask application,
 from flask import render_template # render a HTML template with the given context variables
 from flask import request # access the request object which contains the request data
@@ -94,22 +96,41 @@ def is_eKOI_string(d):
         if d['is_eKOI']==0:
             outstr = "Designated as not eKOI on %(is_eKOI_date)s " % d
 
-    return  outstr
+    return outstr
 
-def get_display_vetting_templateVars(starname_url):
-    print "connecting to database %s" % dbpath 
+def is_EB_string(d):
+    """
+    Return a string explaining the disposition status of EB
 
-    # Grab the unique id for candidate #
+    Parameters
+    -----------
+    d : dictionary with 
+        - is_EB
+        - is_EB_date
+    """
+
+    is_EB = d['is_EB']
+    
+    if is_EB==None:
+        outstr = "No disposition" % d
+    else:
+        outstr = "Designated is %s on %s " % (is_EB,d['is_EB_date'])
+    return outstr
+
+def starname_to_dbidx(starname):
     con = sqlite3.connect(dbpath)
-    cur = con.cursor()
-    query = """
+    with con:
+        cur = con.cursor()
+        query = """
 SELECT id from candidate 
 GROUP BY starname
 HAVING id=MAX(id)
-AND starname=%s""" % starname_url
+AND starname=%s""" % starname
     cur.execute(query)
-    id, = cur.fetchone()
+    dbidx, = cur.fetchone()
+    return dbidx
 
+def is_eKOI_insert(dbidx):
     # Capture output from form.
     keys = request.form.keys()
     if len(keys)==0:
@@ -119,18 +140,45 @@ AND starname=%s""" % starname_url
             d = dict(is_eKOI=1)
         if keys.count('not_eKOI')==1:
             d = dict(is_eKOI=0)
-        d['is_eKOI_date']=strftime("%Y-%m-%d %H:%M:%S")
+        d['is_eKOI_date'] = strftime("%Y-%m-%d %H:%M:%S")
 
-        con = sqlite3.connect(dbpath)
-        cur = con.cursor()
         sqlcmd = "UPDATE candidate SET is_eKOI=?,is_eKOI_date=? WHERE id=?"
-        values = (d['is_eKOI'],d['is_eKOI_date'],id)
-        cur.execute(sqlcmd,values)
-        con.commit()
-        con.close()
+        values = (d['is_eKOI'],d['is_eKOI_date'],dbidx)
+        con = sqlite3.connect(dbpath)
+        with con:
+            cur = con.cursor()
+            cur.execute(sqlcmd,values)
+
+def is_EB_insert(dbidx):
+    # Capture output from form.
+    keys = request.form.keys()
+    print keys
+        
+    if np.sum([keys.count(k) for k in is_EB_buttons.keys()])==1:
+        values = (keys[0],strftime("%Y-%m-%d %H:%M:%S"),dbidx)
+        sqlcmd = "UPDATE candidate SET is_EB=?,is_EB_date=? WHERE id=?"
+        con = sqlite3.connect(dbpath)
+        with con:
+            cur = con.cursor()
+            cur.execute(sqlcmd,values)
+    else:
+        pass
+
+is_EB_buttons = {
+    'Y_SE':'Y Secondary Eclipse',
+    'Y_OOT':'Y OOT Variability',
+    'N':'N'
+}
+
+def get_display_vetting_templateVars(starname_url):
+    print "connecting to database %s" % dbpath 
+
+    dbidx = starname_to_dbidx(starname_url)
+    is_eKOI_insert(dbidx)
+    is_EB_insert(dbidx)
 
     con = sqlite3.connect(dbpath)
-    query = "SELECT * from candidate WHERE id=%i" % id
+    query = "SELECT * from candidate WHERE id=%i" % dbidx
     df = pd.read_sql(query,con)
     con.close()
 
@@ -165,13 +213,15 @@ AND starname=%s""" % starname_url
     
     templateVars = dict(templateVars,**chartkw)
     templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
+    templateVars['is_EB_string'] = is_EB_string(dfdict)
+
+    templateVars['is_EB_buttons'] = is_EB_buttons
     return templateVars
         
 @app.route('/vetting/<starname_url>',methods=['GET','POST'])
 def display_vetting(starname_url):
     templateVars = get_display_vetting_templateVars(starname_url)
     html = render_template('vetting_template.html',**templateVars)
-    print html
     return html
 
 @app.route('/vetting/list',methods=['GET','POST'])
@@ -210,36 +260,44 @@ def display_vetting_list():
     
     templateVars = get_display_vetting_templateVars(starname_current)    
     templateVars['res'] = res
-    template = render_template('vetting_session_template.html',**templateVars)    
+    template = render_template('vetting_session_template.html',**templateVars)
     return template
 
 def query_starname_list(starname_list):
-    # Grab the unique id for candidate #
-
     con = sqlite3.connect(dbpath)
     with con:
         cur = con.cursor()
         query = """
-SELECT starname,is_eKOI from candidate 
+SELECT starname,is_eKOI,is_EB from candidate 
 GROUP BY starname
 HAVING id=MAX(id)
 AND starname in %s""" % str(tuple(starname_list))
         cur.execute(query)
         res = cur.fetchall()
     
-    res = pd.DataFrame(res,columns=['starname','is_eKOI'])
+    res = pd.DataFrame(res,columns=['starname','is_eKOI','is_EB'])
     res.index = res.starname
     res = res.ix[starname_list]
-    res['color'] = res.is_eKOI.apply(is_eKOI_to_color)
+    res['is_eKOI_color'] = res.is_eKOI.apply(is_eKOI_to_color)
+    res['is_EB_color'] = res.is_EB.apply(is_EB_to_color)
     return res
 
+
+def is_EB_to_color(s):
+    if s==None:
+        return 'LightGray'
+    elif s[0]=='Y':
+        return 'Tomato'
+    elif s[0]=='N':
+        return 'RoyalBlue'
+
 def is_eKOI_to_color(is_eKOI):
-    if is_eKOI==None:
-        return 'black'
-    elif is_eKOI==1:
-        return 'green'
+    if is_eKOI==1:
+        return 'RoyalBlue'
     elif is_eKOI==0:
-        return 'red'
+        return 'Tomato'
+    else:
+        return 'LightGray'
 
 if __name__=="__main__":
     app.run(host=host,port=25000,debug=True)

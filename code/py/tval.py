@@ -74,9 +74,6 @@ class DV(h5plus.iohelper):
         self.add_attr('f_not_normalized_med', f_not_normalized_med,
                       description='Median flux before normalizing')
 
-
-
-
         self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
         self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
 

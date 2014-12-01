@@ -4,17 +4,21 @@
 
 {% block sidebar %}
 {{ super() }}
-<div class="container">
+
+<div class="container" >  
+  <p style="width:350px;">
   {% for star in res %}
-  <font color='{{ star['color'] }}'> 
     {% if star['starname_current'] %}
     <b> {{star['starname']}} </b>
     {% else %}
     {{star['starname']}} 
     {% endif %}
-  </font> 
-  {% endfor %}
 
+  <font color='{{ star['is_eKOI_color'] }}'> &#9679; </font>
+  <font color='{{ star['is_EB_color'] }}'> &#9679; </font>
+
+  {% endfor %}
+  </p>
 </div>
 {% endblock %}
 
@@ -25,7 +29,7 @@
     <form method="post" >
       <input class="btn btn-primary" type="submit" name="prev" value="Prev">
       <input class="btn btn-primary" type="submit" name="next" value="Next">
-      <input class="btn btn-primary" type="submit" name="clear" value="clear">
+      <input class="btn btn-primary" type="submit" name="clear" value="Clear">
     </form>
   {% endblock %}
 

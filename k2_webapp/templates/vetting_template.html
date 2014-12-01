@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 {% from 'macros.html' import plot_list %}
 {% from 'macros.html' import table_list %}
+{% from 'macros.html' import scatter_coords %}
 
 {% block title %} K2 Vetting {% endblock %}
 {% block head %}
   {{ super() }}
 {% endblock %}
+
 {% block sidebar %}
 {{table_list(cattable)}}
-{% from 'macros.html' import  scatter_coords %}
+{{table_list(table)}}
 {{ scatter_coords(starname,starcoords,coords) }}
 <div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
 {% endblock %}
@@ -19,9 +21,18 @@
 <div class="container">
   <h1>Vetting {{ starname }}</h1>
   <form method="post" >
+    <p>
     <input type="submit" name="is_eKOI" value="eKOI">
     <input type="submit" name="not_eKOI" value="Not eKOI">
     {{ is_eKOI_string }} 
+    </p>
+
+    <p>
+    {% for key,value in is_EB_buttons.iteritems() %}
+    <input type="submit" name="{{ key }}" value="{{ value }} ">
+    {% endfor %}
+    {{ is_EB_string }} 
+    </p>
   </form>
 </div>
 {% endblock %}
@@ -29,7 +40,6 @@
 {% block content %}
   {{plot_list(tps_imagepars)}}
   {{plot_list(phot_imagepars)}}
-  {{table_list(table)}}
   {{table_list(tablelong)}}
 {% endblock %}
 
