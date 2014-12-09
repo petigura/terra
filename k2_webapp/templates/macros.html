@@ -84,9 +84,9 @@ $(function () {
 {
 name: 'K2 Target Stars',
 data: [
-{% for ra,dec in coords %}
+{% for ra,dec in coords -%}
 [{{ra}},{{dec}}],
-{% endfor %}
+{%- endfor %}
 ]
 
 
