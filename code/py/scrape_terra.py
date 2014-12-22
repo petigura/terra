@@ -82,21 +82,21 @@ if __name__=='__main__':
                               'code/py/candidate_schema.sql')
         with open(schemafile) as f:
             schema = f.read()
+            
         con = sqlite3.connect(args.dbfile)
-        cur = con.cursor()
-        cur.execute(schema)
-        con.commit()
-        con.close()
+        with con:
+            cur = con.cursor()
+            cur.execute(schema)
 
     counter = 0
     for h5file in args.h5file:
         d = dv_h5_scrape(h5file,verbose=True)
         sqlcmd,values = dict2insert(d)
         con = sqlite3.connect(args.dbfile)
-        cur = con.cursor()
-        cur.execute(sqlcmd,values)
+        with con:
+            cur = con.cursor()
+            cur.execute(sqlcmd,values)
+
         counter +=1
         if np.mod(counter,10)==0:
             print counter
-        con.commit()
-        con.close()

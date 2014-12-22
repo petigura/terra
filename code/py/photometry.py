@@ -365,22 +365,46 @@ dfmask = pd.read_hdf(dfmaskpath,'dfmask')
 
 def read_photometry(path):
     """
-    Path to photometry
+    Read photometry
+    
+    Parameters
+    ----------
+    path : path to photometry
     """
 
     print "reading in %s" %path
     if (path.count('.pickle') + path.count('.fits')) > 0:
         lc = read_photometry_crossfield(path)
     if path.count('.h5') > 0:
-        lc = pd.read_hdf(path,'lc0')
-        lc['f'] = lc['fdt_time_xy']
+        with h5py.File(path) as h5:
+            groupnames = [item[0] for item in h5.items()]
 
-        lc0 = lc0_C0['cad t'.split()]
-        lc = pd.merge(lc0,lc.drop('t',axis=1),on='cad',how='left')
-        lc['fmask'] = (lc['fmask']!=False)
+        if groupnames.count('lc')==1:
+            lc = pd.read_hdf(path,'lc')
+            lc = pd.merge(
+                lc0_C0['cad t'.split()],
+                lc.drop('t',axis=1),on='cad',how='left')
 
-        lc = pd.merge(lc,dfmask,on='cad')
-        lc['fmask'] = lc['pmask']
+            lc['fmask'] = lc['fmask']!=False
+
+            lc['f_not_normalized'] = lc['fdt_t_pos']
+
+            lc['f'] = lc['fdt_t_pos']
+            lc['f'] /= median(lc['f'])
+            lc['f'] -= 1
+            lc['t'] = lc['t'] -  2454833
+
+
+        elif groupnames.count('lc0')==1:
+            lc = pd.read_hdf(path,'lc0')
+            lc['f'] = lc['fdt_time_xy']
+
+            lc0 = lc0_C0['cad t'.split()]
+            lc = pd.merge(lc0,lc.drop('t',axis=1),on='cad',how='left')
+            lc['fmask'] = (lc['fmask']!=False)
+
+            lc = pd.merge(lc,dfmask,on='cad')
+            lc['fmask'] = lc['pmask']
 
         lc = np.array(lc.to_records(index=False))
     print "lc.size " + str(lc.size)

@@ -70,6 +70,7 @@ class DV(h5plus.iohelper):
 
         f_not_normalized_med =  \
             pd.DataFrame(self.lc).describe().ix['50%','f_not_normalized']
+            
 
         self.add_attr('f_not_normalized_med', f_not_normalized_med,
                       description='Median flux before normalizing')
