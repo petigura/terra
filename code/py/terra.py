@@ -274,7 +274,7 @@ def data_validation(par):
     dv.at_med_filt()
     dv.at_autocorr()
 
-    trans = tm.from_dv(dv,bin_period=1)
+    trans = tm.from_dv(dv,bin_period=0.1)
     trans.register()
     trans.pdict = trans.fit_lightcurve()[0]
     trans.MCMC()
@@ -299,7 +299,7 @@ def data_validation(par):
 
 def multiCopyCut(file0,file1,pdict=None):
     """
-]    Multi Planet Copy Cut
+    Multi Planet Copy Cut
 
     Copys the calibrated light curve to file1. Cuts the transit out.
     """

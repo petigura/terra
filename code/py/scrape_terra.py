@@ -59,15 +59,7 @@ def dv_h5_scrape(h5file,verbose=True):
     d = append_attrs_dict(d,h5file,'/dv')
     d = append_attrs_dict(d,h5file,'/dv/fit',prefix='fit_')
     print d
-            
     return d
-
-def dict2insert(d):
-    names = str(tuple(d.keys())).replace("'","")
-    strtup = "("+("?, "*len(d.keys()))[:-2]+")"
-    sqlcmd = 'INSERT INTO candidate %s VALUES %s' % (names,strtup)
-    values = tuple(d.values())
-    return sqlcmd,values
 
 if __name__=='__main__':
     p = ArgumentParser(description='Scrape attributes from grid.h5 files')
@@ -76,27 +68,30 @@ if __name__=='__main__':
     args  = p.parse_args()
     
     # If table doesn't exist yet, create it.
-    import os.path
     if not os.path.isfile(args.dbfile):
-        schemafile = os.path.join(os.environ['K2_DIR'],
-                              'code/py/candidate_schema.sql')
+        schemafile = os.path.join(
+            os.environ['K2_DIR'],'code/py/candidate_schema.sql')
         with open(schemafile) as f:
             schema = f.read()
+
         con = sqlite3.connect(args.dbfile)
-        cur = con.cursor()
-        cur.execute(schema)
-        con.commit()
-        con.close()
+        with con:
+            cur = con.cursor()
+            cur.execute(schema)
 
     counter = 0
     for h5file in args.h5file:
         d = dv_h5_scrape(h5file,verbose=True)
-        sqlcmd,values = dict2insert(d)
+        columns = ', '.join(d.keys())
+        placeholders = ':'+', :'.join(d.keys())
+        query = 'INSERT INTO candidate (%s) VALUES (%s)' % \
+                (columns, placeholders)
+
         con = sqlite3.connect(args.dbfile)
-        cur = con.cursor()
-        cur.execute(sqlcmd,values)
+        with con:
+            cur = con.cursor()
+            cur.execute(query)
+
         counter +=1
         if np.mod(counter,10)==0:
             print counter
-        con.commit()
-        con.close()
