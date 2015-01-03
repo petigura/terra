@@ -22,7 +22,10 @@ import k2_catalogs
 cat = k2_catalogs.read_cat()
 cat.index = cat.epic.astype(str)
 
+
 host = os.environ['K2WEBAPP_HOST']
+host = "127.0.0.1"
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -205,6 +208,10 @@ def get_display_vetting_templateVars(starname_url):
  
     coords = cat['ra dec'.split()].itertuples(index=False)
     coords = map(list,coords)
+    target = dict(cat.ix[starname]['ra dec'.split()])
+    target['starname'] = starname
+    templateVars['target'] = target
+
     chartkw = dict(
         coords = coords,
         starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False),
@@ -214,7 +221,6 @@ def get_display_vetting_templateVars(starname_url):
     templateVars = dict(templateVars,**chartkw)
     templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
     templateVars['is_EB_string'] = is_EB_string(dfdict)
-
     templateVars['is_EB_buttons'] = is_EB_buttons
     return templateVars
         
@@ -222,6 +228,7 @@ def get_display_vetting_templateVars(starname_url):
 def display_vetting(starname_url):
     templateVars = get_display_vetting_templateVars(starname_url)
     html = render_template('vetting_template.html',**templateVars)
+    print html
     return html
 
 @app.route('/vetting/list',methods=['GET','POST'])
@@ -261,6 +268,7 @@ def display_vetting_list():
     templateVars = get_display_vetting_templateVars(starname_current)    
     templateVars['res'] = res
     template = render_template('vetting_session_template.html',**templateVars)
+    print template
     return template
 
 def query_starname_list(starname_list):
@@ -281,7 +289,6 @@ AND starname in %s""" % str(tuple(starname_list))
     res['is_eKOI_color'] = res.is_eKOI.apply(is_eKOI_to_color)
     res['is_EB_color'] = res.is_EB.apply(is_EB_to_color)
     return res
-
 
 def is_EB_to_color(s):
     if s==None:

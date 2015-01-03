@@ -13,9 +13,11 @@
 {{table_list(table)}}
 {{ scatter_coords(starname,starcoords,coords) }}
 <div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
+  <a href=http://irsa.ipac.caltech.edu/applications/finderchart/#&id=Hydra_finderchart_finder_chart&projectId=finderchart&UserTargetWorldPt={{ target['ra'] }};{{ target['dec'] }};EQ_J2000&subsize=0.0375&sources=DSS,SDSS,2MASS&DoSearch=true target="_blank">
+    Finder Charts @ IPAC<br> (Opens New Window)
+  </a>
+
 {% endblock %}
-
-
 {% block main %}
 {% block buttons %}
 <div class="container">
