@@ -84,13 +84,13 @@ if __name__=='__main__':
         d = dv_h5_scrape(h5file,verbose=True)
         columns = ', '.join(d.keys())
         placeholders = ':'+', :'.join(d.keys())
-        query = 'INSERT INTO candidate (%s) VALUES (%s)' % \
+        sql = 'INSERT INTO candidate (%s) VALUES (%s)' % \
                 (columns, placeholders)
 
         con = sqlite3.connect(args.dbfile)
         with con:
             cur = con.cursor()
-            cur.execute(query)
+            cur.execute(sql,d)
 
         counter +=1
         if np.mod(counter,10)==0:
