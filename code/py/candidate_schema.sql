@@ -37,5 +37,7 @@ CREATE TABLE candidate (
   fit_tau REAL,
   f_not_normalized_med REAL NULL,
   is_eKOI INT NULL,
-  is_eKOI_date TEXT NULL
+  is_eKOI_date TEXT NULL,
+  is_EB TEXT NULL,
+  is_EB_date TEXT NULL
 );
