@@ -14,6 +14,7 @@ export PATH=${K2_DIR}/k2_webapp/:${PATH}
 export K2PHOTFILES=${PROJDIR}/www/k2photfiles/
 export K2WEBAPP_DB=${PROJDIR}/www/K2/TPS/C0_10-10/scrape.db
 export K2WEBAPP_HOST="0.0.0.0"
+export K2_ARCHIVE=${PROJDIR}/www/K2/
 
 cd $K2_DIR
 
