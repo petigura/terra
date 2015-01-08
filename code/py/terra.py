@@ -38,7 +38,7 @@ def h5F(par):
     else:
         return h5py.File(outfile)
 
-def pp(par):
+def pp(par,lc=None):
     """
     Preprocess
 
@@ -104,7 +104,8 @@ def pp(par):
     outfile = os.path.abspath(outfile)
 
     with h5F(par) as h5:
-        lc = photometry.read_photometry(path_phot)
+        if type(lc)==type(None):
+            lc = photometry.read_photometry(path_phot)
 
         h5.create_group('pp')
         h5['/pp/cal'] = lc
@@ -136,8 +137,6 @@ def pp(par):
         # Store path information
         h5.attrs['phot_basedir'] = os.path.dirname(path_phot)
         h5.attrs['phot_fits_filename'] = os.path.basename(path_phot)
-
-        
         h5.attrs['grid_basedir'] = os.path.dirname(outfile)
         h5.attrs['grid_h5_filename'] = os.path.basename(outfile)
 
