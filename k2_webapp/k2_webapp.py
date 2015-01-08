@@ -19,19 +19,20 @@ from flask import flash  # to display messages in the template
 import pandas as pd
 import k2_catalogs
 
-cat = k2_catalogs.read_cat()
-cat.index = cat.epic.astype(str)
-
-
 host = os.environ['K2WEBAPP_HOST']
 host = "127.0.0.1"
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+K2_ARCHIVE = os.environ['K2_ARCHIVE']
+K2_ARCHIVE_URL = K2_ARCHIVE.replace(
+    "/project/projectdirs/m1669/www/",
+    "http://portal.nersc.gov/project/m1669/"
+    )
+
 tps_basedir0 = '/project/projectdirs/m1669/www/K2/TPS/C0_11-12/'
 phot_basedir0 = '/project/projectdirs/m1669/www/K2/photometry/C0_11-12/'
-dbpath = os.path.join(tps_basedir0,'scrape.db')
 
 phot_plots = """\
 width ext
@@ -120,20 +121,8 @@ def is_EB_string(d):
         outstr = "Designated is %s on %s " % (is_EB,d['is_EB_date'])
     return outstr
 
-def starname_to_dbidx(starname):
-    con = sqlite3.connect(dbpath)
-    with con:
-        cur = con.cursor()
-        query = """
-SELECT id from candidate 
-GROUP BY starname
-HAVING id=MAX(id)
-AND starname=%s""" % starname
-    cur.execute(query)
-    dbidx, = cur.fetchone()
-    return dbidx
 
-def is_eKOI_insert(dbidx):
+def is_eKOI_insert(dbpath,dbidx):
     # Capture output from form.
     keys = request.form.keys()
     if len(keys)==0:
@@ -147,12 +136,14 @@ def is_eKOI_insert(dbidx):
 
         sqlcmd = "UPDATE candidate SET is_eKOI=?,is_eKOI_date=? WHERE id=?"
         values = (d['is_eKOI'],d['is_eKOI_date'],dbidx)
+
+#        dbpath = 
         con = sqlite3.connect(dbpath)
         with con:
             cur = con.cursor()
             cur.execute(sqlcmd,values)
 
-def is_EB_insert(dbidx):
+def is_EB_insert(dbpath,dbidx):
     # Capture output from form.
     keys = request.form.keys()
     print keys
@@ -173,66 +164,111 @@ is_EB_buttons = {
     'N':'N'
 }
 
-def get_display_vetting_templateVars(starname_url):
+def get_tpspath(run,starname_url):
+    tpspath = os.path.join(K2_ARCHIVE,'TPS/%s/' % run )
+    return tpspath
+
+def starname_to_dbidx(dbpath,starname):
     print "connecting to database %s" % dbpath 
 
-    dbidx = starname_to_dbidx(starname_url)
-    is_eKOI_insert(dbidx)
-    is_EB_insert(dbidx)
-
     con = sqlite3.connect(dbpath)
-    query = "SELECT * from candidate WHERE id=%i" % dbidx
-    df = pd.read_sql(query,con)
-    con.close()
+    with con:
+        cur = con.cursor()
+        query = """
+        SELECT id from candidate 
+        GROUP BY starname
+        HAVING id=MAX(id)
+        AND starname=%s""" % starname
 
-    starname = starname_url
+    cur.execute(query)
+    dbidx, = cur.fetchone()
+    return dbidx
 
-    if len(df)==0:
-        return "Star %s not in %s" % (starname,tps_basedir0)
-    if len(df)>1:
-        return "Row returned must be unique"
 
-    dfdict = dict(df.iloc[0] )
-    table = df['P t0 tdur s2n grass num_trans'.split()]
-    tablelong = df
-    table,tablelong = map(lambda x : dict(x.iloc[0]),[table,tablelong])
+class Vetter(object):
+    def __init__(self,k2_camp,run,starname_url):
+        self.k2_camp = k2_camp
+        self.run = run
+        self.starname_url = starname_url
+        self.tpspath = get_tpspath(run,starname_url)
+        self.dbpath = os.path.join(K2_ARCHIVE,self.tpspath,'scrape.db')
+        cat = k2_catalogs.read_cat(k2_camp)
+        cat.index = cat.epic.astype(str)
+        self.cat = cat
 
-    table['Depth [ppt]'] = 1e3*tablelong['mean']
-    templateVars = { 
-        "tps_imagepars":tps_imagepars(starname),
-        "phot_imagepars":phot_imagepars(starname),
-        "table":table,
-        "tablelong":tablelong,
-        "cattable":cat.ix[starname]
-   }
- 
-    coords = cat['ra dec'.split()].itertuples(index=False)
-    coords = map(list,coords)
-    target = dict(cat.ix[starname]['ra dec'.split()])
-    target['starname'] = starname
-    templateVars['target'] = target
+    def starname_to_dbidx(self):
+        return starname_to_dbidx(self.dbpath,self.starname_url)
+    def get_display_vetting_templateVars(self):
+        cat = self.cat
+        dbidx = self.starname_to_dbidx()
 
-    chartkw = dict(
-        coords = coords,
-        starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False),
-        starname = starname
-    )
-    
-    templateVars = dict(templateVars,**chartkw)
-    templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
-    templateVars['is_EB_string'] = is_EB_string(dfdict)
-    templateVars['is_EB_buttons'] = is_EB_buttons
-    return templateVars
-        
-@app.route('/vetting/<starname_url>',methods=['GET','POST'])
-def display_vetting(starname_url):
-    templateVars = get_display_vetting_templateVars(starname_url)
-    html = render_template('vetting_template.html',**templateVars)
-    print html
+        starname = self.starname_url
+        run = self.run
+        dbpath = self.dbpath
+        is_eKOI_insert(dbpath,dbidx)
+        is_EB_insert(dbpath,dbidx)
+
+        con = sqlite3.connect(self.dbpath)
+        query = "SELECT * from candidate WHERE id=%i" % dbidx
+        df = pd.read_sql(query,con)
+        con.close()
+
+        if len(df)==0:
+            return "Star %s not in %s" % (starname,tps_basedir0)
+        if len(df)>1:
+            return "Row returned must be unique"
+
+        dfdict = dict(df.iloc[0] )
+        table = df['P t0 tdur s2n grass num_trans'.split()]
+        tablelong = df
+        table,tablelong = map(lambda x : dict(x.iloc[0]),[table,tablelong])
+
+        table['Depth [ppt]'] = 1e3*tablelong['mean']
+        templateVars = { 
+            "tps_imagepars":tps_imagepars(starname),
+            "phot_imagepars":phot_imagepars(starname),
+            "table":table,
+            "tablelong":tablelong,
+            "cattable":cat.ix[starname]
+       }
+
+        coords = cat['ra dec'.split()].itertuples(index=False)
+        coords = map(list,coords)
+        target = dict(cat.ix[starname]['ra dec'.split()])
+        target['starname'] = starname
+        templateVars['target'] = target
+
+        chartkw = dict(
+            coords = coords,
+            starcoords = cat.ix[[starname]]['ra dec'.split()].itertuples(index=False),
+            starname = starname
+        )
+
+        templateVars = dict(templateVars,**chartkw)
+        templateVars['is_eKOI_string'] = is_eKOI_string(dfdict)
+        templateVars['is_EB_string'] = is_EB_string(dfdict)
+        templateVars['is_EB_buttons'] = is_EB_buttons
+
+        templateVars['run'] = run
+
+        templateVars['phot_outdir'] = os.path.join(
+            K2_ARCHIVE_URL,'photometry/%s/output/%s/' % (run,starname)
+            )
+        templateVars['tps_outdir'] = os.path.join(
+            K2_ARCHIVE_URL,'TPS/%s/output/%s/' % (run,starname)
+            )
+        return templateVars
+
+@app.route('/vetting/<k2_camp>/<run>/<starname_url>',methods=['GET','POST'])
+def display_vetting(k2_camp,run,starname_url):
+    vetter = Vetter(k2_camp,run,starname_url)
+    templateVars = vetter.get_display_vetting_templateVars()
+    print templateVars['phot_outdir']
+    html = render_template('vetting_template_C1.html',**templateVars)
     return html
 
-@app.route('/vetting/list',methods=['GET','POST'])
-def display_vetting_list():
+@app.route('/vetting/list/<k2_camp>/<run>/',methods=['GET','POST'])
+def display_vetting_list(k2_camp,run):
     # Handle button input
     if request.method == "POST":
         keys = request.form.keys()
@@ -247,6 +283,8 @@ def display_vetting_list():
         if keys.count('clear')==1:
             session.clear()
 
+    dbpath = os.path.join(K2_ARCHIVE,'TPS/%s/scrape.db' % run)
+
     # Default behavior when the page is first loaded
     if "starname_list" not in session:
         return render_template('vetting_session_start_template.html')    
@@ -260,18 +298,20 @@ def display_vetting_list():
     if session['starlist_index'] >= session['nstars']:
         session['starlist_index'] = session['nstars']-1
 
-    res = query_starname_list(session['starname_list'])
+    res = query_starname_list(dbpath,session['starname_list'])
     starname_current = res.iloc[ session['starlist_index']]['starname']
+    vetter = Vetter(k2_camp,run,starname_current)
+
     res['starname_current'] = (res['starname']==starname_current)
     res = res.to_dict('records')
     
-    templateVars = get_display_vetting_templateVars(starname_current)    
+    templateVars = vetter.get_display_vetting_templateVars()    
     templateVars['res'] = res
+    print templateVars['tps_outdir']
     template = render_template('vetting_session_template.html',**templateVars)
-    print template
     return template
 
-def query_starname_list(starname_list):
+def query_starname_list(dbpath,starname_list):
     con = sqlite3.connect(dbpath)
     with con:
         cur = con.cursor()
@@ -307,4 +347,5 @@ def is_eKOI_to_color(is_eKOI):
         return 'LightGray'
 
 if __name__=="__main__":
-    app.run(host=host,port=25000,debug=True)
+    app.run(host='0.0.0.0',port=25001,debug=True)
+#    app.run(host=host,port=25001,debug=True)

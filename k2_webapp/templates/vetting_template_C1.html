@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from 'macros.html' import plot_list %}
+{% from 'macros.html' import table_list %}
+{% from 'macros.html' import scatter_coords %}
+
+{% block title %} K2 Vetting {% endblock %}
+{% block head %}
+  {{ super() }}
+{% endblock %}
+
+{% block sidebar %}
+<font=-6>
+{{table_list(cattable)}}
+{{table_list(table)}}
+</font>
+
+{{ scatter_coords(starname,starcoords,coords) }}
+<div id="scatter" style="width: 350px; height: 350px; margin: 0 auto"></div>
+  <a href=http://irsa.ipac.caltech.edu/applications/finderchart/#&id=Hydra_finderchart_finder_chart&projectId=finderchart&UserTargetWorldPt={{ target['ra'] }};{{ target['dec'] }};EQ_J2000&subsize=0.0375&sources=DSS,SDSS,2MASS&DoSearch=true target="_blank">
+    Finder Charts @ IPAC<br> (Opens New Window)
+  </a>
+
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_0-median-frame.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_0-median-frame.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> Median image frame </p>
+   </div>
+</div>
+
+
+{% endblock %}
+{% block main %}
+{% block buttons %}
+<div class="container">
+  <h1>Vetting {{ starname }}</h1>
+  <form method="post" >
+    <p>
+    <input type="submit" name="is_eKOI" value="eKOI">
+    <input type="submit" name="not_eKOI" value="Not eKOI">
+    {{ is_eKOI_string }} 
+    </p>
+
+    <p>
+    {% for key,value in is_EB_buttons.iteritems() %}
+    <input type="submit" name="{{ key }}" value="{{ value }} ">
+    {% endfor %}
+    {{ is_EB_string }} 
+    </p>
+  </form>
+</div>
+{% endblock %}
+
+
+{% block content %}
+
+<div id="image">
+  <a href="{{ tps_outdir }}/{{ starname }}.grid.pk.png">
+  <img src="{{ tps_outdir }}/{{ starname }}.grid.pk.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> DV summary plots. </p> 
+
+
+
+{#
+
+Could eventually use this longer caption
+
+Top row: SNR “periodogram” of box-car photometric search for transiting planets. The red dot shows the P and SNR of the most significant peak in the periodogram. The autocorrelation function,“ACF”, plot at upper right shows the circular auto-correlation function from the phase folded photometry, used to identify secondary eclipses and correlated noise in the photometry. Second row: at left “Phase” shows the phase–folded photometry, where black points represent detrended photometry near the time of transit, green symbols show median flux over 30 min bins, and the dashed line shows the best-fitting Mandel-Agol transit model (7). At second from left, “Phased Zoom” shows a zoomed y-axis to highlight the transit itself. For this TCE, the transit model is a good match to the photometry. At third from left, “Phased 180” shows phase folded photometry 180◦ in orbital phase from transit center. At fourth from left, “Secondary eclipse” shows how TERRA notches out the putative transit and searches for secondary eclipses. We show the photometry folded on the second most significant dimming. For KIC-5709725, this phase is 0.9◦ relative to the primary transit, so close in phase that the primary transit is still visible. This transit does not show signs of a secondary eclipse. Transit SES — transit single event statistic as a function of transit number. Conceptually, SES is the depth of the transit in ppm, as described by Petigura and Marcy (3). “Season SES” shows the SES statistic grouped according to season. Bottom row: At left, “SES stack” shows SES for the entire light curve, split on the best-fitting transit period and stacked so that transit number increases downward. Compelling transits appear as a sequence of SES peaks at phase = 0◦. “Transit stack” shows for TCEs with fewer than 20 transits a plot of the TERRA-calibrated photometry of each transit (transit number increases downward).
+#}
+   </div>
+</div>
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_dv.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_dv.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_1-ses-vs-aperture-size.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_1-ses-vs-aperture-size.png" width="50%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_2-pos_pc0.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_2-pos_pc0.png" width="50%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_3-gp_t_pos.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_3-gp_t_pos.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+<div id="image">
+  <a href="{{ phot_outdir }}/{{ starname }}_4-gp_t_pos_zoom.png">
+  <img src="{{ phot_outdir }}/{{ starname }}_4-gp_t_pos_zoom.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+
+<div id="image">
+  <a href="{{ tps_outdir }}/{{ starname }}.grid.lc.png">
+  <img src="{{ tps_outdir }}/{{ starname }}.grid.lc.png" width="100%">
+  </a>
+  <div class="caption">
+     <p> Quick look plot </p>
+   </div>
+</div>
+
+
+{{table_list(tablelong)}}
+{% endblock %}
+
+{% endblock %}

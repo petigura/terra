@@ -105,7 +105,6 @@ def pp(par):
 
     with h5F(par) as h5:
         lc = photometry.read_photometry(path_phot)
-
         h5.create_group('pp')
         h5['/pp/cal'] = lc
 
