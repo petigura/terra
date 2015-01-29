@@ -17,6 +17,10 @@ def grid(args):
     df = pd.read_sql('select * from grid',con,index_col='id')
     d = dict(df.ix[args.index])
     d['outfile'] = args.outfile
+    if args.debug:
+        d['P1'] = 1.
+        d['P2'] = 2.
+    
     terra.grid(d)
 
 def dv(args):
@@ -44,6 +48,7 @@ if __name__=='__main__':
     p_grid.add_argument('outfile',type=str,help='output file <*.grid.h5>')
     p_grid.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
     p_grid.add_argument('index',type=str,help='photometry id')
+    p_grid.add_argument('--debug',action="store_true",help='Run in debug mode')
     p_grid.set_defaults(func=grid)
 
     p_grid = subparsers.add_parser('dv', help='Run the data validation module')

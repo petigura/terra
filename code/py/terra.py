@@ -118,16 +118,16 @@ def pp(par,lc=None):
         lc['fcal'] = lc['f']
         lc['fdt'] = lc['f']
 
-        fcal = ma.masked_array(lc['fcal'],lc['fmask'])
-        fcal.fill_value=0
+        fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+        print "fcal: ncad=%i nmask=%i" % (fcal.size,fcal.mask.sum())
 
-#        isOutlier = prepro.isOutlier(fcal.filled(),method='two-sided')
-
-        isOutlier = np.zeros(fcal.size).astype(bool)
-
+        # Identify outliers in the time-domain
+        isOutlier = prepro.isOutlier(fcal,[-1e3,10],interp='constant')
         lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
         lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
-
+        print "fcal: ncad=%i nmask=%i" % (fcal.size,lc['fmask'].sum())
+        
+        fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
 
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
@@ -143,10 +143,31 @@ def pp(par,lc=None):
             if par['plot_lc']:
                 from matplotlib import pylab as plt
                 import kplot
-                kplot.plot_lc(h5)
+
+                isOutlier = np.array(lc['isOutlier'])
+
+                fig,axL = plt.subplots(nrows=2,figsize=(20,8),sharex=True)
+
+                plt.sca(axL[0])
+                plt.plot(lc['t'],fcal.data,label='Full light curve')
+                plt.plot(lc['t'],fcal,color='RoyalBlue',
+                         label='Masked light curve')
+                plt.plot(
+                    lc['t'][isOutlier],fcal.data[isOutlier],'or',mew=0,
+                    alpha=0.5,label='Outliers Identfied in time-domain'
+                    )
+                plt.ylabel('fcal')
+                plt.legend(loc='best')
+
+                plt.sca(axL[1])
+                plt.plot(lc['t'],fcal,label='Masked light curve')
+                plt.xlabel('Time')
+                plt.legend(loc='best')
+                fig.set_tight_layout(True)
                 figpath = par['outfile'].replace('.h5','.lc.png')
                 plt.gcf().savefig(figpath)
                 plt.close() 
+                print "Created figure %s" % figpath
 
             h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
 
@@ -209,8 +230,12 @@ def grid(par):
 
     grid = tfind.read_hdf(par)
     grid.set_parL(parL)    
+
+    pgram_std = grid.periodogram(mode='ffa')    
+    grid.to_hdf('it0',par)
+
     pgram_std = grid.periodogram(mode='std')    
-    grid.to_hdf(par)
+    grid.to_hdf('it0_std',par)
 
 def data_validation(par):
     """

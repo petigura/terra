@@ -19,6 +19,7 @@ import h5plus
 from keptoy import P2a,a2tdur
 import terra
 
+
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
 epdtype = zip(epnames,[float]*len(epnames) )
@@ -79,11 +80,12 @@ class Grid(object):
         pgram = tdpep_std(self.t,self.fm,par)
         return pgram
 
-    def to_hdf(self,kwargs):
+    def to_hdf(self,groupname,kwargs):
         with terra.h5F(kwargs) as h5:
-            it0 = h5.create_group('it0')
-            it0 = h5['it0']
-            it0['RES'] = np.array(self.pgram.to_records(index=False))
+            it0 = h5.create_group(groupname)
+            g = h5[groupname]
+            g['RES'] = np.array(self.pgram.to_records(index=False))
+            print "saving periodogram to %s[%s]" % (h5.filename,groupname)
 
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
@@ -231,7 +233,7 @@ def tdpep(t,fm,par):
             r[k] = rep[k]
         r['noise'] = ma.median( ma.abs(dM) )
         r['twd']   = twd
-        r['t0']    = r['t0cad']*lc + t[0]        
+        r['t0']    = r['t0cad']*config.lc + t[0]        
         rtd.append(r) 
     rtd = np.vstack(rtd)
     rtd['s2n'] = rtd['mean']/rtd['noise']*np.sqrt(rtd['count'])
