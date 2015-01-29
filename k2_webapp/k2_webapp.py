@@ -347,5 +347,5 @@ def is_eKOI_to_color(is_eKOI):
         return 'LightGray'
 
 if __name__=="__main__":
-    app.run(host='0.0.0.0',port=25001,debug=True)
-#    app.run(host=host,port=25001,debug=True)
+#    app.run(host='0.0.0.0',port=25001,debug=True)
+    app.run(host=host,port=25000,debug=True)
