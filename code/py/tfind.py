@@ -80,11 +80,12 @@ class Grid(object):
         pgram = tdpep_std(self.t,self.fm,par)
         return pgram
 
-    def to_hdf(self,kwargs):
+    def to_hdf(self,groupname,kwargs):
         with terra.h5F(kwargs) as h5:
-            it0 = h5.create_group('it0')
-            it0 = h5['it0']
-            it0['RES'] = np.array(self.pgram.to_records(index=False))
+            it0 = h5.create_group(groupname)
+            g = h5[groupname]
+            g['RES'] = np.array(self.pgram.to_records(index=False))
+            print "saving periodogram to %s[%s]" % (h5.filename,groupname)
 
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):

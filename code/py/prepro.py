@@ -456,33 +456,47 @@ def isStep(r,fmask):
             
     return step,isStep
 
-def isOutlier(f,method='two-sided'):
+def isOutlier(fm0,lims,interp='linear'):
     """
     Is Outlier
 
-    Identifies single outliers based on a median & percentile filter.
+    Identifies single outliers in a array based on a median or
+    percentile filter. Since masked values will return nans in the
+    median filter, we interpolate between the masked values either by
+    assuming they are 0, or using linear interpolation.
 
     Parameters
     ----------
-    f : Column to perform outlier rejection.
+    fm : Masked Array of observations.
 
     Returns
     -------
     mask : Boolean array. True is outlier.
+
     """
+    fm = fm0.copy()
+    assert type(fm)==ma.core.MaskedArray,"fm must be masked array"
 
+    lim0,lim1 = lims
+
+    if interp=='linear':
+        x = np.arange(fm.size)
+        fm.data[fm.mask] = np.interp(x[fm.mask],x[~fm.mask],fm.data[~fm.mask])
+        f = fm.data
+    elif interp=='constant':
+        fm.fill_value = 0
+        f = fm.filled()
+    else:
+        assert False,"Invalid value for interp"
+    
     fmed = nd.median_filter(f,size=4)
-    fhpf = f-fmed
+    fhpf = f - fmed
 
-    if method.count('sided') > 0:
-        sig = 1.48*np.median(np.abs(fhpf))        
-    if method=='two-sided':
-        return np.abs(fhpf) > 10*sig
-    if method=='one-sided':
-        return fhpf > 10*sig
-    if method=='percentile':
-        lo,up = np.percentile(fhpf,[0.1,99.9])
-        return (fhpf > up) | (fhpf < lo)
+    sig = 1.48*np.median(np.abs(fhpf))        
+    bout = (fhpf < lim0*sig) | (fhpf > lim1*sig)
+
+    print "isOutlier found %i outliers" % bout.sum()
+    return bout
 
 
 def noiseyReg(t,dM,thresh=2):
