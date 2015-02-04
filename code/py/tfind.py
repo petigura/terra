@@ -14,7 +14,6 @@ import h5py
 
 import FFA_cext as FFA
 import fold
-from config import *
 import config
 import h5plus
 from keptoy import P2a,a2tdur

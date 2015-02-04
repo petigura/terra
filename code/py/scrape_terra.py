@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import pandas as pd
 import h5py
 import sys
@@ -70,7 +72,7 @@ if __name__=='__main__':
     # If table doesn't exist yet, create it.
     if not os.path.isfile(args.dbfile):
         schemafile = os.path.join(
-            os.environ['K2_DIR'],'code/py/candidate_schema.sql')
+            os.environ['K2_TERRA_DIR'],'code/py/candidate_schema.sql')
         with open(schemafile) as f:
             schema = f.read()
 

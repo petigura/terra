@@ -18,7 +18,6 @@ import tfind
 import detrend
 import keplerio
 import prepro
-import stellar
 import h5plus
 from plotplus import AddAnchored
 from config import nMode,sigOut,maxIt#,path_phot

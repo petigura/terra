@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+import terra
+import pandas as pd
+import sqlite3
+from argparse import ArgumentParser
+
 def pp(args):
     con = sqlite3.connect(args.parfile)
     df = pd.read_sql('select * from pp',con,index_col='id')
@@ -21,7 +27,6 @@ def dv(args):
     terra.data_validation(d)
 
 if __name__=='__main__':
-    from argparse import ArgumentParser
 
     p = ArgumentParser(description='Wrapper around functions in terra.py')
     subparsers = p.add_subparsers()
@@ -50,8 +55,5 @@ if __name__=='__main__':
     args = p.parse_args()
 
     # Import here to save time when just calling help.
-    import terra
-    import pandas as pd
-    import sqlite3
 
     args.func(args)
