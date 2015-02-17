@@ -192,65 +192,6 @@ def plotMed(dv):
     stack(t,fmed*1e6,P,t0,step=5*df)
     autoscale(tight=True)
 
-def morton(dv):
-    """
-    Print a 1-page diagnostic plot of a given dv.
-    """
-    P  = dv.attrs['P']
-    t0 = dv.attrs['t0']
-    df = dv.attrs['df']
-
-    fig = figure(figsize=(20,12))
-    gs = GridSpec(4,3)
-
-    axPF0   = fig.add_subplot(gs[0,0])
-    axPF180 = fig.add_subplot(gs[0,1],sharey=axPF0)
-    axPFSea = fig.add_subplot(gs[0,2],sharey=axPF0)
-    axStack = fig.add_subplot(gs[1:,:])
-
-    for ax,ph in zip([axPF0,axPF180],[0,180]):
-        sca(ax)        
-
-        PF  = dv['lcPF%i'%ph]
-        bPF = dv['blc30PF%i' % ph ]
-
-        plot(PF['tPF'],PF['f'],',',color='k')
-        plot(bPF['tb'],bPF['med'],'o',mew=0,color='red')
-        xl = max(np.abs(PF['tPF']))
-        xlim(np.array([-1,1])*xl )
-
-    cax = gca()
-    cax.yaxis.set_visible(False)
-    at = AnchoredText('Phase Folded LC + 180',prop=tprop,frameon=True,loc=2)
-    cax.add_artist(at)
-
-    sca(axPF0)
-
-    cax = gca()
-    at = AnchoredText('Phase Folded LC',prop=tprop,frameon=True,loc=2)
-    cax.add_artist(at)
-    xlabel('t - t0 (days)')
-    ylabel('flux')
-    ylim(-3*df*1e-6,2*df*1e-6)
-
-    sca(axPFSea)
-
-    for season in range(4):
-        try:
-            PF = dv['PF_Season%i' % season ][:]
-            plot(PF['t'],PF['fmed'],color=seasonColors[season],label='%i' % season)
-        except:
-            pass
-
-    at = AnchoredText('Transit by Season',prop=tprop,frameon=True,loc=2)
-    cax = gca()
-    cax.legend(loc='lower right',title='Season')
-    cax.yaxis.set_visible(False)
-    cax.add_artist(at)
-    sca(axStack)
-    plotManyTrans(dv)
- 
-    gcf().subplots_adjust(hspace=0.21,wspace=0.05,left=0.05,right=0.99,bottom=0.05,top=0.99)
 
 def plotManyTrans(dv):
     PF = dv['lcPF0'][:]
