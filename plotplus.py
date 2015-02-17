@@ -167,6 +167,20 @@ def recMask():
         );
 
 def AddAnchored(*args,**kwargs):
+    """
+    Init definition: AnchoredText(self, s, loc, pad=0.4, borderpad=0.5, prop=None, **kwargs)
+    Docstring:       AnchoredOffsetbox with Text
+    Init docstring:
+    *s* : string
+    *loc* : location code
+    *prop* : font property
+    *pad* : pad between the text and the frame as fraction of the font
+            size.
+    *borderpad* : pad between the frame and the axes (or bbox_to_anchor).
+
+    other keyword parameters of AnchoredOffsetbox are also allowed.
+    """
+
     at = AnchoredText(*args,**kwargs)
     plt.gca().add_artist(at)
 
@@ -178,3 +192,5 @@ def flip(axis):
     if axis=='both':
         plt.xlim(plt.xlim()[::-1])        
         plt.ylim(plt.ylim()[::-1])
+
+
