@@ -550,3 +550,49 @@ def simPts(stars,nsim,limD):
     return simPar
 
 
+def test_terra():
+    dpp = {
+        'outfile':'test.h5',
+        'path_phot':'terra/tests/data/201367065.fits',
+        'type':'tps',
+        'update':True,
+        'plot_lc':True
+        }
+
+    pp(dpp)
+
+    dgrid = {
+        'outfile':'test.h5',
+        'update':True,
+        'P1': 4,
+        'P2': 21,
+        'fluxField': 'fcal',
+        'fluxMask': 'fmask',
+        'outfile': 'test.h5',
+        'tbase':80
+        }
+
+    grid(dgrid)
+
+    ddv = {
+        'LDT_deg': 3,
+        'cfrac': 3,
+        'cpad': 0.5,
+        'nCont': 4, 
+        'a1': 0.773,
+        'a2': -0.679,
+        'a3': 1.140,
+        'a4': -0.416, 
+        'outfile':'test.h5',
+        'plot_diag':True,
+        }
+
+    data_validation(ddv)
+
+    print "Pipeline ran to competion"
+    print "verify that the following files look OK"
+    print "\n".join(["test.lc.png","test.pk.png"])
+
+
+
+
