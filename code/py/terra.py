@@ -558,7 +558,6 @@ def test_terra():
         'update':True,
         'plot_lc':True
         }
-
     pp(dpp)
 
     dgrid = {
