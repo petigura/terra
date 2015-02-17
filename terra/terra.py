@@ -24,9 +24,10 @@ from config import k2_dir
 import photometry
 import transit_model as tm
 
-#######################
-# Top Level Functions #
-#######################
+from matplotlib import pylab as plt
+from plotting import kplot
+from plotting import tval_plotting
+from matplotlib import pylab as plt
 
 def h5F(par):
     """
@@ -112,23 +113,23 @@ def pp(par,lc=None):
         if par['type'].find('mc') != -1:
             inj(h5,par)
 
-        # Hack to get around no calibration step
-        for k in 'fcal fit fdt'.split():
-            lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
-        lc['fcal'] = lc['f']
-        lc['fdt'] = lc['f']
+    # Hack to get around no calibration step
+    for k in 'fcal fit fdt'.split():
+        lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
+    lc['fcal'] = lc['f']
+    lc['fdt'] = lc['f']
 
-        fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
-        print "fcal: ncad=%i nmask=%i" % (fcal.size,fcal.mask.sum())
+    fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+    print "fcal: ncad=%i nmask=%i" % (fcal.size,fcal.mask.sum())
 
-        # Identify outliers in the time-domain
-        isOutlier = prepro.isOutlier(fcal,[-1e3,10],interp='constant')
-        lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
-        lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
-        print "fcal: ncad=%i nmask=%i" % (fcal.size,lc['fmask'].sum())
-        
-        fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+    # Identify outliers in the time-domain
+    isOutlier = prepro.isOutlier(fcal,[-1e3,10],interp='constant')
+    lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
+    lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
+    print "fcal: ncad=%i nmask=%i" % (fcal.size,lc['fmask'].sum())
+    
 
+    with h5F(par) as h5:
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
         # prepro.cal(h5,par)
@@ -138,38 +139,14 @@ def pp(par,lc=None):
         h5.attrs['phot_fits_filename'] = os.path.basename(path_phot)
         h5.attrs['grid_basedir'] = os.path.dirname(outfile)
         h5.attrs['grid_h5_filename'] = os.path.basename(outfile)
+        figpath = outfile.replace('.h5','.lc.png')
+        h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
 
-        if par.has_key('plot_lc'):
-            if par['plot_lc']:
-                from matplotlib import pylab as plt
-                import kplot
 
-                isOutlier = np.array(lc['isOutlier'])
-
-                fig,axL = plt.subplots(nrows=2,figsize=(20,8),sharex=True)
-
-                plt.sca(axL[0])
-                plt.plot(lc['t'],fcal.data,label='Full light curve')
-                plt.plot(lc['t'],fcal,color='RoyalBlue',
-                         label='Masked light curve')
-                plt.plot(
-                    lc['t'][isOutlier],fcal.data[isOutlier],'or',mew=0,
-                    alpha=0.5,label='Outliers Identfied in time-domain'
-                    )
-                plt.ylabel('fcal')
-                plt.legend(loc='best')
-
-                plt.sca(axL[1])
-                plt.plot(lc['t'],fcal,label='Masked light curve')
-                plt.xlabel('Time')
-                plt.legend(loc='best')
-                fig.set_tight_layout(True)
-                figpath = par['outfile'].replace('.h5','.lc.png')
-                plt.gcf().savefig(figpath)
-                plt.close() 
-                print "Created figure %s" % figpath
-
-            h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
+    kplot.plot_lc(outfile)
+    plt.gcf().savefig(figpath)
+    plt.close() 
+    print "Created figure %s" % figpath
 
 
 def raw(h5,files,fields=[]):
@@ -306,19 +283,17 @@ def data_validation(par):
     dv.to_hdf(outfile,'/dv')
     trans.to_hdf(outfile,'/dv/fit')
 
-    if par['plot_diag']:
-        import tval_plotting
-        from matplotlib import pylab as plt
-        ext = 'pk'
-        dv = tval.read_hdf(outfile,'/dv')
-        dv.trans = tm.read_hdf(outfile,'/dv/fit')
-        tval_plotting.diag(dv)
-        figpath = par['outfile'].replace('.h5','.%s.png' % ext)
-        plt.gcf().savefig(figpath)
-        plt.close() 
-        print "created %s" % figpath
-        with h5py.File(outfile) as h5:
-            h5.attrs['grid_plot_filename'] = os.path.basename(figpath)        
+    ext = 'pk'
+    dv = tval.read_hdf(outfile,'/dv')
+    dv.trans = tm.read_hdf(outfile,'/dv/fit')
+    tval_plotting.diag(dv)
+    figpath = par['outfile'].replace('.h5','.%s.png' % ext)
+    plt.gcf().savefig(figpath)
+    plt.close() 
+    print "created %s" % figpath
+    with h5py.File(outfile) as h5:
+        h5.attrs['grid_plot_filename'] = os.path.basename(figpath)        
+
 
 def multiCopyCut(file0,file1,pdict=None):
     """

@@ -1,12 +1,16 @@
+import sys
+
 import numpy as np
 from scipy import optimize
-from emcee import EnsembleSampler
 import pandas as pd
+from matplotlib.pylab import *
+from emcee import EnsembleSampler
 
-import h5plus 
 import keptoy
+from plotting.kplot import *
+from utils import h5plus 
 
-import sys
+
 
 class TransitModel(h5plus.iohelper):
     """
@@ -398,9 +402,6 @@ def from_dv(dv,bin_period=50):
     trans = TransitModel(t,f,ferr,dv.climb,pdict)
     return trans
 
-# Some plotting functions
-from matplotlib.pylab import *
-from kplot import *
 
 
 def plot_transit_model(tm):
