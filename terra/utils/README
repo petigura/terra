@@ -1,0 +1,16 @@
+####### General Purpose Modules ######
+
+plotplus - Supplements matplotlib functionality
+
+	 mergeAxes - Takes a figure multiple plots that share the abcissca.
+	 	     standardizes the limits.  
+
+	 errpt     - Overplot representitive errorbar on an axis.  The user
+	 	     specifies the location of the errorbar in 
+		     *device coordinates* - [0.1,0.1] is lower left
+
+numplus  - Supplements numpy functionality
+	 
+	 binavg - Groups points into user specified bins and computes the
+	 	  average in each bin.  I was surprized that I couldn't find
+		  something that did this online.
