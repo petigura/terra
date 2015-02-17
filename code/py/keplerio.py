@@ -29,7 +29,6 @@ from matplotlib import mlab
 import keptoy
 import detrend
 import tfind
-import qalg
 kepdir = os.environ['KEPDIR']
 cbvdir = os.path.join(kepdir,'CBV/')
 kepfiles = os.path.join(os.environ['KEPBASE'],'files')
@@ -129,7 +128,7 @@ def nQ(t0):
     """
     t = copy.deepcopy(t0)
     r = rnQ(t.data)
-    t = qalg.rec2tab(r)
+
     t.keywords = t0.keywords
     t.keywords['NQ'] = True
 
@@ -164,26 +163,6 @@ def rnQ(r0):
 
     return r
 
-def nanTime(t0):
-    """
-    Remove nans from the timeseries.
-
-    Simple wrapper around rnanTime
-
-    Parameters
-    ----------
-    t0 : input table.
-
-    Returns
-    -------
-    t  : Table with new, normalized columns.
-    
-    """
-    t = copy.deepcopy(t0)
-    r = rnanTime(t.data)
-    t = qalg.rec2tab(r)
-    t.keywords = t0.keywords
-    return t
 
 def rnanTime(r0):
     """
@@ -204,27 +183,6 @@ def rnanTime(r0):
     return r
 
 
-def sQ(tLCset0):
-    """
-    Stitch Quarters (stored as a table set) together
-
-    Parameters
-    ----------
-    tLCset0 : List of tables to stitch together.
-    
-    Returns
-    -------
-    tLC : Lightcurve that has been stitched together.    
-    """
-    tLCset = copy.deepcopy(tLCset0)
-    rL  = [ t.data for t in tLCset ]
-    rLC = rsQ(rL)
-
-    # Output (stiched table)
-    tLC = qalg.rec2tab(rLC)
-    tLC.table_name = "LC" 
-    tLC.keywords = tLCset[0].keywords
-    return tLC
 
 def rsQ(rL):
     """

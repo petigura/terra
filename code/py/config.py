@@ -27,9 +27,6 @@ svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
 #path_phot = "%s/%s.phot.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
 #path_train = "%s/%s.train.h5" % (os.environ['K2_PHOT_DIR'],k2_camp) 
 
-# Qalg
-Plim =  0.001   # Periods must agree to this fractional amount
-epochlim =  0.1 # Epochs must agree to 0.1 days   
 
 # keptoy
 sc = 58.8488 /60./60./24. # SC time in days
@@ -56,7 +53,6 @@ maCadCnt   = 5e3 # cadCount counts up the number of times a particular
                  # cadence goes into the MES calculation.  If a
                  # certain cadence is drastically over represented,
                  # clip it.
-
 
 # tval
 dP     = 0.5

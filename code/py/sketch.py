@@ -11,7 +11,6 @@ from matplotlib import rcParams
 from matplotlib.gridspec import GridSpec,GridSpecFromSubplotSpec
 from keptoy import *
 import keptoy
-import qalg
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 def gridTraceSetup(wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
@@ -275,32 +274,6 @@ def markT(f,p,wd=2):
     sLDT = [slice(m - wdcad/2 , m+wdcad/2) for m in ms]
 
     return sLDT
-
-def ROC(tres,label=True):
-    """
-    
-    """
-    assert len(unique(tres.Pblock))==1,'Periods must be the same'
-    assert len(unique(tres.KIC))==1,'Must compare the same star'
-
-    KIC = unique(tres.KIC)[0]
-    dfL = unique(tres.df)
-    
-    for df in dfL:
-        t = tres.where( tres.df == df)
-        fapL,etaL,fom = qalg.ROC(t)
-        plot(fapL,etaL,lw=2,label='%03d' % (df) )
-    
-    x = linspace(0,1,100)
-    plot(x,x)
-
-    if label:
-        legend(loc='best')
-        title( 'ROC for %i' % KIC ) 
-        xlabel('FAP' )
-        ylabel('Detection Efficiency' )
-
-    pass
 
 
 def hist(tres):

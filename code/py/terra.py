@@ -563,8 +563,8 @@ def test_terra():
     dgrid = {
         'outfile':'test.h5',
         'update':True,
-        'P1': 4,
-        'P2': 21,
+        'P1': 9,
+        'P2': 11,
         'fluxField': 'fcal',
         'fluxMask': 'fmask',
         'outfile': 'test.h5',
