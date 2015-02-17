@@ -3,7 +3,7 @@ from numpy import pi,sqrt,where,std,ma,array
 from numpy import ma,tanh,sin,cos,pi
 from numpy.polynomial import Legendre
 import copy
-import occultsmall
+from transit import occultsmall
 
 from config import Rsun,Msun,G,AU,lc,stefan_boltzmann
 

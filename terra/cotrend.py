@@ -19,7 +19,7 @@ import detrend
 import keplerio
 import prepro
 import h5plus
-from plotplus import AddAnchored
+from utils.plotplus import AddAnchored
 from config import nMode,sigOut,maxIt#,path_phot
 
 def dtbvfitm(t,fm,bv):
