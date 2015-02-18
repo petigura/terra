@@ -2,24 +2,24 @@ import numpy as np
 import os
 
 # Setup directories
-k2_dir = os.environ['K2_DIR']
+#k2_dir = os.environ['K2_DIR']
 #k2_camp = os.environ['K2_CAMP']
 
-def resolve_grid(outfile):
-    """
-    Determine path to .grid.h5 based on environment variables
-    """
-    if os.environ['K2_SEARCH_DIR']=='':
-        print "K2_SEACH_DIR not set. Using K2_DIR"
-        k2_projdir = os.environ['K2_DIR']
-    else:
-        k2_projdir = os.environ['K2_SEARCH_DIR']
-
-    if type=='grid':
-        return "%s/%s" % (k2_projdir,outfile)
-
-svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
-
+#def resolve_grid(outfile):
+#    """
+#    Determine path to .grid.h5 based on environment variables
+#    """
+#    if os.environ['K2_SEARCH_DIR']=='':
+#        print "K2_SEACH_DIR not set. Using K2_DIR"
+#        k2_projdir = os.environ['K2_DIR']
+#    else:
+#        k2_projdir = os.environ['K2_SEARCH_DIR']
+#
+#    if type=='grid':
+#        return "%s/%s" % (k2_projdir,outfile)
+#
+#svdh5 = "%s/Ceng.svd.h5" % (k2_dir) # h5 structure to read mode info from
+#
 # path to pixel data
 #path_pix_fits = os.environ['K2_PIX_DIR']
 

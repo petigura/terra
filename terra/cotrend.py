@@ -18,7 +18,7 @@ import tfind
 import detrend
 import keplerio
 import prepro
-import h5plus
+from utils import h5plus
 from utils.plotplus import AddAnchored
 from config import nMode,sigOut,maxIt#,path_phot
 

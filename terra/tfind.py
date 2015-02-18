@@ -15,7 +15,7 @@ import h5py
 from FFA import FFA_cext as FFA
 from FFA import fold
 import config
-import h5plus
+from utils import h5plus
 from keptoy import P2a,a2tdur
 import terra
 

@@ -18,22 +18,23 @@ from astropy.io import fits
 
 import cotrend
 import config
-from config import k2_dir,svdh5
+#from config import k2_dir,svdh5
 #,path_phot,path_train
 import detrend
-import h5plus
+from utils import h5plus
 import keplerio
 import tfind
 
-kepdir     = os.environ['KEPDIR']
-cbvdir     = os.path.join(kepdir,'CBV/')
-kepfiles   = os.path.join(os.environ['KEPBASE'],'files')
-qsfx       = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
-sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
-sapkey     = csv2rec(sapkeypath,delimiter=' ')
-sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
-cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
-cutList    = pd.read_csv(cutpath,comment='#').to_records(index=False)
+#kepdir     = os.environ['KEPDIR']
+#cbvdir     = os.path.join(kepdir,'CBV/')
+#kepfiles   = os.path.join(os.environ['KEPBASE'],'files')
+#qsfx       = csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+#sapkeypath = os.path.join(kepfiles,'sap_quality_bits.txt')
+#sapkey     = csv2rec(sapkeypath,delimiter=' ')
+#sapdtype   = zip( sapkey['key'],[bool]*sapkey['key'].size )
+#cutpath    = os.path.join(kepfiles,'ranges/cut_time.txt')
+#cutList    = pd.read_csv(cutpath,comment='#').to_records(index=False)
+
 
 def rec_zip(rL):
     """

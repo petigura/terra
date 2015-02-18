@@ -2,32 +2,30 @@
 TERRA
 The top level controller.  This function encapsulates the complete pipeline.
 """
-
-import h5py
-from h5py import File as h5F 
+import copy
+import os
+import glob
 
 import numpy as np
 from numpy import ma
-import glob
+import h5py
+from h5py import File as h5F 
+import pandas as pd
+from matplotlib import pylab as plt
+from matplotlib import mlab
+
+from plotting import kplot,tval_plotting
 import prepro
 import tfind
 import tval
 import keptoy
 import config
-from matplotlib import mlab
-import h5plus
-import copy
-import os
-import pandas as pd
-deltaPcad = 10
-from config import k2_dir
 import photometry
 import transit_model as tm
+from utils import h5plus
 
-from matplotlib import pylab as plt
-from plotting import kplot
-from plotting import tval_plotting
-from matplotlib import pylab as plt
+deltaPcad = 10
+#from config import k2_dir
 
 def h5F(par):
     """

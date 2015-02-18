@@ -15,7 +15,7 @@ import h5py
 
 import pandas as pd
 
-import h5plus
+from utils import h5plus
 import FFA
 
 import keptoy

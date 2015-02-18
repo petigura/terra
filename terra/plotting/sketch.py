@@ -3,15 +3,20 @@ A module for visualizing Kepler data.
 
 The idea is to keep it rough.
 """
-from numpy import *
 import glob
+import copy
+
+from numpy import *
 from matplotlib.pylab import *
-    
 from matplotlib import rcParams
 from matplotlib.gridspec import GridSpec,GridSpecFromSubplotSpec
-from keptoy import *
-import keptoy
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+
+from ..keptoy import *
+from .. import keptoy
+from .. import tfind
+from .. import tval
+
 
 def gridTraceSetup(wAx=0.2,wData=0.2,hAx=0.1,hData=2e-3,hStepData=1e-3):
     """
@@ -128,8 +133,6 @@ def stackold(x,y,size,pad=0.1,axl=None,**kw):
     if axl != None:
         return axl
 
-from keptoy import lc
-import tfind
 
 def DM(dM,P):
     plt.clf()
@@ -197,8 +200,6 @@ def window(tRES,tLC):
     xlabel('Period (days)')
     ylabel('Window')
 
-import tval
-import copy
 
 def LDT(t,fm,p):
     """

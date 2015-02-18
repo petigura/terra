@@ -29,11 +29,14 @@ from matplotlib import mlab
 import keptoy
 import detrend
 import tfind
-kepdir = os.environ['KEPDIR']
-cbvdir = os.path.join(kepdir,'CBV/')
-kepfiles = os.path.join(os.environ['KEPBASE'],'files')
-qsfx  = mlab.csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
-kicdb = os.path.join(kepfiles,'KIC.db')
+
+#kepdir = os.environ['KEPDIR']
+#cbvdir = os.path.join(kepdir,'CBV/')
+#kepfiles = os.path.join(os.environ['KEPBASE'],'files')
+#qsfx  = mlab.csv2rec(os.path.join(kepfiles,'qsuffix.txt'),delimiter=' ')
+#kicdb = os.path.join(kepfiles,'KIC.db')
+
+
 
 # Extra columns not needed in transit search.
 xtraCol = ['TIMECORR','SAP_BKG','SAP_BKG_ERR',

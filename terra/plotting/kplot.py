@@ -17,16 +17,20 @@ from matplotlib.pylab import *
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 import pandas as pd
-
-import tval
-import sketch
-import config
 import h5py
+
+from .. import tval
+import sketch
+from .. import config
 
 seasonColors = ['r','c','m','g']
 tprop = dict(name='monospace')
-bbox = dict(boxstyle="round", fc="w",alpha=.5,ec='none')
-annkw = dict(xycoords='data',textcoords='offset points',bbox=bbox,weight='light')
+bbox = dict(
+    boxstyle="round", fc="w",alpha=.5,ec='none'
+)
+annkw = dict(
+    xycoords='data',textcoords='offset points',bbox=bbox,weight='light'
+)
 
 def MC_diag(dv):
     fig = figure(figsize=(10,6))
