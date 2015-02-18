@@ -20,3 +20,10 @@ A suite of codes to find extrasolar planets
 3. Bulid the cython and fortran extensions with make. At NERSC f2py did not like compiling the fortran code with the default ifort compiler. Make sure gfortran is loaded instead.
 4. Add `</path/to/terra>` to $PYTHONPATH
 5. Add `</path/to/terra> /bin/` to $PATH
+6. Test that everything is working by running the following test
+
+   ```
+   python -c "from terra import terra; terra.test_terra()"
+   ```
+   
+   
