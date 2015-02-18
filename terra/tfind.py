@@ -12,13 +12,12 @@ from numpy import ma
 import pandas as pd
 import h5py
 
-import FFA_cext as FFA
-import fold
+from FFA import FFA_cext as FFA
+from FFA import fold
 import config
 import h5plus
 from keptoy import P2a,a2tdur
 import terra
-
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']

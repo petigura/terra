@@ -13,5 +13,5 @@
 *.temp
 *.tot
 *.so
-FFA/*.c
+terra/FFA/*.c
 
