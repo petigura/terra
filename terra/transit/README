@@ -1,0 +1,57 @@
+These routines are based on the work in Mandel & Agol (2002),
+so please cite this paper if you make use of these routines
+in your research.
+
+For extremely accurate lightcurves, we recommend the non-linear
+routine.  For very fast lightcurves, we recommend the
+small-planet routine.  For accurate lightcurves with reasonable
+speed, we recommend the quadratic limb-darkening routines.
+
+For a quick start, we recommend going into IDL and running
+the routine compcoeff.pro: just type "@compcoeff" at the
+command line.  To see how the IDL routines are called, simply
+look at the text of compcoeff.pro.  To see how the fortran
+routines are called, run "@compfortidl."
+
+1)  Non-linear limb-darkening:
+
+    a)  testnl.f   - fortran 77 program which calls occultnl.f
+    b)  occultnl.f - fortran 77 subroutine for computing
+        eclipses for non-linear limb-darkening
+    c)  compfortidl.pro - compares fortran and IDL routines
+        simply start IDL and type "@compfortidl.pro."  This
+        routine compiles the fortran routines, runs them,
+        and compares the speed with the IDL routine
+    d)  occultnl.pro - IDL routine which computes lightcurve
+        of non-linear limb-darkened source
+
+2)  Quadratic limb-darkening:
+
+    a)  test.f - fortran 77 program which calls the subroutine 
+        occultquad
+    b)  occultquad.f - fortran 77 subroutine which computes
+        lightcurves for quadratic limb-darkened sources
+    c)  occultquad.pro - IDL routine
+
+3)  Small-planet approximation:
+
+    a)  occultsmall.pro - computes lightcurve for a small planet
+    b)  occultsmall.f   - fortran program & subroutine for
+        computing the lightcurve of a small planet
+    c)  compcoeff.pro   - creates figure 2 from Mandel & Agol
+        by calling occultsmall.pro and occultnl.pro
+
+4)  Limb-darkening coefficients:
+
+    a)  transit.pro - IDL routine which finds quadratic limb-darkening 
+        coefficients from Claret (2000) grid (in quadratic.dat)
+    b)  transitnl.pro - IDL routine which finds nonlinear limb-darkening
+        coefficients from Claret (2000) grid in atlas.dat
+
+5)  Other routines:
+
+    a)  rf.for, rd.for, rc.for - fortran routines from Numerical Recipes
+    b)  ellec.f, ellk.f, ellec.pro, ellk.pro - approximations to the 
+        complete elliptic integrals from Abramowitz & Stegun (1965)
+    c)  rf.pro, rd.pro, rc.pro - IDL routines modified from the
+        Numerical Recipes routines

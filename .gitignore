@@ -12,3 +12,6 @@
 *.sqlite
 *.temp
 *.tot
+*.so
+terra/FFA/*.c
+
