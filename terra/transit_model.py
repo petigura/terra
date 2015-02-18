@@ -10,8 +10,6 @@ import keptoy
 from plotting.kplot import *
 from utils import h5plus 
 
-
-
 class TransitModel(h5plus.iohelper):
     """
     TransitModel

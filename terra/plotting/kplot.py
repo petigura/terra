@@ -20,8 +20,8 @@ import pandas as pd
 import h5py
 
 from .. import tval
-import sketch
 from .. import config
+from . import sketch
 
 seasonColors = ['r','c','m','g']
 tprop = dict(name='monospace')

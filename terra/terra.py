@@ -9,7 +9,7 @@ import glob
 import numpy as np
 from numpy import ma
 import h5py
-from h5py import File as h5F 
+from utils.h5plus import h5F
 import pandas as pd
 from matplotlib import pylab as plt
 from matplotlib import mlab
@@ -27,15 +27,6 @@ from utils import h5plus
 deltaPcad = 10
 #from config import k2_dir
 
-def h5F(par):
-    """
-    If the update kw is set, open h5 file as a h5plus object.
-    """
-    outfile = par['outfile']
-    if par['update']:
-        return h5plus.File(outfile)
-    else:
-        return h5py.File(outfile)
 
 def pp(par,lc=None):
     """

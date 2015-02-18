@@ -17,7 +17,7 @@ from FFA import fold
 import config
 from utils import h5plus
 from keptoy import P2a,a2tdur
-import terra
+from utils.h5plus import h5F
 
 # dtype of the record array returned from ep()
 epnames = ['mean','count','t0cad','Pcad']
@@ -30,7 +30,7 @@ tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
 def read_hdf(kwargs):
-    with terra.h5F(kwargs) as h5:
+    with h5F(kwargs) as h5:
         lc  = h5['/pp/cal'][:]
 
     f = lc[ kwargs['fluxField'] ]
@@ -80,7 +80,7 @@ class Grid(object):
         return pgram
 
     def to_hdf(self,groupname,kwargs):
-        with terra.h5F(kwargs) as h5:
+        with h5F(kwargs) as h5:
             it0 = h5.create_group(groupname)
             g = h5[groupname]
             g['RES'] = np.array(self.pgram.to_records(index=False))

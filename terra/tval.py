@@ -139,13 +139,8 @@ class DV(h5plus.iohelper):
         dM   = self.dM
         rLbl = transLabel(t,self.P,self.t0,self.tdur*2)
 
-        # Doesn't mean anything for K2
-        qrec = keplerio.qStartStop()
+        # Hack. K2 doesn't have seasons
         q = np.zeros(t.size) - 1
-        for r in qrec:
-            b = (t > r['tstart']) & (t < r['tstop'])
-            q[b] = r['q']
-        
         season = np.mod(q,4)
         dtype = [('ses',float),('tnum',int),('season',int)]
         dM.fill_value = np.nan
@@ -189,8 +184,8 @@ class DV(h5plus.iohelper):
         rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
 
         # Attach the quarter, doesn't do anything for K2
-        qarr = keplerio.t2q( rPF['t'] ).astype(int)
-        rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
+        #qarr = keplerio.t2q( rPF['t'] ).astype(int)
+        #rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
         self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
 
     def at_binPhaseFold(self,ph,bwmin):

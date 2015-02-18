@@ -145,6 +145,18 @@ def read_iohelper(h5file,group):
 
    return io
 
+
+def h5F(par):
+    """
+    If the update kw is set, open h5 file as a h5plus object.
+    """
+    outfile = par['outfile']
+    if par['update']:
+        return File(outfile)
+    else:
+        return h5py.File(outfile)
+
+
 def add_attrs(h5,d):
    """
    Add elements of a dictionary as attributes to h5 file.

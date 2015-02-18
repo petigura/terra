@@ -1,16 +1,16 @@
 #!/usr/bin/env python
+import os
+import sqlite3
+import glob
+from argparse import ArgumentParser
+from cStringIO import StringIO as sio
 
 import pandas as pd
 import h5py
-import sys
-import sqlite3
-import glob
-import os
-from argparse import ArgumentParser
 import numpy as np
-from cStringIO import StringIO as sio
-import transit_model as tm
-import h5plus
+
+from terra import transit_model as tm
+from terra.utils import h5plus
 
 # Table with fits column description
 top_attrs="""\
@@ -28,6 +28,9 @@ top_attrs="""\
 top_attrs = sio(top_attrs)
 top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
 top_attrs = top_attrs.dropna()
+
+TERRADIR = os.path.dirname(os.path.dirname(__file__))
+schemafile = os.path.join(TERRADIR,'terra/candidate_schema.sql')
 
 def dv_h5_scrape(h5file,verbose=True):
     """
@@ -71,8 +74,6 @@ if __name__=='__main__':
     
     # If table doesn't exist yet, create it.
     if not os.path.isfile(args.dbfile):
-        schemafile = os.path.join(
-            os.environ['K2_TERRA_DIR'],'code/py/candidate_schema.sql')
         with open(schemafile) as f:
             schema = f.read()
 
