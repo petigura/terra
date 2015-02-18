@@ -1,4 +1,7 @@
-keppycode
-=========
+# TERRA # 
 
-Repo for Kepler Code
+A suite of codes to search for transiting extrasolar planets
+
+## Installation instructions ##
+
+
