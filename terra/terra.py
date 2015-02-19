@@ -513,11 +513,13 @@ def simPts(stars,nsim,limD):
 
     return simPar
 
+PKG_DIR = os.path.dirname(__file__)
+testfitsfn = os.path.join(PKG_DIR,'tests/data/201367065.fits')
 
-def test_terra():
+def test_terra():    
     dpp = {
         'outfile':'test.h5',
-        'path_phot':'terra/tests/data/201367065.fits',
+        'path_phot':testfitsfn,
         'type':'tps',
         'update':True,
         'plot_lc':True
