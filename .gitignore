@@ -1,6 +1,5 @@
 *.h5
 *.csv
-*.fits
 *.txt
 *.pyc
 *.png
@@ -12,3 +11,6 @@
 *.sqlite
 *.temp
 *.tot
+*.so
+terra/FFA/*.c
+
