@@ -29,6 +29,9 @@ A suite of codes to find extrasolar planets
    LDFLAGS="-L/global/homes/p/petigura/anaconda/lib" SOFLAGS="-fPIC -shared" make
    # Running it a second time will get the fortran code compiled
    make
+   
+   # the last compiled fortran code should look something like:
+   /opt/gcc/4.9.2/bin/gfortran -Wall -g -Wall -g -shared
    ```
 
 4. Add `</path/to/terra>` to $PYTHONPATH
