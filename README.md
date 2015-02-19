@@ -1,11 +1,3 @@
-# TERRA # 
-
-A suite of codes to search for transiting extrasolar planets
-
-## Installation instructions ##
-
-
-=======
 # TERRA #
 
 A suite of codes to find extrasolar planets
