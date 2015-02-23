@@ -42,6 +42,9 @@ def read_hdf(kwargs):
     return grid
 
 class Grid(object):
+    def __init__(self,t,fm):
+        self.t = t 
+        self.fm = fm
     def set_parL(self,parL):
         """
         Set grid search parameters
@@ -66,6 +69,10 @@ class Grid(object):
             pgram = map(self.pgram_ffa,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
+        if mode=='bls':
+            pgram = map(self.pgram_bls,self.parL)
+            pgram = np.hstack(pgram)
+            pgram = pd.DataFrame(pgram)
 
         self.pgram = pgram
         return pgram
@@ -78,6 +85,11 @@ class Grid(object):
     def pgram_std(self,par):
         pgram = tdpep_std(self.t,self.fm,par)
         return pgram
+
+    def pgram_bls(self,par):
+        pgram = bls(self.t,self.fm,par)
+        return pgram
+
 
     def to_hdf(self,groupname,kwargs):
         with h5F(kwargs) as h5:
@@ -336,8 +348,6 @@ def tdpep_std(t,fm,par):
         ('col',int),
         ('t0',float)] 
 
-
-
     for twd in par['twdG']:
         dM = mtd(fm,twd)
         dM.fill_value=0
@@ -375,6 +385,34 @@ def tdpep_std(t,fm,par):
             idx+=1
 
     return pgram
+
+
+def bls(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    PcadG = np.arange(par['Pcad1'],par['Pcad2'])
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+
+    data = fm.data
+    mask = fm.mask.astype(int)
+    icad = np.arange(fm.size)
+
+    twd1 = par['twdG'][0]
+    twd2 = par['twdG'][-1]
+
+    dtype = [('col',int),('twd',float),('s2n',float),('Pcad',float),('noise',float),('mean',float)]
+    pgram = np.zeros(PcadG.size,dtype)
+    for i,Pcad in enumerate(PcadG):
+        row,col = fold.wrap_icad(icad,Pcad)
+        ccol,scol,sscol = fold.fold_col(data,mask,col)
+        ncol = np.max(col) + 1
+        r = pgram[i]
+        r['s2n'],r['twd'],r['col'],r['mean'],r['noise'] = fold.bls(ccol,scol,sscol,ncol,twd1,twd2)
+        r['Pcad'] = Pcad
+
+    return pgram
+
 
 def get_frac_Pcad(P):
     """
