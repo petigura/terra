@@ -197,11 +197,9 @@ def grid(par):
     grid = tfind.read_hdf(par)
     grid.set_parL(parL)    
 
-    pgram_std = grid.periodogram(mode='ffa')    
+    pgram = grid.periodogram(mode='bls')    
     grid.to_hdf('it0',par)
 
-    pgram_std = grid.periodogram(mode='std')    
-    grid.to_hdf('it0_std',par)
 
 def data_validation(par):
     """
