@@ -36,9 +36,9 @@ def read_hdf(kwargs):
     f = lc[ kwargs['fluxField'] ]
     mask = lc[ kwargs['fluxMask'] ] 
 
-    grid = Grid()
-    grid.t = lc['t']
-    grid.fm = ma.masked_array(f,mask,fill_value=0,copy=True)
+    t = lc['t']
+    fm = ma.masked_array(f,mask,fill_value=0,copy=True)
+    grid = Grid(t,fm)
     return grid
 
 class Grid(object):
@@ -73,6 +73,16 @@ class Grid(object):
             pgram = map(self.pgram_bls,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
+            pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
+        if mode=='fm':
+            pgram = map(self.pgram_fm,self.parL)
+            pgram = np.hstack(pgram)
+            pgram = pd.DataFrame(pgram)
+            pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
+            pgram['s2n'] = pgram['depth_2d'] * np.sqrt(pgram['depth_ivar_2d'])
+            pgram['mean'] = pgram['depth_2d']
+            pgram['noise'] = 1/np.sqrt(pgram['depth_ivar_2d'])
+
 
         self.pgram = pgram
         return pgram
@@ -88,6 +98,10 @@ class Grid(object):
 
     def pgram_bls(self,par):
         pgram = bls(self.t,self.fm,par)
+        return pgram
+
+    def pgram_fm(self,par):
+        pgram = foreman_mackey(self.t,self.fm,par)
         return pgram
 
 
@@ -393,6 +407,7 @@ def bls(t,fm,par):
     ncad = fm.size
     PcadG = np.arange(par['Pcad1'],par['Pcad2'])
     get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
 
     data = fm.data
     mask = fm.mask.astype(int)
@@ -408,10 +423,224 @@ def bls(t,fm,par):
         ccol,scol,sscol = fold.fold_col(data,mask,col)
         ncol = np.max(col) + 1
         r = pgram[i]
-        r['s2n'],r['twd'],r['col'],r['mean'],r['noise'] = fold.bls(ccol,scol,sscol,ncol,twd1,twd2)
+        r['s2n'],r['twd'],r['col'],r['mean'],r['noise'] = fold.bls(
+            ccol,scol,sscol,ncol,twd1,twd2
+        )
         r['Pcad'] = Pcad
+    pgram['mean'] *= -1
+    return pgram
+
+dtype = [
+    ('phic_same', float), 
+    ('phic_variable', float),
+    ('depth_2d', float),
+    ('depth_ivar_2d', float),
+    ('nind', float),
+    ('col', int),
+    ('itwd', int),
+]
+
+dtype_fm_max_res = np.dtype(dtype)
+
+
+dtype = [
+    ('phic_same', float), 
+    ('phic_variable', float),
+    ('depth_2d', float),
+    ('depth_ivar_2d', float),
+    ('nind', float),
+    ('col', int),
+    ('itwd', int),
+    ('Pcad',float),
+    ('twd', int),
+]
+
+dtype_fm_res = np.dtype(dtype)
+
+
+def foreman_mackey(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    Pcad1 = par['Pcad1']
+    Pcad2 = par['Pcad2']
+    twdG = par['twdG']
+    alpha = 1200.0
+
+    PcadG = np.arange(Pcad1, Pcad2)
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
+    nPcad = PcadG.size
+
+    res_1d = map(lambda x : foreman_mackey_1d(fm,x), twdG)
+    res_1d = np.vstack(res_1d)
+
+
+    pgram = np.zeros(nPcad,dtype=dtype_fm_res)
+    
+    for i,Pcad in enumerate(PcadG):
+        res = fold.forman_mackey_max(
+            Pcad, 
+            alpha, 
+            res_1d['good_trans'],
+            res_1d['dll_1d'],
+            res_1d['depth_1d'],
+            res_1d['depth_ivar_1d']
+        )
+
+        for iname,name in enumerate(dtype_fm_max_res.names):
+            pgram[i][name] = res[iname]
+
+        pgram[i]['Pcad'] = Pcad
+#        pgram[i]['twd'] = twdG[pgram[i]['itwd']]
 
     return pgram
+
+def foreman_mackey(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    Pcad1 = par['Pcad1']
+    Pcad2 = par['Pcad2']
+    twdG = par['twdG']
+    ntwd = len(twdG)
+    alpha = 1200.0
+
+    PcadG = np.arange(Pcad1, Pcad2)
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
+    nPcad = PcadG.size
+
+    icad = np.arange(fm.size)
+    data = fm.data
+    mask = fm.mask.astype(int)
+
+    res_1d = map(lambda x : foreman_mackey_1d(fm,x), twdG)
+    res_1d = np.vstack(res_1d)
+
+    pgram = np.zeros(nPcad,dtype=dtype_fm_res)
+
+    dtype = [
+        ('col', int), 
+        ('phic_same',float),
+        ('phic_variable',float),
+        ('depth_2d',float), 
+        ('depth_ivar_2d',float),
+        ('nind',int),
+        ('idx',int),
+        ('twd',int),
+    ]
+    
+    for i,Pcad in enumerate(PcadG):
+        row,col = fold.wrap_icad(icad,Pcad)
+        ncol = np.max(col) + 1
+        res_temp = np.zeros((ntwd,ncol),dtype=dtype)
+        res_temp['phic_same'] -= np.inf
+        res_temp['phic_variable'] -= np.inf
+
+        for itwd,twd in enumerate(twdG):
+            col, phic_same, phic_variable, depth_2d, depth_ivar_2d, nind = \
+                fold.forman_mackey(
+                    Pcad, 
+                    alpha, 
+                    res_1d[itwd]['good_trans'], 
+                    res_1d[itwd]['dll_1d'], 
+                    res_1d[itwd]['depth_1d'], 
+                    res_1d[itwd]['depth_ivar_1d'], 
+                )
+
+
+            res_temp[itwd]['col'] = col
+            res_temp[itwd]['phic_same'] = phic_same
+            res_temp[itwd]['phic_variable'] = phic_variable
+            res_temp[itwd]['depth_2d'] = depth_2d
+            res_temp[itwd]['depth_ivar_2d'] = depth_ivar_2d
+            res_temp[itwd]['nind'] = nind
+            res_temp[itwd]['twd'] = twd
+
+        res_temp = res_temp.flatten()
+        res_temp = res_temp[
+            (res_temp['depth_2d'] > 0.0 ) &
+            (res_temp['phic_same'] > res_temp['phic_variable']) &
+            (res_temp['nind'] >= 2)
+            ]
+
+        if res_temp.size==0:
+            continue 
+
+        res_max = res_temp[res_temp['phic_same'].argmax()]
+
+        pgram[i]['phic_same'] = res_max['phic_same']
+        pgram[i]['phic_variable'] = res_max['phic_variable']
+        pgram[i]['depth_2d'] = res_max['depth_2d']
+        pgram[i]['depth_ivar_2d'] = res_max['depth_ivar_2d']
+        pgram[i]['nind'] = res_max['nind']
+        pgram[i]['col'] = res_max['col']
+        pgram[i]['twd'] = res_max['twd']
+        pgram[i]['Pcad'] = Pcad        
+
+    return pgram
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def foreman_mackey_1d(fm,twd):
+    assert fm.fill_value==0,'fill_value must = 0'
+    assert np.sum(np.isnan(fm.compressed()))==0,'mask out nans'
+
+    dtype = [
+        ('good_trans', int),
+        ('depth_1d', float), 
+        ('depth_ivar_1d', float), 
+        ('dll_1d', float), 
+    ]
+
+    ncad = len(fm)
+    fmfilled = fm.filled()
+
+    # Compute inverse varience
+    ivar = 1.0 / np.median(np.diff(fm.compressed()) ** 2)
+    res = np.zeros(ncad,dtype=dtype)
+
+    for cad1 in range(ncad):
+        cad2 = cad1 + twd
+        data = fmfilled[cad1:cad2]
+        mask = fm.mask[cad1:cad2]
+        s = np.sum(data)
+        c = np.sum(~mask)
+        m = s / c
+        res['depth_1d'][cad1] = -1.0 * m 
+        ll0 = -0.5 * np.sum(data**2) * ivar 
+        ll = -0.5 * np.sum( (data - m )**2 ) * ivar 
+        res['dll_1d'][cad1] = ll - ll0
+        res['depth_ivar_1d'][cad1] = ivar * c
+        
+        if c > twd / 2:
+            res['good_trans'][cad1] = 1
+
+    return res
+
 
 
 def get_frac_Pcad(P):
