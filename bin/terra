@@ -19,8 +19,8 @@ def grid(args):
     d = dict(df.ix[args.index])
     d['outfile'] = args.outfile
     if args.debug:
-        d['P1'] = 5.
-        d['P2'] = 10.
+        d['P1'] = 20.
+        d['P2'] = 23.
     
     terra.grid(d)
 

@@ -61,6 +61,78 @@ cpdef fold_col(np.ndarray[np.float64_t, ndim=1] data,
 
     return ccol,scol,sscol
 
+
+cpdef fold_col_clip(np.ndarray[np.float64_t, ndim=1] data,
+                    np.ndarray[np.int64_t, ndim=1] mask, 
+                    np.ndarray[np.int64_t, ndim=1] col,
+                    int nclip):
+    """
+    Fold Columns
+
+    Assign each point of time series to a column (bin) compute the
+    following aggregating statristics for each column.
+
+    Parameters
+    ----------
+    data : (float) data array
+    mask : (int) mask for data array. 1 = masked out.
+    col : (int) column corresponding to phase bin of measurement.
+
+    Return
+    ------
+    ccol : total number of non-masked elements
+    scol : sum of elements
+    sscol : sum of squares of elements
+    """
+
+    cdef int icad, icol,ncad, ncol
+    ncad = data.shape[0]
+    ncol = np.max(col)+1
+    
+    # Define column arrays
+    oshape = (nclip,ncol)
+    cdef np.ndarray[np.int64_t] ccol = np.zeros(oshape,dtype=int)
+    cdef np.ndarray[np.float64_t] scol = np.zeros(oshape)
+    cdef np.ndarray[np.float64_t] sscol = np.zeros(oshape)
+
+
+    # Temporary arrays with values indecies of nclip largest values
+    tshape = (nclip,ncol)
+    cdef np.ndarray[np.int64_t] tmpicad = np.zeros(tshape,dtype=int)
+    cdef np.ndarray[np.float64_t] tmpdata = np.zeros(tshape,dtype=float) - 1
+
+    cdef np.ndarray[np.int64_t] minrowtmp = np.zeros(tshape,dtype=int)
+    cdef np.ndarray[np.float64_t] mindatatmp = np.zeros(tshape,dtype=float) - 1
+
+    # Loop over cadences
+    for icad in range(ncad):
+        if mask[icad]==1:
+            continue
+
+        icol = col[icad]
+
+        ccol[0,icol]+=1 
+        scol[0,icol]+=data[icad] 
+        sscol[0,icol]+=data[icad]**2
+
+        if data[icad] > mindatatmp[icol]:
+            tmpicad[]
+                
+
+
+
+
+    # Subtract off the max value
+    for icol in range(ncol):
+        icad = maxicad[icol]
+        ccol[icol]-=1 
+        scol[icol]-=data[icad] 
+        sscol[icol]-=data[icad]**2
+
+    return ccol,scol,sscol
+
+
+
 def wrap_icad(icad,Pcad):
     """
     rows and column identfication to each one of the

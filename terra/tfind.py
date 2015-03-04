@@ -62,13 +62,10 @@ class Grid(object):
     def periodogram(self,mode='std'):
         if mode=='std':
             pgram = map(self.pgram_std,self.parL)
-            pgram = pd.concat(pgram)
-            pgram = pgram.sort(['Pcad','s2n'])
-            pgram = pgram.groupby('Pcad',as_index=False).last()
-        if mode=='ffa':
-            pgram = map(self.pgram_ffa,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
+        if mode=='ffa':
+            pgram = map(self.pgram_ffa,self.parL)
         if mode=='bls':
             pgram = map(self.pgram_bls,self.parL)
             pgram = np.hstack(pgram)
@@ -331,73 +328,173 @@ def fold_ffa(dM,Pcad0):
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
 
-def tdpep_std(t,fm,par):
+def tdpep_std(t,fm,par,stdthresh=10):
     """
     """
     ncad = fm.size
     PcadG = np.arange(par['Pcad1'],par['Pcad2'])
     get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
     PcadG = np.hstack(map(get_frac_Pcad,PcadG))
-
+    twdG = par['twdG']
+    
     icad = np.arange(ncad)
 
     data = list(itertools.product(par['twdG'],PcadG))
-    pgram = pd.DataFrame(data=data,columns='twd Pcad'.split())
-    pgram['s2n'] = 0.0
-    pgram['c'] = 0.0
-    pgram['mean'] = 0.0
-    pgram['std'] = 0.0
-    pgram['noise'] = 0.0
-    pgram['t0'] = 0.0
-    pgram['colmax'] = -1
+    dtype_pgram = [
+        ('Pcad',float),
+        ('twd',float),
+        ('s2n',float),
+        ('c',float),
+        ('mean',float),
+        ('t0',float),
+        ('noise',float),
+        ]
 
-    idx = 0 
+    pgram = np.zeros( (len(twdG),len(PcadG)),dtype=dtype_pgram)
 
     # dtype of the record array returned from tdpep()
-    dtype = [
+    dtype_temp = [
         ('c',int),
         ('mean',float),
         ('std',float),
         ('s2n',float),
         ('col',int),
-        ('t0',float)] 
+        ('t0',float)
+    ] 
+    for itwd,twd in enumerate(twdG):
+        res = foreman_mackey_1d(fm,twd)    
+        dM = ma.masked_array(
+            res['depth_1d'],
+            ~res['good_trans'].astype(bool),
+            fill_value=0
+            )
+        
+        noise = ma.median( ma.abs(dM) )[0] * 1.5
+        pgram[itwd,:]['noise'] = noise
+        pgram[itwd,:]['twd'] = twd
 
-    for twd in par['twdG']:
-        dM = mtd(fm,twd)
-        dM.fill_value=0
-        noise = ma.median( ma.abs(dM) )[0]
-
-        for Pcad in PcadG:
+        for iPcad,Pcad in enumerate(PcadG):
             row,col = fold.wrap_icad(icad,Pcad)
             ncol = np.max(col) + 1 # Starts from 0
             
-            r = np.empty(ncol,dtype)
-            c,s,ss = fold.fold_col(dM.data,dM.mask.astype(int),col)
+            r = np.zeros(ncol,dtype=dtype_temp)
+            r['s2n'] = -1 
 
+            rclip = r.copy()
+
+            #for f,ri in zip([fold.fold_col,fold.fold_col_clip],[r,rclip]):
+            #    c,s,ss = f(dM.data,dM.mask.astype(int),col)
+            #
+            #    # Compute first and second moments
+            #    ri['mean'] = s/c
+            #    ri['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
+            #    ri['s2n'] = s / np.sqrt(c) / noise            
+            #    ri['c'] = c
+            #    ri['col'] = np.arange(ncol) 
+            #
+            #    # Add half the transit with because column index
+            #    # corresponds in ingress
+            #    ri['t0'] = ( ri['col'] + twd / 2.0) * config.lc + t[0] 
+
+
+            df = pd.DataFrame(
+                np.vstack(
+                    [dM.data,dM.data**2,(~dM.mask).astype(int),col,icad]).T,
+                columns=['s','ss','c','col','icad']
+            )
+            df = df[df.c > 0].dropna()
+            df.index = df['icad'].astype(int)
+            df = df.sort(['col','s'])
+            df['col'] = df.col.astype(int)
+            g = df.groupby('col',as_index=True)
+            dfsum = g.sum()
+            dfsum['col'] = dfsum.index
+
+            # Require 3 transits
+            goodcol = dfsum[dfsum['c'] >=3].index
+            dfsum = dfsum.loc[goodcol]
+            dfsum['bmax1'] = False
+            dfsum['bmax2'] = False
+
+            c,s,ss = (
+                np.array(dfsum['c']),
+                np.array(dfsum['s']),
+                np.array(dfsum['ss'])
+                )
+            
             # Compute first and second moments
-            r['mean'] = s/c
-            r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
-            r['s2n'] = s / np.sqrt(c) / noise            
-            r['c'] = c
-            r['col'] = np.arange(ncol) 
-            r['t0'] = r['col'] * config.lc + t[0]
+            dfsum['mean'] = s/c
+            dfsum['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
+            dfsum['s2n'] = s / np.sqrt(c) / noise            
+            dfsum['c'] = c
+            
+            # Add half the transit with because column index
+            # corresponds in ingress
+            dfsum['t0'] = ( dfsum['col'] + twd / 2.0) * config.lc + t[0] 
+
 
             # Non-linear part.
             # - Require 3 or more transits
-            # - Require Consistency among transits
-            b = (r['c'] >= 3) & (r['std'] < 5 * noise)
-            if np.any(b):
-                r = r[b] # Cut the columns that don't pass
+            ## - Require consistency among transits
 
-                imax = np.argmax(r['s2n'])
-                pgram.at[idx,'noise'] = noise
-                pgram.at[idx,'colmax'] = r['col'][imax]
-                for k in 'c mean std s2n t0'.split():
-                    pgram.at[idx,k] = r[k][imax]
+            dropcad = g.last()['icad']
+            df = df.drop(dropcad)
+            df['col'] = df.col.astype(int)
+            g = df.groupby('col',as_index=True)
+            dfmax = g.sum()
+            dfmax['col'] = dfmax.index
+            dfmax = dfmax.loc[goodcol]
+            dfsum['bmax1'] = dfmax['s'] / dfmax['c'] > 0.5 * dfsum['mean']
+
+            dropcad = g.last()['icad']
+            df = df.drop(dropcad)
+            df['col'] = df.col.astype(int)
+            g = df.groupby('col',as_index=True)
+            dfmax = g.sum()
+            dfmax['col'] = dfmax.index
+            dfmax = dfmax.loc[goodcol]
+            dfsum['bmax2'] = dfmax['s'] / dfmax['c'] > 0.5 * dfsum['mean']
 
 
-            idx+=1
+#            dfmax = g.nth(-1).loc[goodcol]
+#            c -= np.array(dfmax['c']) 
+#            s -= np.array(dfmax['s']) 
+#            ss -= np.array(dfmax['ss']) 
+#            
+#            dfsum['bmax1'] = s / c > 0.5 * dfsum['mean']
+#
+#            dfmax = g.nth(-2).loc[goodcol]
+#            c -= np.array(dfmax['c']) 
+#            s -= np.array(dfmax['s']) 
+#            ss -= np.array(dfmax['ss']) 
+#            dfsum['bmax2'] = s / c > 0.5 * dfsum['mean']
+#
+            # Accept if s2n > 30 or
+            #r['std'] < 0.2 * r['mean'] Let's high SNR transits pass
+            # or if r['std'] < let's consistent depth transits pass 
+            #b = (r['std'] < 0.2 * r['mean'] ) | ()
 
+#            b = (
+#                (r['s2n'] > 30) |
+#                (r['std'] < stdthresh * noise)
+#                )
+#
+#            r = r[b] # Cut the columns that don't pass
+#            if len(r)==0:
+#                continue 
+
+
+            b = dfsum.bmax1 & dfsum.bmax2
+            if ~np.any(b):
+                continue 
+            colmax = dfsum[b].s2n.idxmax()
+            names = ['mean','s2n','c','t0']
+            for n in names:
+                pgram[itwd,iPcad][n] = dfsum.loc[colmax,n]
+
+            pgram[itwd,iPcad]['Pcad'] = Pcad
+
+    pgram = pgram[np.argmax(pgram['s2n'],axis=0),np.arange(pgram.shape[1])]
     return pgram
 
 
@@ -580,30 +677,6 @@ def foreman_mackey(t,fm,par):
         pgram[i]['Pcad'] = Pcad        
 
     return pgram
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 def foreman_mackey_1d(fm,twd):
     assert fm.fill_value==0,'fill_value must = 0'
