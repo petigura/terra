@@ -10,6 +10,8 @@ from kplot import wrapHelp,yticksppm,tprop,bbox,annkw
 from .. import transit_model as tm
 from .. import tval
 from .. import config
+from matplotlib.ticker import MaxNLocator
+
 
 pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
 rc('axes',color_cycle=['RoyalBlue','Tomato'])
@@ -98,6 +100,10 @@ grass %(grass).2f""" % d
     secondary_eclipse(dv)
     AddAnchored("Secondary\nEclipse",prop=tprop,frameon=True,loc=3)
 
+    for ax in [axPF,axPFzoom,axPF180,axPFSec]:
+        ax.grid()
+        ax.yaxis.set_major_locator(MaxNLocator(4))
+
     sca(axSingSES)
     single_event_statistic(dv)
 
@@ -148,6 +154,14 @@ def periodogram(dv):
     id = np.argsort( np.abs(x - dv.P))[0]
     plot(x[id],y[id],'ro')
     autoscale(axis='x',tight=True)
+    xl = xlim()
+
+    harm = np.array([2,4]).astype(float)
+    harm = np.hstack([1,1/harm,harm]) 
+    harm *= dv.P 
+    for h in harm:
+        axvline(h,lw=6,alpha=0.2,color='r',zorder=0)
+    xlim(*xl)
 
 def autocorr(dv):
     xlabel('Displacement')
@@ -156,7 +170,7 @@ def autocorr(dv):
     gca().yaxis.set_visible(False)
 
 def phaseFold(dv,ph,diag=False,zoom=False):
-    PF = getattr(dv,'lcPF%i' % ph)
+    PF = getattr(dv,'lcPF%i' % ph )
     x  = PF['tPF']
 
     @handelKeyError
@@ -239,9 +253,13 @@ def transit_stack(dv):
 
     res,lc = dv.RES,dv.lc
     ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
-    wrapHelp(dv,lc['t'],ym,d)
+    wrapHelp(dv,lc['t'],ym,d,time=True)
     ylabel('SES (ppm)')
-    xlim(-2,2)
+
+    # With of transit view units of twd
+    xl = np.array([-3.0,3.0])
+    xl = xl* dv.twd * config.lc
+    xlim(*xl)
     axvline(0, alpha=.1,lw=10,color='m',zorder=1)
 
     gca().yaxis.set_visible(False)

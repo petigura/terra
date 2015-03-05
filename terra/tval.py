@@ -295,12 +295,13 @@ class DV(h5plus.iohelper):
         """
         Attach autocorrelation trace
         """
-        bx5fft = np.fft.fft(self.rbmed5['f'] )
-        corr = np.fft.ifft( bx5fft*bx5fft.conj()  )
-        corr = corr.real
-        lag = np.fft.fftfreq(corr.size,1./corr.size)
-        lag = np.fft.fftshift(lag)
-        corr = np.fft.fftshift(corr)
+        
+        arr = ma.masked_invalid(self.rbmed5['f']  )
+        nlag = arr.size
+        lag = np.arange(nlag) - nlag/2
+        corr = [ma.sum(np.roll(arr,l)*arr) for l in lag]
+        corr = np.array(corr)
+
         b = np.abs(lag > 6) # Bigger than the size of the fit.
         autor = max(corr[~b])/max(np.abs(corr[b]))
 

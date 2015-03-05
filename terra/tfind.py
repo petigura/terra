@@ -36,9 +36,9 @@ def read_hdf(kwargs):
     f = lc[ kwargs['fluxField'] ]
     mask = lc[ kwargs['fluxMask'] ] 
 
-    grid = Grid()
-    grid.t = lc['t']
-    grid.fm = ma.masked_array(f,mask,fill_value=0,copy=True)
+    t = lc['t']
+    fm = ma.masked_array(f,mask,fill_value=0,copy=True)
+    grid = Grid(t,fm)
     return grid
 
 class Grid(object):
@@ -60,34 +60,45 @@ class Grid(object):
         self.parL = parL
         
     def periodogram(self,mode='std'):
-        if mode=='std':
-            pgram = map(self.pgram_std,self.parL)
-            pgram = pd.concat(pgram)
-            pgram = pgram.sort(['Pcad','s2n'])
-            pgram = pgram.groupby('Pcad',as_index=False).last()
+        if mode=='max':
+            pgram = map(self._pgram_max,self.parL)
+            pgram = np.hstack(pgram)
+            pgram = pd.DataFrame(pgram)
         if mode=='ffa':
-            pgram = map(self.pgram_ffa,self.parL)
-            pgram = np.hstack(pgram)
-            pgram = pd.DataFrame(pgram)
+            pgram = map(self._pgram_ffa,self.parL)
         if mode=='bls':
-            pgram = map(self.pgram_bls,self.parL)
+            pgram = map(self._pgram_bls,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
+            pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
+        if mode=='fm':
+            pgram = map(self._pgram_fm,self.parL)
+            pgram = np.hstack(pgram)
+            pgram = pd.DataFrame(pgram)
+            pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
+            pgram['s2n'] = pgram['depth_2d'] * np.sqrt(pgram['depth_ivar_2d'])
+            pgram['mean'] = pgram['depth_2d']
+            pgram['noise'] = 1/np.sqrt(pgram['depth_ivar_2d'])
+
 
         self.pgram = pgram
         return pgram
 
-    def pgram_ffa(self,par):
+    def _pgram_ffa(self,par):
         rtd = tdpep(self.t,self.fm,par)
         r = tdmarg(rtd)
         return r
 
-    def pgram_std(self,par):
-        pgram = tdpep_std(self.t,self.fm,par)
+    def _pgram_max(self,par):
+        pgram = pgram_max(self.t,self.fm,par)
         return pgram
 
-    def pgram_bls(self,par):
+    def _pgram_bls(self,par):
         pgram = bls(self.t,self.fm,par)
+        return pgram
+
+    def _pgram_fm(self,par):
+        pgram = foreman_mackey(self.t,self.fm,par)
         return pgram
 
 
@@ -317,75 +328,128 @@ def fold_ffa(dM,Pcad0):
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
 
-def tdpep_std(t,fm,par):
+def pgram_max(t,fm,par):
     """
+    Periodogram: Check max values
+
+    Computes s2n for range of P, t0, and twd. However, for every
+    putative transit, we evaluate the transit depth having cut the
+    deepest transit and the second deepest transit. We require that
+    the mean depth after having cut the test max two values not be too
+    much smaller. Good at removing locations with 2 outliers.
+
+    Parameters 
+    ----------
+    t : t[0] provides starting time
+    fm : masked array with fluxes
+    par : dict with following keys
+          - Pcad1 (lower period limit)
+          - Pcad2 (upper period limit)
+          - twdG (grid of trial durations to compute)
+
+    Returns
+    -------
+    pgram : Record array with following fields
+    -
+
     """
     ncad = fm.size
     PcadG = np.arange(par['Pcad1'],par['Pcad2'])
     get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
     PcadG = np.hstack(map(get_frac_Pcad,PcadG))
-
+    twdG = par['twdG']
+    
     icad = np.arange(ncad)
 
-    data = list(itertools.product(par['twdG'],PcadG))
-    pgram = pd.DataFrame(data=data,columns='twd Pcad'.split())
-    pgram['s2n'] = 0.0
-    pgram['c'] = 0.0
-    pgram['mean'] = 0.0
-    pgram['std'] = 0.0
-    pgram['noise'] = 0.0
-    pgram['t0'] = 0.0
-    pgram['colmax'] = -1
+    dtype_pgram = [
+        ('Pcad',float),
+        ('twd',float),
+        ('s2n',float),
+        ('c',float),
+        ('mean',float),
+        ('t0',float),
+        ('noise',float),
+        ]
 
-    idx = 0 
+    pgram = np.zeros( (len(twdG),len(PcadG)),dtype=dtype_pgram)
 
     # dtype of the record array returned from tdpep()
-    dtype = [
+    dtype_temp = [
         ('c',int),
         ('mean',float),
-        ('std',float),
         ('s2n',float),
         ('col',int),
-        ('t0',float)] 
+        ('t0',float)
+    ] 
+    for itwd,twd in enumerate(twdG):
+        res = foreman_mackey_1d(fm,twd)    
+        dM = ma.masked_array(
+            res['depth_1d'],
+            ~res['good_trans'].astype(bool),
+            fill_value=0
+            )
+        
+        noise = ma.median( ma.abs(dM) )[0] * 1.5
+        pgram[itwd,:]['noise'] = noise
+        pgram[itwd,:]['twd'] = twd
 
-    for twd in par['twdG']:
-        dM = mtd(fm,twd)
-        dM.fill_value=0
-        noise = ma.median( ma.abs(dM) )[0]
-
-        for Pcad in PcadG:
+        for iPcad,Pcad in enumerate(PcadG):
+            # Compute row and columns for folded data
             row,col = fold.wrap_icad(icad,Pcad)
-            ncol = np.max(col) + 1 # Starts from 0
             
-            r = np.empty(ncol,dtype)
-            c,s,ss = fold.fold_col(dM.data,dM.mask.astype(int),col)
+            ncol = np.max(col) + 1
+            nrow = np.max(row) + 1
+            icol = np.arange(ncol)
 
-            # Compute first and second moments
+            # Shove data and mask into appropriate positions
+            data = np.zeros((nrow,ncol))
+            mask = np.ones((nrow,ncol)).astype(bool)
+            data[row,col] = dM.data
+            mask[row,col] = dM.mask
+
+            # Sum along columns (clipping top 0, 1, 2 values)
+            datasum,datacnt = cumsum_top(data,mask,2)
+
+            # datasum[-1] are the is the summed columns having not
+            # clipped any values. Update results array. For t0, add
+            # half the transit with because column index corresponds
+            # in ingress
+            s = datasum[-1,:]
+            c = datacnt[-1,:]
+            r = np.zeros(ncol,dtype=dtype_temp)
+            r['s2n'] = -1 
             r['mean'] = s/c
-            r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
             r['s2n'] = s / np.sqrt(c) / noise            
-            r['c'] = c
-            r['col'] = np.arange(ncol) 
-            r['t0'] = r['col'] * config.lc + t[0]
-
-            # Non-linear part.
-            # - Require 3 or more transits
-            # - Require Consistency among transits
-            b = (r['c'] >= 3) & (r['std'] < 5 * noise)
-            if np.any(b):
-                r = r[b] # Cut the columns that don't pass
-
-                imax = np.argmax(r['s2n'])
-                pgram.at[idx,'noise'] = noise
-                pgram.at[idx,'colmax'] = r['col'][imax]
-                for k in 'c mean std s2n t0'.split():
-                    pgram.at[idx,k] = r[k][imax]
+            r['c'][:] = c
+            r['col'] = icol
+            r['t0'] = ( r['col'] + twd / 2.0) * config.lc + t[0] 
 
 
-            idx+=1
+            # Compute mean transit depth after removing the deepest
+            # transit, datacnt[-2], and the second deepest transit,
+            # datacnt[-3]. The mean transit depth must be > 0.5 it's
+            # former value. Also, require 3 transits.
+            mean_clip1 = datasum[-2] / datacnt[-2]
+            mean_clip2 = datasum[-3] / datacnt[-3]
+            b = (
+                (mean_clip1 > 0.5 * r['mean'] ) & 
+                (mean_clip2 > 0.5 * r['mean']) & 
+                (r['c'] >= 3)
+            )
 
+            if ~np.any(b):
+                continue 
+
+            rcut = r[b]
+            rmax = rcut[np.argmax(rcut['s2n'])]
+            names = ['mean','s2n','c','t0']
+            for n in names:
+                pgram[itwd,iPcad][n] = rmax[n]
+            pgram[itwd,iPcad]['Pcad'] = Pcad
+            
+    # Compute the maximum return twd with the maximum s2n
+    pgram = pgram[np.argmax(pgram['s2n'],axis=0),np.arange(pgram.shape[1])]
     return pgram
-
 
 def bls(t,fm,par):
     """
@@ -393,6 +457,7 @@ def bls(t,fm,par):
     ncad = fm.size
     PcadG = np.arange(par['Pcad1'],par['Pcad2'])
     get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
 
     data = fm.data
     mask = fm.mask.astype(int)
@@ -408,10 +473,200 @@ def bls(t,fm,par):
         ccol,scol,sscol = fold.fold_col(data,mask,col)
         ncol = np.max(col) + 1
         r = pgram[i]
-        r['s2n'],r['twd'],r['col'],r['mean'],r['noise'] = fold.bls(ccol,scol,sscol,ncol,twd1,twd2)
+        r['s2n'],r['twd'],r['col'],r['mean'],r['noise'] = fold.bls(
+            ccol,scol,sscol,ncol,twd1,twd2
+        )
         r['Pcad'] = Pcad
+    pgram['mean'] *= -1
+    return pgram
+
+dtype = [
+    ('phic_same', float), 
+    ('phic_variable', float),
+    ('depth_2d', float),
+    ('depth_ivar_2d', float),
+    ('nind', float),
+    ('col', int),
+    ('itwd', int),
+]
+
+dtype_fm_max_res = np.dtype(dtype)
+
+
+dtype = [
+    ('phic_same', float), 
+    ('phic_variable', float),
+    ('depth_2d', float),
+    ('depth_ivar_2d', float),
+    ('nind', float),
+    ('col', int),
+    ('itwd', int),
+    ('Pcad',float),
+    ('twd', int),
+]
+
+dtype_fm_res = np.dtype(dtype)
+
+
+def foreman_mackey(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    Pcad1 = par['Pcad1']
+    Pcad2 = par['Pcad2']
+    twdG = par['twdG']
+    alpha = 1200.0
+
+    PcadG = np.arange(Pcad1, Pcad2)
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
+    nPcad = PcadG.size
+
+    res_1d = map(lambda x : foreman_mackey_1d(fm,x), twdG)
+    res_1d = np.vstack(res_1d)
+
+
+    pgram = np.zeros(nPcad,dtype=dtype_fm_res)
+    
+    for i,Pcad in enumerate(PcadG):
+        res = fold.forman_mackey_max(
+            Pcad, 
+            alpha, 
+            res_1d['good_trans'],
+            res_1d['dll_1d'],
+            res_1d['depth_1d'],
+            res_1d['depth_ivar_1d']
+        )
+
+        for iname,name in enumerate(dtype_fm_max_res.names):
+            pgram[i][name] = res[iname]
+
+        pgram[i]['Pcad'] = Pcad
+#        pgram[i]['twd'] = twdG[pgram[i]['itwd']]
 
     return pgram
+
+def foreman_mackey(t,fm,par):
+    """
+    """
+    ncad = fm.size
+    Pcad1 = par['Pcad1']
+    Pcad2 = par['Pcad2']
+    twdG = par['twdG']
+    ntwd = len(twdG)
+    alpha = 1200.0
+
+    PcadG = np.arange(Pcad1, Pcad2)
+    get_frac_Pcad = lambda P : np.arange(P,P+1,1.0*P / ncad)
+    PcadG = np.hstack(map(get_frac_Pcad,PcadG))
+    nPcad = PcadG.size
+
+    icad = np.arange(fm.size)
+    data = fm.data
+    mask = fm.mask.astype(int)
+
+    res_1d = map(lambda x : foreman_mackey_1d(fm,x), twdG)
+    res_1d = np.vstack(res_1d)
+
+    pgram = np.zeros(nPcad,dtype=dtype_fm_res)
+
+    dtype = [
+        ('col', int), 
+        ('phic_same',float),
+        ('phic_variable',float),
+        ('depth_2d',float), 
+        ('depth_ivar_2d',float),
+        ('nind',int),
+        ('idx',int),
+        ('twd',int),
+    ]
+    
+    for i,Pcad in enumerate(PcadG):
+        row,col = fold.wrap_icad(icad,Pcad)
+        ncol = np.max(col) + 1
+        res_temp = np.zeros((ntwd,ncol),dtype=dtype)
+        res_temp['phic_same'] -= np.inf
+        res_temp['phic_variable'] -= np.inf
+
+        for itwd,twd in enumerate(twdG):
+            col, phic_same, phic_variable, depth_2d, depth_ivar_2d, nind = \
+                fold.forman_mackey(
+                    Pcad, 
+                    alpha, 
+                    res_1d[itwd]['good_trans'], 
+                    res_1d[itwd]['dll_1d'], 
+                    res_1d[itwd]['depth_1d'], 
+                    res_1d[itwd]['depth_ivar_1d'], 
+                )
+
+
+            res_temp[itwd]['col'] = col
+            res_temp[itwd]['phic_same'] = phic_same
+            res_temp[itwd]['phic_variable'] = phic_variable
+            res_temp[itwd]['depth_2d'] = depth_2d
+            res_temp[itwd]['depth_ivar_2d'] = depth_ivar_2d
+            res_temp[itwd]['nind'] = nind
+            res_temp[itwd]['twd'] = twd
+
+        res_temp = res_temp.flatten()
+        res_temp = res_temp[
+            (res_temp['depth_2d'] > 0.0 ) &
+            (res_temp['phic_same'] > res_temp['phic_variable']) &
+            (res_temp['nind'] >= 2)
+            ]
+
+        if res_temp.size==0:
+            continue 
+
+        res_max = res_temp[res_temp['phic_same'].argmax()]
+
+        pgram[i]['phic_same'] = res_max['phic_same']
+        pgram[i]['phic_variable'] = res_max['phic_variable']
+        pgram[i]['depth_2d'] = res_max['depth_2d']
+        pgram[i]['depth_ivar_2d'] = res_max['depth_ivar_2d']
+        pgram[i]['nind'] = res_max['nind']
+        pgram[i]['col'] = res_max['col']
+        pgram[i]['twd'] = res_max['twd']
+        pgram[i]['Pcad'] = Pcad        
+
+    return pgram
+
+def foreman_mackey_1d(fm,twd):
+    assert fm.fill_value==0,'fill_value must = 0'
+    assert np.sum(np.isnan(fm.compressed()))==0,'mask out nans'
+
+    dtype = [
+        ('good_trans', int),
+        ('depth_1d', float), 
+        ('depth_ivar_1d', float), 
+        ('dll_1d', float), 
+    ]
+
+    ncad = len(fm)
+    fmfilled = fm.filled()
+
+    # Compute inverse varience
+    ivar = 1.0 / np.median(np.diff(fm.compressed()) ** 2)
+    res = np.zeros(ncad,dtype=dtype)
+
+    for cad1 in range(ncad):
+        cad2 = cad1 + twd
+        data = fmfilled[cad1:cad2]
+        mask = fm.mask[cad1:cad2]
+        s = np.sum(data)
+        c = np.sum(~mask)
+        m = s / c
+        res['depth_1d'][cad1] = -1.0 * m 
+        ll0 = -0.5 * np.sum(data**2) * ivar 
+        ll = -0.5 * np.sum( (data - m )**2 ) * ivar 
+        res['dll_1d'][cad1] = ll - ll0
+        res['depth_ivar_1d'][cad1] = ivar * c
+        
+        if c > twd / 2:
+            res['good_trans'][cad1] = 1
+
+    return res
+
 
 
 def get_frac_Pcad(P):
@@ -519,4 +774,80 @@ def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
         dL.append(d)
 
     return dL
+
+
+def cumsum_top(data,mask,k):
+    """
+
+    Take a data and mask array with shape = (m,n)
+
+    For each column of data, sort the values (ignoring values that are
+    masked out). Then compute the sum along columns of the m-k
+    smallest values, then the m-k+1 smallest values until all m rows
+    are summed.
+
+    Parameters 
+    ----------
+    data : ndim = 2,
+    mask : True if entry is included, False if not
+    """
+    
+
+    # masked values are filled with -infs (so they don't enter into the sort)
+    nrow,ncol = data.shape
+    nrowout = k + 1
+
+    datainf = data.copy() 
+    datazero = data.copy()
+
+    datainf[mask] = -np.inf 
+    datazero[mask] = 0.0
+
+    icol = np.arange(data.shape[1])
+    srow = np.argsort(datainf,axis=0) # Indecies of sorted rows
+    
+    datazero = datazero[srow,icol]
+    mask = mask[srow,icol]
+    cnt = (~mask).astype(int) # Counter. 1 if it's a valid point
+
+    # Substitue the sum of all the higher rows in to the nrowout row
+    # of output arrays
+    datazero[-nrowout,:] = np.sum(datazero[:-k],axis=0)
+    cnt[-nrowout,:] = np.sum(cnt[:-k],axis=0)
+    
+    datasum = np.cumsum(datazero[-nrowout:],axis=0)
+    # Count number of masked elements
+    datacnt = np.cumsum(cnt[-nrowout:],axis=0) 
+    return datasum,datacnt
+
+def test_cumsum_top():
+    np.set_printoptions(precision=1)
+    nrow,ncol = 4,10
+    
+    arr = np.ones((nrow,ncol))
+    arr[0,2] = np.nan
+    arr[-1,-3:] = np.nan
+    arr[:,3] = 2
+    arr[1,5] = 8
+    arr[2,5] = 10
+
+    print "Input array"
+    print arr 
+
+    mask = np.isnan(arr)
+    k = 2
+    print "cumsum arrays"
+    datasum,datacnt  = cumsum_top(arr,mask,k)
+    print datasum.astype(int)
+    print datacnt.astype(int)
+    print "Mean value"
+    s =  str(datasum.astype(float)/(datacnt.astype(float)))
+    sL = s.split('\n')
+    sL[0] += ' <- Consistent depth'
+    sL[2] += ' <- 2 outliers drive mean'
+    print "\n".join(sL)
+    
+
+    
+
 
