@@ -99,3 +99,4 @@ wd        = 4    # Width of the median filter used to determine step
 # consider bad data by the following amounts in both directions.
 cadGrow = dict(desat=1,atTwk=4)
 
+climb_solar = np.array([ 0.77, -0.67, 1.14, -0.41])
