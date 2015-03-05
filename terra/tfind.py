@@ -60,19 +60,19 @@ class Grid(object):
         self.parL = parL
         
     def periodogram(self,mode='std'):
-        if mode=='std':
-            pgram = map(self.pgram_std,self.parL)
+        if mode=='max':
+            pgram = map(self._pgram_max,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
         if mode=='ffa':
-            pgram = map(self.pgram_ffa,self.parL)
+            pgram = map(self._pgram_ffa,self.parL)
         if mode=='bls':
-            pgram = map(self.pgram_bls,self.parL)
+            pgram = map(self._pgram_bls,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
             pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
         if mode=='fm':
-            pgram = map(self.pgram_fm,self.parL)
+            pgram = map(self._pgram_fm,self.parL)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
             pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
@@ -84,20 +84,20 @@ class Grid(object):
         self.pgram = pgram
         return pgram
 
-    def pgram_ffa(self,par):
+    def _pgram_ffa(self,par):
         rtd = tdpep(self.t,self.fm,par)
         r = tdmarg(rtd)
         return r
 
-    def pgram_std(self,par):
-        pgram = tdpep_std(self.t,self.fm,par)
+    def _pgram_max(self,par):
+        pgram = pgram_max(self.t,self.fm,par)
         return pgram
 
-    def pgram_bls(self,par):
+    def _pgram_bls(self,par):
         pgram = bls(self.t,self.fm,par)
         return pgram
 
-    def pgram_fm(self,par):
+    def _pgram_fm(self,par):
         pgram = foreman_mackey(self.t,self.fm,par)
         return pgram
 
@@ -328,8 +328,30 @@ def fold_ffa(dM,Pcad0):
     meanF  = sumF/countF
     return t0cad,Pcad,meanF,countF
 
-def tdpep_std(t,fm,par,stdthresh=10):
+def pgram_max(t,fm,par):
     """
+    Periodogram: Check max values
+
+    Computes s2n for range of P, t0, and twd. However, for every
+    putative transit, we evaluate the transit depth having cut the
+    deepest transit and the second deepest transit. We require that
+    the mean depth after having cut the test max two values not be too
+    much smaller. Good at removing locations with 2 outliers.
+
+    Parameters 
+    ----------
+    t : t[0] provides starting time
+    fm : masked array with fluxes
+    par : dict with following keys
+          - Pcad1 (lower period limit)
+          - Pcad2 (upper period limit)
+          - twdG (grid of trial durations to compute)
+
+    Returns
+    -------
+    pgram : Record array with following fields
+    -
+
     """
     ncad = fm.size
     PcadG = np.arange(par['Pcad1'],par['Pcad2'])
@@ -339,7 +361,6 @@ def tdpep_std(t,fm,par,stdthresh=10):
     
     icad = np.arange(ncad)
 
-    data = list(itertools.product(par['twdG'],PcadG))
     dtype_pgram = [
         ('Pcad',float),
         ('twd',float),
@@ -356,7 +377,6 @@ def tdpep_std(t,fm,par,stdthresh=10):
     dtype_temp = [
         ('c',int),
         ('mean',float),
-        ('std',float),
         ('s2n',float),
         ('col',int),
         ('t0',float)
@@ -374,67 +394,62 @@ def tdpep_std(t,fm,par,stdthresh=10):
         pgram[itwd,:]['twd'] = twd
 
         for iPcad,Pcad in enumerate(PcadG):
-            # Generate an empty array
+            # Compute row and columns for folded data
             row,col = fold.wrap_icad(icad,Pcad)
             
             ncol = np.max(col) + 1
             nrow = np.max(row) + 1
-
             icol = np.arange(ncol)
+
+            # Shove data and mask into appropriate positions
             data = np.zeros((nrow,ncol))
             mask = np.ones((nrow,ncol)).astype(bool)
-
             data[row,col] = dM.data
             mask[row,col] = dM.mask
 
+            # Sum along columns (clipping top 0, 1, 2 values)
             datasum,datacnt = cumsum_top(data,mask,2)
 
-            r = np.zeros(ncol,dtype=dtype_temp)
-            r['s2n'] = -1 
-
-            # Compute first and second moments
+            # datasum[-1] are the is the summed columns having not
+            # clipped any values. Update results array. For t0, add
+            # half the transit with because column index corresponds
+            # in ingress
             s = datasum[-1,:]
             c = datacnt[-1,:]
-
-
+            r = np.zeros(ncol,dtype=dtype_temp)
+            r['s2n'] = -1 
             r['mean'] = s/c
-#            r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
             r['s2n'] = s / np.sqrt(c) / noise            
             r['c'][:] = c
             r['col'] = icol
-
-            # Add half the transit with because column index
-            # corresponds in ingress
             r['t0'] = ( r['col'] + twd / 2.0) * config.lc + t[0] 
 
-            # Require 3 transits
 
-
-
-            # Non-linear part.
-            # - Require 3 or more transits
-            ## - Require consistency among transits
+            # Compute mean transit depth after removing the deepest
+            # transit, datacnt[-2], and the second deepest transit,
+            # datacnt[-3]. The mean transit depth must be > 0.5 it's
+            # former value. Also, require 3 transits.
             mean_clip1 = datasum[-2] / datacnt[-2]
             mean_clip2 = datasum[-3] / datacnt[-3]
-            
             b = (
                 (mean_clip1 > 0.5 * r['mean'] ) & 
                 (mean_clip2 > 0.5 * r['mean']) & 
                 (r['c'] >= 3)
             )
+
             if ~np.any(b):
                 continue 
-            
+
             rcut = r[b]
             rmax = rcut[np.argmax(rcut['s2n'])]
             names = ['mean','s2n','c','t0']
             for n in names:
                 pgram[itwd,iPcad][n] = rmax[n]
             pgram[itwd,iPcad]['Pcad'] = Pcad
-
+            
+    # Compute the maximum return twd with the maximum s2n
     pgram = pgram[np.argmax(pgram['s2n'],axis=0),np.arange(pgram.shape[1])]
     return pgram
-
 
 def bls(t,fm,par):
     """
