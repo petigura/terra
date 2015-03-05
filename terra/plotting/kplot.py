@@ -440,12 +440,21 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
     return sb
 
 
-def wrapHelp(dv,x,ym,d):
-    stackkw = dict(step=3*dv.mean*1e6,P=dv.P,t0=dv.t0)
-    stack(x,ym,**stackkw)
+def wrapHelp(dv,x,ym,d,**kwargs):
+    scale = 1e6
+    pad =  dv.mean*3*scale
+
+    stackkw = dict(step=pad,P=dv.P,t0=dv.t0)
+    stackkw = dict(stackkw,**kwargs)
+    df = stack(x,ym,**stackkw)
     pltkw = dict(alpha=0.2)
-    stack(x,ym.data,pltkw=pltkw,**stackkw)    
+    df = stack(x,ym.data,pltkw=pltkw,**stackkw)    
+
     autoscale(tight=True)
+    y0 = min(df['yshft']) - pad
+    y1 = max(df['yshft']) + pad 
+    ylim(y0,y1)
+
 
 def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     """
