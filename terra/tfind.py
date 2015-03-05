@@ -374,124 +374,62 @@ def tdpep_std(t,fm,par,stdthresh=10):
         pgram[itwd,:]['twd'] = twd
 
         for iPcad,Pcad in enumerate(PcadG):
+            # Generate an empty array
             row,col = fold.wrap_icad(icad,Pcad)
-            ncol = np.max(col) + 1 # Starts from 0
             
+            ncol = np.max(col) + 1
+            nrow = np.max(row) + 1
+
+            icol = np.arange(ncol)
+            data = np.zeros((nrow,ncol))
+            mask = np.ones((nrow,ncol)).astype(bool)
+
+            data[row,col] = dM.data
+            mask[row,col] = dM.mask
+
+            datasum,datacnt = cumsum_top(data,mask,2)
+
             r = np.zeros(ncol,dtype=dtype_temp)
             r['s2n'] = -1 
 
-            rclip = r.copy()
-
-            #for f,ri in zip([fold.fold_col,fold.fold_col_clip],[r,rclip]):
-            #    c,s,ss = f(dM.data,dM.mask.astype(int),col)
-            #
-            #    # Compute first and second moments
-            #    ri['mean'] = s/c
-            #    ri['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
-            #    ri['s2n'] = s / np.sqrt(c) / noise            
-            #    ri['c'] = c
-            #    ri['col'] = np.arange(ncol) 
-            #
-            #    # Add half the transit with because column index
-            #    # corresponds in ingress
-            #    ri['t0'] = ( ri['col'] + twd / 2.0) * config.lc + t[0] 
-
-
-            df = pd.DataFrame(
-                np.vstack(
-                    [dM.data,dM.data**2,(~dM.mask).astype(int),col,icad]).T,
-                columns=['s','ss','c','col','icad']
-            )
-            df = df[df.c > 0].dropna()
-            df.index = df['icad'].astype(int)
-            df = df.sort(['col','s'])
-            df['col'] = df.col.astype(int)
-            g = df.groupby('col',as_index=True)
-            dfsum = g.sum()
-            dfsum['col'] = dfsum.index
-
-            # Require 3 transits
-            goodcol = dfsum[dfsum['c'] >=3].index
-            dfsum = dfsum.loc[goodcol]
-            dfsum['bmax1'] = False
-            dfsum['bmax2'] = False
-
-            c,s,ss = (
-                np.array(dfsum['c']),
-                np.array(dfsum['s']),
-                np.array(dfsum['ss'])
-                )
-            
             # Compute first and second moments
-            dfsum['mean'] = s/c
-            dfsum['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
-            dfsum['s2n'] = s / np.sqrt(c) / noise            
-            dfsum['c'] = c
-            
+            s = datasum[-1,:]
+            c = datacnt[-1,:]
+
+
+            r['mean'] = s/c
+#            r['std'] = np.sqrt( (c*ss-s**2) / (c * (c - 1)))
+            r['s2n'] = s / np.sqrt(c) / noise            
+            r['c'][:] = c
+            r['col'] = icol
+
             # Add half the transit with because column index
             # corresponds in ingress
-            dfsum['t0'] = ( dfsum['col'] + twd / 2.0) * config.lc + t[0] 
+            r['t0'] = ( r['col'] + twd / 2.0) * config.lc + t[0] 
+
+            # Require 3 transits
+
 
 
             # Non-linear part.
             # - Require 3 or more transits
             ## - Require consistency among transits
-
-            dropcad = g.last()['icad']
-            df = df.drop(dropcad)
-            df['col'] = df.col.astype(int)
-            g = df.groupby('col',as_index=True)
-            dfmax = g.sum()
-            dfmax['col'] = dfmax.index
-            dfmax = dfmax.loc[goodcol]
-            dfsum['bmax1'] = dfmax['s'] / dfmax['c'] > 0.5 * dfsum['mean']
-
-            dropcad = g.last()['icad']
-            df = df.drop(dropcad)
-            df['col'] = df.col.astype(int)
-            g = df.groupby('col',as_index=True)
-            dfmax = g.sum()
-            dfmax['col'] = dfmax.index
-            dfmax = dfmax.loc[goodcol]
-            dfsum['bmax2'] = dfmax['s'] / dfmax['c'] > 0.5 * dfsum['mean']
-
-
-#            dfmax = g.nth(-1).loc[goodcol]
-#            c -= np.array(dfmax['c']) 
-#            s -= np.array(dfmax['s']) 
-#            ss -= np.array(dfmax['ss']) 
-#            
-#            dfsum['bmax1'] = s / c > 0.5 * dfsum['mean']
-#
-#            dfmax = g.nth(-2).loc[goodcol]
-#            c -= np.array(dfmax['c']) 
-#            s -= np.array(dfmax['s']) 
-#            ss -= np.array(dfmax['ss']) 
-#            dfsum['bmax2'] = s / c > 0.5 * dfsum['mean']
-#
-            # Accept if s2n > 30 or
-            #r['std'] < 0.2 * r['mean'] Let's high SNR transits pass
-            # or if r['std'] < let's consistent depth transits pass 
-            #b = (r['std'] < 0.2 * r['mean'] ) | ()
-
-#            b = (
-#                (r['s2n'] > 30) |
-#                (r['std'] < stdthresh * noise)
-#                )
-#
-#            r = r[b] # Cut the columns that don't pass
-#            if len(r)==0:
-#                continue 
-
-
-            b = dfsum.bmax1 & dfsum.bmax2
+            mean_clip1 = datasum[-2] / datacnt[-2]
+            mean_clip2 = datasum[-3] / datacnt[-3]
+            
+            b = (
+                (mean_clip1 > 0.5 * r['mean'] ) & 
+                (mean_clip2 > 0.5 * r['mean']) & 
+                (r['c'] >= 3)
+            )
             if ~np.any(b):
                 continue 
-            colmax = dfsum[b].s2n.idxmax()
+            
+            rcut = r[b]
+            rmax = rcut[np.argmax(rcut['s2n'])]
             names = ['mean','s2n','c','t0']
             for n in names:
-                pgram[itwd,iPcad][n] = dfsum.loc[colmax,n]
-
+                pgram[itwd,iPcad][n] = rmax[n]
             pgram[itwd,iPcad]['Pcad'] = Pcad
 
     pgram = pgram[np.argmax(pgram['s2n'],axis=0),np.arange(pgram.shape[1])]
@@ -821,4 +759,80 @@ def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
         dL.append(d)
 
     return dL
+
+
+def cumsum_top(data,mask,k):
+    """
+
+    Take a data and mask array with shape = (m,n)
+
+    For each column of data, sort the values (ignoring values that are
+    masked out). Then compute the sum along columns of the m-k
+    smallest values, then the m-k+1 smallest values until all m rows
+    are summed.
+
+    Parameters 
+    ----------
+    data : ndim = 2,
+    mask : True if entry is included, False if not
+    """
+    
+
+    # masked values are filled with -infs (so they don't enter into the sort)
+    nrow,ncol = data.shape
+    nrowout = k + 1
+
+    datainf = data.copy() 
+    datazero = data.copy()
+
+    datainf[mask] = -np.inf 
+    datazero[mask] = 0.0
+
+    icol = np.arange(data.shape[1])
+    srow = np.argsort(datainf,axis=0) # Indecies of sorted rows
+    
+    datazero = datazero[srow,icol]
+    mask = mask[srow,icol]
+    cnt = (~mask).astype(int) # Counter. 1 if it's a valid point
+
+    # Substitue the sum of all the higher rows in to the nrowout row
+    # of output arrays
+    datazero[-nrowout,:] = np.sum(datazero[:-k],axis=0)
+    cnt[-nrowout,:] = np.sum(cnt[:-k],axis=0)
+    
+    datasum = np.cumsum(datazero[-nrowout:],axis=0)
+    # Count number of masked elements
+    datacnt = np.cumsum(cnt[-nrowout:],axis=0) 
+    return datasum,datacnt
+
+def test_cumsum_top():
+    np.set_printoptions(precision=1)
+    nrow,ncol = 4,10
+    
+    arr = np.ones((nrow,ncol))
+    arr[0,2] = np.nan
+    arr[-1,-3:] = np.nan
+    arr[:,3] = 2
+    arr[1,5] = 8
+    arr[2,5] = 10
+
+    print "Input array"
+    print arr 
+
+    mask = np.isnan(arr)
+    k = 2
+    print "cumsum arrays"
+    datasum,datacnt  = cumsum_top(arr,mask,k)
+    print datasum.astype(int)
+    print datacnt.astype(int)
+    print "Mean value"
+    s =  str(datasum.astype(float)/(datacnt.astype(float)))
+    sL = s.split('\n')
+    sL[0] += ' <- Consistent depth'
+    sL[2] += ' <- 2 outliers drive mean'
+    print "\n".join(sL)
+    
+
+    
+
 
