@@ -12,7 +12,7 @@ from numpy import ma
 import pandas as pd
 import h5py
 
-from FFA import FFA_cext as FFA
+#from FFA import FFA_cext as FFA
 from FFA import fold
 import config
 from utils import h5plus
@@ -79,7 +79,6 @@ class Grid(object):
             pgram['s2n'] = pgram['depth_2d'] * np.sqrt(pgram['depth_ivar_2d'])
             pgram['mean'] = pgram['depth_2d']
             pgram['noise'] = 1/np.sqrt(pgram['depth_ivar_2d'])
-
 
         self.pgram = pgram
         return pgram
@@ -381,6 +380,8 @@ def pgram_max(t,fm,par):
         ('col',int),
         ('t0',float)
     ] 
+
+    # Loop over different transit durations
     for itwd,twd in enumerate(twdG):
         res = foreman_mackey_1d(fm,twd)    
         dM = ma.masked_array(
@@ -388,14 +389,15 @@ def pgram_max(t,fm,par):
             ~res['good_trans'].astype(bool),
             fill_value=0
             )
-        
+
+        # Compute noise (robust, based on MAD) on twd timescales
         noise = ma.median( ma.abs(dM) )[0] * 1.5
         pgram[itwd,:]['noise'] = noise
         pgram[itwd,:]['twd'] = twd
 
         for iPcad,Pcad in enumerate(PcadG):
             # Compute row and columns for folded data
-            row,col = fold.wrap_icad(icad,Pcad)
+            row,col = wrap_icad(icad,Pcad)
             
             ncol = np.max(col) + 1
             nrow = np.max(row) + 1
@@ -423,7 +425,6 @@ def pgram_max(t,fm,par):
             r['c'][:] = c
             r['col'] = icol
             r['t0'] = ( r['col'] + twd / 2.0) * config.lc + t[0] 
-
 
             # Compute mean transit depth after removing the deepest
             # transit, datacnt[-2], and the second deepest transit,
@@ -469,7 +470,7 @@ def bls(t,fm,par):
     dtype = [('col',int),('twd',float),('s2n',float),('Pcad',float),('noise',float),('mean',float)]
     pgram = np.zeros(PcadG.size,dtype)
     for i,Pcad in enumerate(PcadG):
-        row,col = fold.wrap_icad(icad,Pcad)
+        row,col = wrap_icad(icad,Pcad)
         ccol,scol,sscol = fold.fold_col(data,mask,col)
         ncol = np.max(col) + 1
         r = pgram[i]
@@ -582,7 +583,7 @@ def foreman_mackey(t,fm,par):
     ]
     
     for i,Pcad in enumerate(PcadG):
-        row,col = fold.wrap_icad(icad,Pcad)
+        row,col = wrap_icad(icad,Pcad)
         ncol = np.max(col) + 1
         res_temp = np.zeros((ntwd,ncol),dtype=dtype)
         res_temp['phic_same'] -= np.inf
@@ -850,4 +851,21 @@ def test_cumsum_top():
 
     
 
+
+
+
+def wrap_icad(icad,Pcad):
+    """
+    rows and column identfication to each one of the
+    measurements in df
+
+    Parameters
+    ----------
+    icad : Measurement number starting with 0
+    Pcad : Period to fold on
+    """
+
+    row = np.floor( icad / Pcad ).astype(int)
+    col = np.floor(np.mod(icad,Pcad)).astype(int)
+    return row,col
 

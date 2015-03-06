@@ -132,23 +132,6 @@ cpdef fold_col_clip(np.ndarray[np.float64_t, ndim=1] data,
     return ccol,scol,sscol
 
 
-
-def wrap_icad(icad,Pcad):
-    """
-    rows and column identfication to each one of the
-    measurements in df
-
-    Parameters
-    ----------
-    icad : Measurement number starting with 0
-    Pcad : Period to fold on
-    """
-
-    row = np.floor( icad / Pcad ).astype(int)
-    col = np.floor(np.mod(icad,Pcad)).astype(int)
-    return row,col
-
-
 @cython.boundscheck(False)
 @cython.cdivision(True)
 cpdef bls(np.ndarray[np.int64_t, ndim=1] ccol,
