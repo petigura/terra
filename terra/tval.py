@@ -238,21 +238,27 @@ class DV(h5plus.iohelper):
 
         # Notch out the transit and recompute
         fmcut = self.fm.copy()
-        fmcut.mask = fmcut.mask | (self.rLbl['tRegLbl'] >= 0)
-        dMCut = tfind.mtd(fmcut,self.twd)
+        fmcut.fill_value=0
+        # Widen by twice the transit duration
+        tmask = self.rLbl['tRegLbl'] >= 0
+        tmask = np.convolve(
+            tmask.astype(float),
+            np.ones(self.twd * 2),
+            mode='same'
+            )
+        tmask = tmask.astype(bool)
+        fmcut.mask = fmcut.mask | tmask
+        grid = tfind.Grid(self.t,fmcut)
+        parL = [dict(Pcad1=self.Pcad-1,Pcad2=self.Pcad+1,twdG=[self.twd])]
+        grid.set_parL(parL)
+        pgram = grid.periodogram('max')
+        idxmax = pgram.s2n.idxmax()
 
-        Pcad0 = np.floor(self.Pcad)
-        r = tfind.ep(dMCut, Pcad0)
+        dkeys = 's2ncut s2ncut_t0 s2ncut_mean'.split()
+        pkeys = 's2n t0 mean'.split()
 
-        i = np.nanargmax(r['mean'])
-        if i is np.nan:
-            s2n = np.nan
-        else:
-            s2n = r['mean'][i] / self.noise * np.sqrt(r['count'][i])
-
-        self.add_attr('s2ncut',s2n)
-        self.add_attr('s2ncut_t0',r['t0cad'][i]*keptoy.lc + self.t[0])
-        self.add_attr('s2ncut_mean',r['mean'][i])
+        for dkey,pkey in zip(dkeys,pkeys):
+            self.add_attr(dkey,pgram.ix[idxmax,pkey])
 
     def at_phaseFold_SecondaryEclipse(self):
         """
