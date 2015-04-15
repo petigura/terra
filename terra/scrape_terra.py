@@ -63,7 +63,7 @@ def dv_h5_scrape(h5file,verbose=True):
 
     d = append_attrs_dict(d,h5file,'/dv')
     d = append_attrs_dict(d,h5file,'/dv/fit',prefix='fit_')
-    print d
+    print pd.Series(d)
     return d
 
 def create_table(dbfile):
