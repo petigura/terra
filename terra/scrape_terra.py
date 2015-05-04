@@ -32,7 +32,7 @@ top_attrs = top_attrs.dropna()
 TERRADIR = os.path.dirname(os.path.dirname(__file__))
 schemafile = os.path.join(TERRADIR,'terra/candidate_schema.sql')
 
-def dv_h5_scrape(h5file,verbose=True):
+def dv_h5_scrape(h5file):
     """
     Get important MetaData and features from h5 file
     """
@@ -63,7 +63,6 @@ def dv_h5_scrape(h5file,verbose=True):
 
     d = append_attrs_dict(d,h5file,'/dv')
     d = append_attrs_dict(d,h5file,'/dv/fit',prefix='fit_')
-    print pd.Series(d)
     return d
 
 def create_table(dbfile):
@@ -98,7 +97,7 @@ if __name__=='__main__':
 
     counter = 0
     for h5file in args.h5file:
-        d = dv_h5_scrape(h5file,verbose=True)
+        d = dv_h5_scrape(h5file)
         insert_dict(d,args.dbfile)
         counter +=1
         if np.mod(counter,10)==0:
