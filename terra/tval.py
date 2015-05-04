@@ -189,27 +189,50 @@ class DV(h5plus.iohelper):
         self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
 
     def at_binPhaseFold(self,ph,bwmin):
-        """
-        Attach binned phase-folded light curve
+        """Attach binned phase-folded light curve
+
+        Attaches a dataset named `blc<bwmin>iPF<ph>`  with the following keys:
+        - count : Number of each measurment in bin
+        - mean : Mean flux value in each bin
+        - std : Standard deviation of measurements in each bin
+        - med : Median measurement
+        - tb : Central time of the bin
 
         Parameters
         ----------
         ph : Phase [between 0 and 360]
+        bwmin - targe bin width (minutes)
 
+        
         Note
         ----
         Must run at_phaseFold first
 
-        h5 - h5 file with the following columns
-             lcPF0
-             lcPF180         
-        ph - phase to fold at.
-        bwmin - targe bin width (minutes)
+        dtype=
+
         """
+        # Default dtype
+        dtype = [('count', '<f8'), 
+                 ('mean', '<f8'), 
+                 ('std', '<f8'), 
+                 ('med', '<f8'), 
+                 ('tb', '<f8')]        
+
         key = 'lcPF%i' % ph
+        d = dict(ph=ph,bwmin=bwmin,key=key)
+        desc = 'Binned %(key)s light curve ph=%(ph)i, binsize=%(bwmin)i' % d
+        name  = 'blc%(bwmin)iPF%(ph)i' % d
+
         assert hasattr(self,key),'Must run at_phaseFold first' 
         lcPF = getattr(self,key)
         lcPF = pd.DataFrame(lcPF['tPF f'.split()])
+        
+        if len(lcPF) < 2:
+            print "Phase-folded photometry has less than 2 valid values"
+            print "Adding in place holder array and terminating" 
+            blcPF = np.zeros(2,dtype)
+            self.add_dset(name,blcPF,description=desc)            
+            return None
 
         # Add a tiny bit to xma to get the last element
         bw = bwmin / 60./24. # converting minutes to days
@@ -225,10 +248,6 @@ class DV(h5plus.iohelper):
         blcPF = blcPF.rename(columns={'size':'count','median':'med'})
         blcPF = blcPF.dropna()
         blcPF = blcPF.to_records(index=False)
-
-        d = dict(ph=ph,bwmin=bwmin,key=key)
-        name  = 'blc%(bwmin)iPF%(ph)i' % d
-        desc = 'Binned %(key)s light curve ph=%(ph)i, binsize=%(bwmin)i' % d
         self.add_dset(name,blcPF,description=desc)
 
     def at_s2ncut(self):
