@@ -20,7 +20,7 @@ import tfind
 import tval
 import keptoy
 import config
-import photometry
+from k2utils import photometry
 import transit_model as tm
 from utils import h5plus
 
