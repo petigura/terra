@@ -22,7 +22,7 @@ if __name__=='__main__':
 
     counter = 0
     for h5file in args.h5file:
-        d = dv_h5_scrape(h5file,verbose=True)
+        d = dv_h5_scrape(h5file)
         insert_dict(d,args.dbfile)
         counter +=1
         if np.mod(counter,10)==0:
