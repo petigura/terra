@@ -39,5 +39,6 @@ CREATE TABLE candidate (
   is_eKOI INT NULL,
   is_eKOI_date TEXT NULL,
   is_EB TEXT NULL,
-  is_EB_date TEXT NULL
+  is_EB_date TEXT NULL,
+  numplanet INT NULL
 );

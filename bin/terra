@@ -1,14 +1,21 @@
 #!/usr/bin/env python
-
-from terra import terra
-import pandas as pd
 import sqlite3
 from argparse import ArgumentParser
+import os
+
+import numpy as np
+import pandas as pd
+
+from terra import terra
+from terra import tval
+from terra.scrape_terra import create_table, dv_h5_scrape, insert_dict
+from terra.utils.h5plus import h5F
+from terra import transit_model as tm
 
 def pp(args):
     con = sqlite3.connect(args.parfile)
     df = pd.read_sql('select * from pp',con,index_col='id')
-    d = dict(df.ix[args.index])
+    d = dict(df.ix[args.starname])
     d['outfile'] = args.outfile
     d['path_phot'] = args.path_phot
     terra.pp(d)
@@ -16,20 +23,93 @@ def pp(args):
 def grid(args):
     con = sqlite3.connect(args.parfile)
     df = pd.read_sql('select * from grid',con,index_col='id')
-    d = dict(df.ix[args.index])
+    d = dict(df.ix[args.starname])
     d['outfile'] = args.outfile
     if args.debug:
-        d['P1'] = 20.
-        d['P2'] = 23.
+        d['P1'] = 1.
+        d['P2'] = 2.
     
     terra.grid(d)
 
-def dv(args):
+def data_validation(args):
     con = sqlite3.connect(args.parfile)
     df = pd.read_sql('select * from dv',con,index_col='id')
-    d = dict(df.ix[args.index])
+    d = dict(df.ix[args.starname])
     d['outfile'] = args.outfile
     terra.data_validation(d)
+    dscrape = dv_h5_scrape(args.outfile)
+    print pd.Series(dscrape)
+
+def multi(args):
+    iteration = 1
+    s2n_threshold = 8
+    max_iteration = 5
+    iteration_to_suffix = lambda x : "%02d" % x
+    def iteration_to_outfile(x):
+        suffix = iteration_to_suffix(x)
+        return "%s/%s.%s.h5" % (args.outdir, args.starname, suffix)
+
+    if type(args.iteration)!=type(None):
+        iteration = args.iteration
+        assert iteration > 1, 'Must start on second or higher iteration'
+        previous_h5file = iteration_to_outfile(iteration-1)
+        s2n = dv_h5_scrape(previous_h5file)['s2n']
+
+    # On the first pass through, perform the pre-processing
+    os.system('mkdir -p %s' % args.outdir)
+    while True:
+        args.outfile = iteration_to_outfile(iteration)
+        print "iteration = %i" % iteration
+        if iteration > max_iteration:
+            print "iteration %i > %i " % (iteration, max_iteration) 
+            break
+
+        if iteration > 1 and s2n < s2n_threshold:
+            print "s2n = %.1f < %.1f " % (s2n, s2n_threshold)             
+            break
+
+        if iteration == 1:
+            pp(args)
+
+        if iteration > 1:
+            # Copy the previous outfile
+            prevoutfile = iteration_to_outfile(iteration - 1)
+            os.system('cp %s %s' % (prevoutfile,args.outfile))
+
+            kwargs = dict(outfile=args.outfile,update=True)
+            with h5F(kwargs) as h5:
+                lc  = h5['/pp/cal'][:]
+
+            # Extract width from fitted light curve
+            dv = tval.read_hdf(args.outfile,'/dv')
+            trans = tm.read_hdf(args.outfile,'/dv/fit')
+            tin = trans.t[trans.fit < 0]
+            tmin,tmax = tin[0],tin[-1]
+            width = tmax - tmin
+            cutfac = 1 # Padding that is also cut (in units of transit width)
+
+            t = dv.t
+            dt = tval.t0shft(t, dv.P, dv.t0)
+            t += dt
+            tPF = np.mod(t + dv.P / 2, dv.P) - dv.P/2
+
+            bin = np.abs(tPF) < (0.5 + cutfac ) * width
+
+            lc['fmask'][bin] = True
+
+            with h5F(kwargs) as h5:
+                h5['/pp/cal']['fmask'] = lc['fmask']
+                print np.sum(h5['/pp/cal']['fmask'])
+
+        grid(args)
+        data_validation(args)
+        create_table(args.resultsdb)
+        d = dv_h5_scrape(args.outfile)
+        d['numplanet'] = iteration
+        insert_dict(d,args.resultsdb)
+        s2n = d['s2n']
+        iteration+=1 
+
 
 def main():
     p = ArgumentParser(description='Wrapper around functions in terra.py')
@@ -41,28 +121,42 @@ def main():
 
     p_pp.add_argument('outfile',type=str,help='output file <*.grid.h5>')
     p_pp.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
-    p_pp.add_argument('index',type=str,help='photometry id')
+    p_pp.add_argument('starname',type=str,help='starname')
     p_pp.set_defaults(func=pp)
 
     p_grid = subparsers.add_parser('grid', help='Run the grid search code')
     p_grid.add_argument('outfile',type=str,help='output file <*.grid.h5>')
     p_grid.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
-    p_grid.add_argument('index',type=str,help='photometry id')
+    p_grid.add_argument('starname',type=str,help='photometry id')
     p_grid.add_argument('--debug',action="store_true",help='Run in debug mode')
     p_grid.set_defaults(func=grid)
 
     p_grid = subparsers.add_parser('dv', help='Run the data validation module')
     p_grid.add_argument('outfile',type=str,help='output file <*.grid.h5>')
     p_grid.add_argument('parfile',type=str,help='parameter file <*.sqlite>')
-    p_grid.add_argument('index',type=str,help='photometry id')
-    p_grid.set_defaults(func=dv)
+    p_grid.add_argument('starname',type=str,help='photometry id')
+    p_grid.set_defaults(func=data_validation)
 
+    p_multi = subparsers.add_parser(
+        'multi', help='Loop through pp, grid, and dv until minimum SNR remains')
+    p_multi.add_argument('path_phot', type=str, help='photometry file *.fits')
+    p_multi.add_argument(
+        'outdir', type=str, help='directory to store the <*.grid.h5> files')
+    p_multi.add_argument(
+        'parfile', type=str, help='database file with runtime parameters')
+    p_multi.add_argument('resultsdb', type=str, 
+                         help='Database to insert results in')
+    p_multi.add_argument('starname', type=str, help='starname')
+    p_multi.add_argument(
+        '--debug', action="store_true", help='Run in debug mode')
+    p_multi.add_argument(
+        '--iteration', type=int, help='Number of iteration to start on')
+
+    p_multi.set_defaults(func=multi)
     args = p.parse_args()
-
+    
     # Import here to save time when just calling help.
-
     args.func(args)
-
 
 if __name__=='__main__':
     main()

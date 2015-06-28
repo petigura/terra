@@ -20,7 +20,7 @@ import tfind
 import tval
 import keptoy
 import config
-import photometry
+from k2utils import photometry
 import transit_model as tm
 from utils import h5plus
 
@@ -252,7 +252,7 @@ def data_validation(par):
     dv.at_SES()
     dv.at_phaseFold(0,**PF_kw)
     dv.at_phaseFold(180,**PF_kw)
-    
+
     for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
         dv.at_binPhaseFold(ph,binsize)
 
