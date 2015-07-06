@@ -60,6 +60,15 @@ class Grid(object):
         self.parL = parL
         
     def periodogram(self,mode='std'):
+        """
+        Run the transit finding periodogram
+        
+        mode : What type of periodogram to run?
+          - 'max' runs pgram_max transit finder. Clips top two SES
+          - 'bls' my implementation of BLS computes folds and then evaluates SNR
+          - 'ffa' SES then fold
+          - 'fm' foreman mackey algo
+        """
         if mode=='max':
             pgram = map(self._pgram_max,self.parL)
             pgram = np.hstack(pgram)
