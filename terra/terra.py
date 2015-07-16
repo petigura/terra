@@ -35,12 +35,13 @@ def pp(par,lc=None):
     Parameters
     ----------
     par : dictionary with the following keys
-          - rawfile 
           - outfile
+          - path_phot
           - type = mc/tps
           - update : Overwrite exsiting files? True/False
           - inj_P,inj_phase,inj_p,inj_tau,inj_b      <-- only for mc
           - a1,a2,a3,a4 limb darkening coefficients  <-- inj/rec runs
+
 
     Example
     -------

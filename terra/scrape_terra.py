@@ -81,7 +81,7 @@ def insert_dict(d,dbfile):
     sql = 'INSERT INTO candidate (%s) VALUES (%s)' % \
             (columns, placeholders)
 
-    con = sqlite3.connect(dbfile)
+    con = sqlite3.connect(dbfile,60)
     with con:
         cur = con.cursor()
         cur.execute(sql,d)
