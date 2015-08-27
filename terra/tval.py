@@ -418,7 +418,7 @@ def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
     t     : time series
     P     : Period of transit
     t0    : epoch of one transit
-    tdur  : transit duration
+    tdur  : transit duration (days not cadences)
     cfrac : continuum defined as points between tdur * (0.5 + cpad)
             and tdur * (0.5 + cpad + cfrac) of transit midpoint cpad
     cpad  : how far away from the transit do we start the continuum
@@ -487,11 +487,10 @@ def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
     ----------
     t      : time
     fm     : masked flux array
-    recLbl : record array with following labels
+    recLbl : Out put of transit label record array with following labels 
              - cRegLbl   : Region to fit the continuum
              - totRegLbl : Entire region to detrend.
              - tLbl   : Middle of transit
-
     nCont  : Number of continuum points before and after transit in
              order to use the transit
 

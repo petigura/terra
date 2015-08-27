@@ -12,8 +12,7 @@ from numpy import ma
 import pandas as pd
 import h5py
 
-#from FFA import FFA_cext as FFA
-from FFA import fold
+from FFA import FFA_cext as FFA
 import config
 from utils import h5plus
 from keptoy import P2a,a2tdur
@@ -68,6 +67,12 @@ class Grid(object):
           - 'bls' my implementation of BLS computes folds and then evaluates SNR
           - 'ffa' SES then fold
           - 'fm' foreman mackey algo
+
+        Returns
+        -------
+        pgram : Pandas dataframe with mean, count, t0cad, Pcad, noise,
+                s2n, twd, t0
+
         """
         if mode=='max':
             pgram = map(self._pgram_max,self.parL)
@@ -75,6 +80,7 @@ class Grid(object):
             pgram = pd.DataFrame(pgram)
         if mode=='ffa':
             pgram = map(self._pgram_ffa,self.parL)
+            pgram = pd.DataFrame(np.hstack(pgram))
         if mode=='bls':
             pgram = map(self._pgram_bls,self.parL)
             pgram = np.hstack(pgram)
