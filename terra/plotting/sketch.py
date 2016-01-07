@@ -224,7 +224,7 @@ def LDT(t,fm,p):
         plot(t[id]-ho,ffit-vo,'r',lw=2)
         plot(t[id]-ho,trend-vo,'c',lw=2)
 
-        color = rcParams['axes.color_cycle'][mod(i,4)]
+        color = rcParams['axes.prop_cycle'][mod(i,4)]
 
 def tfit(tsim,tfit):
     plot(tset.RES.PG[0],tset.RES.ddd[1]/tset.RES.sss[1],'o')
@@ -532,7 +532,7 @@ def flux(tLC,step=100,type='flux'):
         d[line] = ma.masked_array(zeros(x.size),~x)
 
     vstep = ma.median(ma.abs(fdt))*10
-    rcParams['axes.color_cycle'] = ['c','m','green']
+    rcParams['axes.prop_cycle'] = ['c','m','green']
 
     if type is 'flux':
         for i in np.arange(nstep):
