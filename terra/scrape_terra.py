@@ -29,8 +29,6 @@ top_attrs = sio(top_attrs)
 top_attrs = pd.read_csv(top_attrs,names='field desc'.split(),comment='#')
 top_attrs = top_attrs.dropna()
 
-TERRADIR = os.path.dirname(os.path.dirname(__file__))
-schemafile = os.path.join(TERRADIR,'terra/candidate_schema.sql')
 
 def dv_h5_scrape(h5file):
     """
@@ -65,26 +63,6 @@ def dv_h5_scrape(h5file):
     d = append_attrs_dict(d,h5file,'/dv/fit',prefix='fit_')
     return d
 
-def create_table(dbfile):
-    if not os.path.isfile(dbfile):
-        with open(schemafile) as f:
-            schema = f.read()
-
-        con = sqlite3.connect(dbfile)
-        with con:
-            cur = con.cursor()
-            cur.execute(schema)
-
-def insert_dict(d,dbfile):
-    columns = ', '.join(d.keys())
-    placeholders = ':'+', :'.join(d.keys())
-    sql = 'INSERT INTO candidate (%s) VALUES (%s)' % \
-            (columns, placeholders)
-
-    con = sqlite3.connect(dbfile,60)
-    with con:
-        cur = con.cursor()
-        cur.execute(sql,d)
 
 if __name__=='__main__':
     p = ArgumentParser(description='Scrape attributes from grid.h5 files')
