@@ -81,7 +81,7 @@ def insert_dict(d,dbfile):
     sql = 'INSERT INTO candidate (%s) VALUES (%s)' % \
             (columns, placeholders)
 
-    con = sqlite3.connect(dbfile)
+    con = sqlite3.connect(dbfile,60)
     with con:
         cur = con.cursor()
         cur.execute(sql,d)
@@ -94,7 +94,6 @@ if __name__=='__main__':
     
     # If table doesn't exist yet, create it.
     create_table(args.dbfile)
-
     counter = 0
     for h5file in args.h5file:
         d = dv_h5_scrape(h5file)

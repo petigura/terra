@@ -166,7 +166,7 @@ class DV(h5plus.iohelper):
 
         # Median SES, different seasons
         for i in range(4):
-            medses = np.median( rses['ses'][rses['season'] % 4  == i] ) 
+            medses = -99 #Hack
             self.add_attr('SES_%i' % i, medses,
                           description='Median SES [Season %i]' % i )
 
