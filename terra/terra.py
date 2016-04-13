@@ -25,7 +25,47 @@ import transit_model as tm
 from utils import h5plus
 
 deltaPcad = 10
-#from config import k2_dir
+
+
+def terra():
+    """
+    Top level wrapper for terra, all parameters are passed in as
+    keyword arguments
+
+    """
+    @print_timestamp
+    def pp(self):
+        con = sqlite3.connect(self.pardb)
+        df = pd.read_sql('select * from pp',con,index_col='id')
+        d = dict(df.ix[self.starname])
+        d['outfile'] = self.star_gridfile
+        d['path_phot'] = self.lcfile
+        terra.pp(d)
+
+    @print_timestamp
+    def grid(self,debug=False):
+        con = sqlite3.connect(self.pardb)
+        df = pd.read_sql('select * from grid',con,index_col='id')
+        d = dict(df.ix[self.starname])
+        d['outfile'] = self.star_gridfile
+        if debug:
+            d['p1'] = 1.
+            d['p2'] = 2.
+    
+        terra.grid(d)
+
+    @print_timestamp
+    def data_validation(self):
+        con = sqlite3.connect(self.pardb)
+        df = pd.read_sql('select * from dv',con,index_col='id')
+        d = dict(df.ix[self.starname])
+        d['outfile'] = self.star_gridfile
+        terra.data_validation(d)
+        dscrape = dv_h5_scrape(self.star_gridfile)
+        print pd.Series(dscrape)
+        # insert into sqlite3 database
+        #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
+
 
 
 def pp(par,lc=None):
@@ -62,8 +102,6 @@ def pp(par,lc=None):
              outfile='temp.grid.h5',plot_lc=True,update=True,type='tps')
     terra.pp(dpp)
 
-
-
     Make a dataframe with the following columns
     Minumum processing to look at LC
 
@@ -98,9 +136,7 @@ def pp(par,lc=None):
         if type(lc)==type(None):
             lc = photometry.read_fits(path_phot)
         h5.create_group('pp')
-
         h5['/pp/cal'] = lc
-
         if par['type'].find('mc') != -1:
             inj(h5,par)
 
@@ -123,8 +159,6 @@ def pp(par,lc=None):
     with h5F(par) as h5:
         del h5['/pp/cal'] # Clear group so we can re-write to it.
         h5['/pp/cal'] = lc
-        # prepro.cal(h5,par)
-
         # Store path information
         h5.attrs['phot_basedir'] = os.path.dirname(path_phot)
         h5.attrs['phot_fits_filename'] = os.path.basename(path_phot)
@@ -132,7 +166,6 @@ def pp(par,lc=None):
         h5.attrs['grid_h5_filename'] = os.path.basename(outfile)
         figpath = outfile.replace('.h5','.lc.png')
         h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
-
 
     kplot.plot_lc(outfile)
     plt.gcf().savefig(figpath)
