@@ -513,28 +513,27 @@ def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
     return df
 
 
-def plot_lc(outfile):
-    with h5py.File(outfile) as h5:
-        lc = h5['/pp/cal'][:]
+def plot_lc(pipe):
+    lc = pipe.lc
 
     isOutlier = np.array(lc['isOutlier'])
     fig,axL = plt.subplots(nrows=2,figsize=(20,8),sharex=True)
     plt.sca(axL[0])
 
-    fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+    f = ma.masked_array(lc['f'],lc['fmask'],fill_value=0)
 
-    plt.plot(lc['t'],fcal.data,label='Full light curve')
-    plt.plot(lc['t'],fcal,color='RoyalBlue',
+    plt.plot(lc['t'],f.data,label='Full light curve')
+    plt.plot(lc['t'],f,color='RoyalBlue',
              label='Masked light curve')
     plt.plot(
-        lc['t'][isOutlier],fcal.data[isOutlier],'or',mew=0,
+        lc['t'][isOutlier],f.data[isOutlier],'or',mew=0,
         alpha=0.5,label='Outliers Identfied in time-domain'
         )
-    plt.ylabel('fcal')
+    plt.ylabel('f')
     plt.legend(loc='best')
 
     plt.sca(axL[1])
-    plt.plot(lc['t'],fcal,label='Masked light curve')
+    plt.plot(lc['t'],f,label='Masked light curve')
     plt.xlabel('Time')
     plt.legend(loc='best')
     fig.set_tight_layout(True)

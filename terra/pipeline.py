@@ -62,9 +62,14 @@ class Pipeline(object):
         header['finished_grid_search'] = False
         header['finished_data_validation'] = False
         self.header = pd.Series(header)
-
         self.lc = lc
 
+    def _get_fm(self):
+        """Convenience function to return masked flux array"""
+        fm = np.array(self.lc.f)
+        fm = ma.masked_array(fm, self.lc.fmask, fill_value=0 )
+        fm -= ma.median(fm)
+        return fm
 
     def preprocess(self):
         """Process light curve in the time domain
@@ -73,13 +78,10 @@ class Pipeline(object):
             None
 
         """
-        
-
-        # Identify outliers in the time-domain
-        f = np.array(self.lc.f)
-        isOutlier = prepro.isOutlier(f, [-1e3,10], interp='constant')
+        fm = self._get_fm()
+        isOutlier = prepro.isOutlier(fm, [-1e3,10], interp='constant')
         self.lc['isOutlier'] = isOutlier
-        self.lc['fmask'] = self.lc.fmask | self.lc.isOutlier | np.isnan(f)
+        self.lc['fmask'] = fm.mask | isOutlier | np.isnan(fm.data)
         print "preprocess: identified {} outliers in the time domain".format(
               isOutlier.sum() )
         print "preprocess: {} measurements, {} are masked out".format(
@@ -87,13 +89,26 @@ class Pipeline(object):
 
         self.header['finished_preprocess'] = True
 
-    def grid_search(self):
+    def grid_search(self, P1=0.5, P2=None, periodogram_mode='max'):
+        """Run the grid based search
 
+        Args:
+            P1 (Optional[float]) : Minimum period to search over
+            P2 
         """
 
-        """
-        pass
-        
+        t = np.array(self.lc.t)
+        fm = self._get_fm() 
+        grid = tfind.Grid(t, fm)
+
+        tbase = self.lc.t.max() - self.lc.t.min()
+        parL = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
+        grid.set_parL(parL)    
+        self.pgram = grid.periodogram(mode=periodogram_mode)
+        self.header['finished_grid_search'] = True
+        print self.pgram.sort('s2n').iloc[-1]
+
+
     def data_validation(self):
         pass
     
@@ -165,150 +180,6 @@ def terra():
         # insert into sqlite3 database
         #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
 
-def pp(par,lc=None):
-    """
-    Preprocess
-
-    Parameters
-    ----------
-    par : dictionary with the following keys
-          - outfile
-          - path_phot
-          - type = mc/tps
-          - update : Overwrite exsiting files? True/False
-          - inj_P,inj_phase,inj_p,inj_tau,inj_b      <-- only for mc
-          - a1,a2,a3,a4 limb darkening coefficients  <-- inj/rec runs
-
-
-    Example
-    -------
-    # Monte Carlo run
-    >>> import terra
-    >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
-               'inj_P': 142.035,'inj_b': 0.46,'inj_p': 0.0132,
-               'inj_phase': 0.583,'inj_tau': 0.178, 
-               'outfile':'temp.grid.h5', 
-               'skic': 7831530, 
-               'type': 'mc', 'plot_lc':True}
-    >>> terra.pp(dpp)
-
-    # TPS Run (Hacked to work on Ian's photometry)
-    dpp = dict(path_phot='photometry/C0_pixdecor/202083828.fits',
-             outfile='temp.grid.h5',plot_lc=True,update=True,type='tps')
-    terra.pp(dpp)
-    """
-
-    par = dict(par) # If passing in pandas series, treat as dict
-    print "creating %(outfile)s" % par
-    print "Running pp on %s" % par['outfile'].split('/')[-1]
-
-    path_phot = par['path_phot']
-    path_phot = os.path.abspath(path_phot) # Expand full path
-    
-    outfile = par['outfile']
-    outfile = os.path.abspath(outfile)
-
-    with h5F(par) as h5:
-        if type(lc)==type(None):
-            lc = photometry.read_fits(path_phot)
-        h5.create_group('pp')
-        h5['/pp/cal'] = lc
-        if par['type'].find('mc') != -1:
-            inj(h5,par)
-
-    # Hack to get around no calibration step
-    for k in 'fcal fit fdt'.split():
-        lc = mlab.rec_append_fields(lc,k,np.zeros(lc.size))
-    lc['fcal'] = lc['f']
-    lc['fdt'] = lc['f']
-
-    fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
-    print "fcal: ncad=%i nmask=%i" % (fcal.size,fcal.mask.sum())
-
-    # Identify outliers in the time-domain
-    isOutlier = prepro.isOutlier(fcal,[-1e3,10],interp='constant')
-    lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
-    lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
-    print "fcal: ncad=%i nmask=%i" % (fcal.size,lc['fmask'].sum())
-
-    with h5F(par) as h5:
-        del h5['/pp/cal'] # Clear group so we can re-write to it.
-        h5['/pp/cal'] = lc
-        # Store path information
-        h5.attrs['phot_basedir'] = os.path.dirname(path_phot)
-        h5.attrs['phot_fits_filename'] = os.path.basename(path_phot)
-        h5.attrs['grid_basedir'] = os.path.dirname(outfile)
-        h5.attrs['grid_h5_filename'] = os.path.basename(outfile)
-        figpath = outfile.replace('.h5','.lc.png')
-        h5.attrs['phot_plot_filename'] = os.path.basename(figpath)
-
-    kplot.plot_lc(outfile)
-    plt.gcf().savefig(figpath)
-    plt.close() 
-    print "Created figure %s" % figpath
-
-
-def raw(h5,files,fields=[]):
-    """
-    Take list of .fits files and store them in the raw group
-
-    fields - list of fields to keep. Use a subset for smaller file size.
-    """
-    raw  = h5.create_group('/raw')
-    hduL = []
-    kicL = []
-    qL   = []
-    for f in files:
-        h = pyfits.open(f)
-        hduL += [h]
-        kicL += [h[0].header['KEPLERID'] ]
-        qL   += [h[0].header['QUARTER'] ]
-
-    assert np.unique(kicL).size == 1,'KEPLERID not the same'
-    assert np.unique(qL).size == len(qL),'duplicate quarters'
-
-    h5.attrs['KEPLERID'] = kicL[0] 
-    for h,q in zip(hduL,qL):
-        r = np.array(h[1].data)
-        if fields!=[]:
-            r = mlab.rec_keep_fields(r,fields)
-
-
-def grid(par):
-    """
-    Grid Search
-
-    Parameters
-    ----------
-    par : dictionary with the following keys
-    
-    Example
-    -------
-
-    >>> import terra
-    >>> par
-    {'P1': 0.5,
-    'P2': 3,
-    'fluxField': 'fcal',
-    'fluxMask': 'fmask',
-    'name': 60017806,
-    'outfile': 'test.h5',
-    'tbase': 7,
-    'update': True}
-    >>> terra.grid(dgrid)    
-    
-    """
-    # Copy in calibrated light-curve
-    names = 'P1 P2 Pcad1 Pcad2 delT1 delT2 twdG'.split()
-    parL = tfind.pgramParsSeg(par['P1'],par['P2'],par['tbase'],nseg=10)
-    df = pd.DataFrame(parL,columns=names)
-    parL = [dict(df.ix[i]) for i in df.index]
-
-    grid = tfind.read_hdf(par)
-    grid.set_parL(parL)    
-
-    pgram = grid.periodogram(mode='max')    
-    grid.to_hdf('it0',par)
 
 
 def data_validation(par):

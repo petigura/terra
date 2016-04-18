@@ -28,34 +28,28 @@ tdnames = epnames + ['noise','s2n','twd','t0']
 tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
-def read_hdf(kwargs):
-    with h5F(kwargs) as h5:
-        lc  = h5['/pp/cal'][:]
-
-    f = lc[ kwargs['fluxField'] ]
-    mask = lc[ kwargs['fluxMask'] ] 
-
-    t = lc['t']
-    fm = ma.masked_array(f,mask,fill_value=0,copy=True)
-    grid = Grid(t,fm)
-    return grid
-
 class Grid(object):
-    def __init__(self,t,fm):
+    def __init__(self, t, fm):
+        """
+        Initialize a grid object
+        """
         self.t = t 
         self.fm = fm
+
     def set_parL(self,parL):
         """
         Set grid search parameters
 
-        Parameters
-        ----------
-        parL : List of dictionaries each with the following keys:
-               - Pcad1 : Lower bound of period search (integer # of cadences)
-               - Pcad2 : Upper bound + 1
-               - twdG  : Range of trial durations to search over
+        Args:
+             parL (list) : List of dictionaries each with the following keys:
+                 - Pcad1 : Lower bound of period search (integer # of cadences)
+                 - Pcad2 : Upper bound + 1
+                 - twdG  : Range of trial durations to search over 
+
         """
-        print pd.DataFrame(parL)
+
+        names = 'P1 P2 twdG'.split()
+        print pd.DataFrame(parL)[names]
         self.parL = parL
         
     def periodogram(self,mode='std'):
@@ -114,15 +108,6 @@ class Grid(object):
     def _pgram_fm(self,par):
         pgram = foreman_mackey(self.t,self.fm,par)
         return pgram
-
-
-    def to_hdf(self,groupname,kwargs):
-        with h5F(kwargs) as h5:
-            it0 = h5.create_group(groupname)
-            g = h5[groupname]
-            g['RES'] = np.array(self.pgram.to_records(index=False))
-            print "saving periodogram to %s[%s]" % (h5.filename,groupname)
-
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):
     """
@@ -364,7 +349,6 @@ def pgram_max(t,fm,par):
     Returns
     -------
     pgram : Record array with following fields
-    -
 
     """
     ncad = fm.size
@@ -409,7 +393,6 @@ def pgram_max(t,fm,par):
         noise = ma.median( ma.abs(dM) )[0] * 1.5
         pgram[itwd,:]['noise'] = noise
         pgram[itwd,:]['twd'] = twd
-
         for iPcad,Pcad in enumerate(PcadG):
             # Compute row and columns for folded data
             row,col = wrap_icad(icad,Pcad)
@@ -426,7 +409,6 @@ def pgram_max(t,fm,par):
 
             # Sum along columns (clipping top 0, 1, 2 values)
             datasum,datacnt = cumsum_top(data,mask,2)
-
             # datasum[-1] are the is the summed columns having not
             # clipped any values. Update results array. For t0, add
             # half the transit with because column index corresponds
@@ -683,8 +665,6 @@ def foreman_mackey_1d(fm,twd):
 
     return res
 
-
-
 def get_frac_Pcad(P):
     """
     Return all the fractional periods between P1 and P1 + 1
@@ -732,16 +712,9 @@ def tdmarg(rtd):
     return rec
 
 
-def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
-    """
-    Periodogram Parameters.
-
-    P1  - Minimum period
-    P2  - Maximum period
-    Rstar - Guess of stellar radius 
-    Mstar - Guess of stellar mass (used with Rstar to comput expected duration
-    ftdur - Fraction of expected maximum tranit duration to search over.
-    """
+def _periodogram_parameters_segment(P1, P2, tbase, Rstar=1, Mstar=1, 
+                                    ftdur=[0.5,1.5]):
+    """Compute periodogram parameters for a single segment"""
 
     fLastOff = 0.25 # Choose period resolution such that the transits
                     # line up to better than fLastOff * tdur
@@ -777,20 +750,36 @@ def pgramPars(P1,P2,tbase,Rstar=1,Mstar=1,ftdur=[0.5,1.5]  ):
               twdG=twdG)
     return d
 
-def pgramParsSeg(P1,P2,tbase,nseg,Rstar=1,Mstar=1,ftdur=[0.5,1.5]):
+def periodogram_parameters(P1, P2, tbase, nseg, Rstar=1.0, Mstar=1.0, 
+                           ftdur=[0.5,1.5]):
+    """
+    Periodogram Parameters.
+
+    Args:
+        P1 (float): Minimum period
+        P2 (float): Maximum period
+        nseg (int): Use the following number of segments 
+        Rstar (Optional[float]) : Stellar radius [Rsun].
+        Mstar (Optional[float]) : Stellar mass [Msun]. Used with Rstar to 
+             compute expected duration.
+        ftdur (Optional[list]) : Fraction of expected maximum tranit duration 
+             to search over.
+    """
+
     # Split the periods into logrithmically spaced segments
     PlimArr = np.logspace( np.log10(P1) , np.log10(P2),nseg+1  )
     dL = []
     for i in range(nseg):
         P1 = PlimArr[i]
         P2 = PlimArr[i+1]
-        d = pgramPars(P1,P2,tbase,Rstar=Rstar,Mstar=Rstar,ftdur=ftdur)
+        d = _periodogram_parameters_segment(
+            P1,P2,tbase,Rstar=Rstar,Mstar=Rstar,ftdur=ftdur
+            )
         d['P1'] = P1
         d['P2'] = P2
         dL.append(d)
 
     return dL
-
 
 def cumsum_top(data,mask,k):
     """
@@ -863,11 +852,6 @@ def test_cumsum_top():
     sL[2] += ' <- 2 outliers drive mean'
     print "\n".join(sL)
     
-
-    
-
-
-
 
 def wrap_icad(icad,Pcad):
     """
