@@ -1,10 +1,26 @@
 """
 TERRA
-The top level controller.  This function encapsulates the complete pipeline.
+The top level controller.  
+
+To Do:
+
+Make terra object oriented.
+
+lc = 
+header = dict(starname='', other meta-data)
+
+pipe.process() # Conditions data in the time domain
+pipe.grid_search() # Perform the grid search.
+pipe.data_validation()
+
+pipe.to_hdf(outfile) # Should be able to read different checkpoints
+
+terra(t, f, ferr, fmask, plimb=[passed to batman], P1=[passed to grid], P2)
+terra(t, f, ferr, fmask, plimb=[passed to batman], P2=)
 """
+
 import copy
 import os
-import glob
 
 import numpy as np
 from numpy import ma
@@ -14,7 +30,7 @@ import pandas as pd
 from matplotlib import pylab as plt
 from matplotlib import mlab
 
-from plotting import kplot,tval_plotting
+from plotting import kplot, tval_plotting
 import prepro
 import tfind
 import tval
@@ -25,8 +41,91 @@ import transit_model as tm
 from utils import h5plus
 
 deltaPcad = 10
+ 
+class Pipeline(object):
+    lc_required_columns = ['t','f','ferr','fmask']
+    def __init__(self, lc, header=dict(starname='starname') ):
+        """Initialize a pipeline model.
+
+        Args:
+            lc (pandas.DataFrame): Light curve. Must have the following 
+                columns: t, f, ferr, fmask
+            header (Optional[dict]): metadata to be stored with the
+                pipeline object. At a bare minimum, it must include
+                the star name
+        """
+        for col in self.lc_required_columns:
+            assert list(lc.columns).index(col) >= 0, \
+                "light curve lc must contain {}".format(col)
+
+        header['finished_preprocess'] = False
+        header['finished_grid_search'] = False
+        header['finished_data_validation'] = False
+        self.header = pd.Series(header)
+
+        self.lc = lc
 
 
+    def preprocess(self):
+        """Process light curve in the time domain
+
+        Args:
+            None
+
+        """
+        
+
+        # Identify outliers in the time-domain
+        f = np.array(self.lc.f)
+        isOutlier = prepro.isOutlier(f, [-1e3,10], interp='constant')
+        self.lc['isOutlier'] = isOutlier
+        self.lc['fmask'] = self.lc.fmask | self.lc.isOutlier | np.isnan(f)
+        print "preprocess: identified {} outliers in the time domain".format(
+              isOutlier.sum() )
+        print "preprocess: {} measurements, {} are masked out".format(
+            len(self.lc) , self.lc['fmask'].sum())
+
+        self.header['finished_preprocess'] = True
+
+    def grid_search(self):
+
+        """
+
+        """
+        pass
+        
+    def data_validation(self):
+        pass
+    
+    def to_hdf(self,hdffile):
+        """Write the pipeline object out to an hdf5 directory
+
+
+        Args:
+             outfile (str): path to output file
+        """
+
+        if self.header['finished_preprocess']:
+            self.lc.to_hdf(hdffile,'lc')
+
+        self.header.to_hdf(hdffile,'header')
+
+def read_hdf(hdffile):
+    header = pd.read_hdf(hdffile,'header')
+    if header['finished_preprocess']:
+        lc = pd.read_hdf(hdffile,'lc')
+
+    pipe = Pipeline(lc, header=dict(starname='starname'))
+    pipe.header = header
+
+    if pipe.header['finished_grid_search']:
+        pipe.grid = pd.read_hdf(hdffile,'grid')
+    if pipe.header['finished_data_validation']:
+        pipe.dv = pd.read_hdf(hdffile,'grid')
+
+    return pipe
+
+        
 def terra():
     """
     Top level wrapper for terra, all parameters are passed in as
@@ -66,8 +165,6 @@ def terra():
         # insert into sqlite3 database
         #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
 
-
-
 def pp(par,lc=None):
     """
     Preprocess
@@ -85,7 +182,6 @@ def pp(par,lc=None):
 
     Example
     -------
-
     # Monte Carlo run
     >>> import terra
     >>> dpp = {'a1': 0.77, 'a2': -0.67, 'a3': 1.14,'a4': -0.41,
@@ -93,7 +189,6 @@ def pp(par,lc=None):
                'inj_phase': 0.583,'inj_tau': 0.178, 
                'outfile':'temp.grid.h5', 
                'skic': 7831530, 
-               'svd_folder':'/global/project/projectdirs/m1669/Kepler/svd/',
                'type': 'mc', 'plot_lc':True}
     >>> terra.pp(dpp)
 
@@ -101,25 +196,6 @@ def pp(par,lc=None):
     dpp = dict(path_phot='photometry/C0_pixdecor/202083828.fits',
              outfile='temp.grid.h5',plot_lc=True,update=True,type='tps')
     terra.pp(dpp)
-
-    Make a dataframe with the following columns
-    Minumum processing to look at LC
-
-           skic  
-    0   3544595  
-    1  10318874  
-    2   5735762  
-    3  12252424  
-    4   4349452  
-    5  11295426  
-    6  11075737  
-    7   2692377  
-    8   8753657  
-    9  11600889  
-
-    nt['outfile'] = nt.skic.apply(lambda x : "%09d.h5" % x)
-    nt['svd_folder']='/global/project/projectdirs/m1669/Kepler/svd/'
-    terra.pp(dict(nt.ix[0]))
     """
 
     par = dict(par) # If passing in pandas series, treat as dict
@@ -154,7 +230,6 @@ def pp(par,lc=None):
     lc = mlab.rec_append_fields(lc,'isOutlier',isOutlier)
     lc['fmask'] = lc['fmask'] | lc['isOutlier']  | np.isnan(lc['fcal'])
     print "fcal: ncad=%i nmask=%i" % (fcal.size,lc['fmask'].sum())
-    
 
     with h5F(par) as h5:
         del h5['/pp/cal'] # Clear group so we can re-write to it.
