@@ -123,6 +123,9 @@ class Pipeline(object):
         if self.header['finished_preprocess']:
             self.lc.to_hdf(hdffile,'lc')
 
+        if self.header['finished_grid_search']:
+            self.pgram.to_hdf(hdffile,'pgram')
+
         self.header.to_hdf(hdffile,'header')
 
 def read_hdf(hdffile):
