@@ -44,6 +44,8 @@ deltaPcad = 10
  
 class Pipeline(object):
     lc_required_columns = ['t','f','ferr','fmask']
+    pgram_nbins = 2000 # Bin the periodogram down to save storage space
+
     def __init__(self, lc, header=dict(starname='starname') ):
         """Initialize a pipeline model.
 
@@ -102,15 +104,51 @@ class Pipeline(object):
         grid = tfind.Grid(t, fm)
 
         tbase = self.lc.t.max() - self.lc.t.min()
-        parL = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
-        grid.set_parL(parL)    
-        self.pgram = grid.periodogram(mode=periodogram_mode)
+        pgram_params = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
+        pgram = grid.periodogram(pgram_params, mode=periodogram_mode)
+
+        if len(pgram) > self.pgram_nbins:
+            log10P = np.log10(pgram.P)
+            bins = np.logspace(log10P.min(),log10P.max(),self.pgram_nbins)
+            pgram['Pbin'] = pd.cut(
+                pgram.P, bins, include_lowest=True, precision=4,labels=False
+                )
+            
+            # Take the highest s2n row at each period bin
+            pgram = pgram.sort(['Pbin','s2n']).groupby('Pbin').last()
+            pgram = pgram.reset_index()
+            
+        self.pgram = pgram
         self.header['finished_grid_search'] = True
         print self.pgram.sort('s2n').iloc[-1]
 
+    def data_validation(self, PF_kw=None, 
+                        climb = [0.773, -0.679, 1.14, -0.416] ):
+        
+        if PF_kw==None:
+            PF_kw = {}
+            
+        dv = tval.DV( self.lc.to_records(), self.pgram.to_records() )
+        dv.climb = np.array( climb )
+        dv.at_grass()
+        dv.at_SES()
+        dv.at_phaseFold(0, **PF_kw)
+        dv.at_phaseFold(180, **PF_kw)
 
-    def data_validation(self):
-        pass
+        for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
+            dv.at_binPhaseFold(ph,binsize)
+
+        dv.at_s2ncut()
+        dv.at_phaseFold_SecondaryEclipse()
+        dv.at_med_filt()
+        dv.at_autocorr()
+
+        trans = tm.from_dv(dv,bin_period=0.1)
+        trans.register()
+        trans.pdict = trans.fit_lightcurve()[0]
+        dv.trans = trans
+        self.dv = dv
+        self.header['finished_data_validation'] = True
     
     def to_hdf(self,hdffile):
         """Write the pipeline object out to an hdf5 directory
@@ -137,7 +175,7 @@ def read_hdf(hdffile):
     pipe.header = header
 
     if pipe.header['finished_grid_search']:
-        pipe.grid = pd.read_hdf(hdffile,'grid')
+        pipe.pgram = pd.read_hdf(hdffile,'pgram')
     if pipe.header['finished_data_validation']:
         pipe.dv = pd.read_hdf(hdffile,'grid')
 
@@ -218,52 +256,6 @@ def data_validation(par):
     >>> terra.data_validation(ddv)
 
     """
-
-    par = dict(par) # If passing in pandas series, treat as dict
-    print "Running data_validation on %s" % par['outfile'].split('/')[-1]
-    par['update'] = True  # need to use h5plus for MCMC
-
-    outfile = par['outfile']
-    PF_keys = 'LDT_deg cfrac cpad nCont'.split()
-    PF_kw = dict( [ (k,par[k]) for k in PF_keys ] )
-
-    dv = tval.DV( outfile )
-    starname = h5py.File(outfile).attrs['grid_basedir'].split('/')[-1]
-    dv.add_attr('starname',starname)
-    dv.climb = np.array( [ par['a%i' % i] for i in range(1,5)])
-
-    dv.at_grass()
-    dv.at_SES()
-    dv.at_phaseFold(0,**PF_kw)
-    dv.at_phaseFold(180,**PF_kw)
-
-    for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
-        dv.at_binPhaseFold(ph,binsize)
-
-    dv.at_s2ncut()
-    dv.at_phaseFold_SecondaryEclipse()
-    dv.at_med_filt()
-    dv.at_autocorr()
-
-    trans = tm.from_dv(dv,bin_period=0.1)
-    trans.register()
-    trans.pdict = trans.fit_lightcurve()[0]
-    trans.MCMC()
-
-    # Save file and generate plot.
-    dv.to_hdf(outfile,'/dv')
-    trans.to_hdf(outfile,'/dv/fit')
-
-    ext = 'pk'
-    dv = tval.read_hdf(outfile,'/dv')
-    dv.trans = tm.read_hdf(outfile,'/dv/fit')
-    tval_plotting.diag(dv)
-    figpath = par['outfile'].replace('.h5','.%s.png' % ext)
-    plt.gcf().savefig(figpath)
-    plt.close() 
-    print "created %s" % figpath
-    with h5py.File(outfile) as h5:
-        h5.attrs['grid_plot_filename'] = os.path.basename(figpath)        
 
 
 def multiCopyCut(file0,file1,pdict=None):

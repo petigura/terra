@@ -29,59 +29,81 @@ tddtype = zip(tdnames,[float]*len(tdnames))
 tddtype = np.dtype(tddtype)
 
 class Grid(object):
+    """Compute transit search periodograms.
+
+    Args:
+        t (numpy array) : Time of observations. Must be evenly spaced.
+        fm (masked array) : Flux values. Must be median normalized and
+            subtract off unity.
+
+    """
     def __init__(self, t, fm):
-        """
-        Initialize a grid object
-        """
+        assert isinstance(t, np.ndarray), "t must be plain numpy array"
+        assert isinstance(fm, ma.core.MaskedArray), "fm must be masked array"
+
+        dt = t[1:] - t[:-1]
+        meddt = np.median(dt)
+        assert np.allclose(dt, meddt, rtol=1e-3), "t must be evenly spaced"
+
+        self.dt = meddt
         self.t = t 
         self.fm = fm
 
-    def set_parL(self,parL):
-        """
-        Set grid search parameters
+    def periodogram(self, param_list, mode='std'):
+        """Run the transit finding periodogram
+        
+        Arguments: 
+            param_list (list) : List of dictionaries each with
+                the following keys:
+                - Pcad1 : Lower bound of period search (integer # of cadences)
+                - Pcad2 : Upper bound + 1
+                - twdG  : Range of trial durations to search over 
 
-        Args:
-             parL (list) : List of dictionaries each with the following keys:
-                 - Pcad1 : Lower bound of period search (integer # of cadences)
-                 - Pcad2 : Upper bound + 1
-                 - twdG  : Range of trial durations to search over 
+            mode (str) : What type of periodogram to run?  
+                - max : Runs pgram_max transit finder. Clips top two transits.
+                - bls : BLS. Folds and then evaluates SNR.
+                - ffa : SES then fold.
+                - fm : foreman mackey algo.
 
+        Returns:
+            pgram (pandas DataFrame) : Transit search periodogram. Contains the
+                following fields:
+                - P : trial period (same units as t).
+                - Pcad : Same as P, units of cadences.
+                - tdur : transit duration with highest s2n (same units as t).
+                - twd : Same as tdur, units of cadences (cadences).
+                - t0 : transit epoch
+                - s2n : signal to noise ratio.
         """
+
+        param_list = pd.DataFrame(param_list)
+        columns = list(param_list.columns)
+        if columns.count('Pcad1')==0:
+            param_list['Pcad1'] = param_list['P1'] / self.dt
+            param_list['Pcad2'] = param_list['P2'] / self.dt
+        if columns.count('P1')==0:
+            param_list['P1'] = param_list['Pcad1'] * self.dt
+            param_list['P2'] = param_list['Pcad2'] * self.dt
 
         names = 'P1 P2 twdG'.split()
-        print pd.DataFrame(parL)[names]
-        self.parL = parL
-        
-    def periodogram(self,mode='std'):
-        """
-        Run the transit finding periodogram
-        
-        mode : What type of periodogram to run?
-          - 'max' runs pgram_max transit finder. Clips top two SES
-          - 'bls' my implementation of BLS computes folds and then evaluates SNR
-          - 'ffa' SES then fold
-          - 'fm' foreman mackey algo
+        print param_list[names]
 
-        Returns
-        -------
-        pgram : Pandas dataframe with mean, count, t0cad, Pcad, noise,
-                s2n, twd, t0
+        param_list = [dict(row) for i,row in param_list.iterrows()]
 
-        """
         if mode=='max':
-            pgram = map(self._pgram_max,self.parL)
+            pgram = map(self._pgram_max,param_list)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
         if mode=='ffa':
-            pgram = map(self._pgram_ffa,self.parL)
+            pgram = map(self._pgram_ffa,param_list)
             pgram = pd.DataFrame(np.hstack(pgram))
         if mode=='bls':
-            pgram = map(self._pgram_bls,self.parL)
+            pgram = map(self._pgram_bls,param_list)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
             pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
         if mode=='fm':
-            pgram = map(self._pgram_fm,self.parL)
+            pgram = map(self._pgram_fm,param_list)
             pgram = np.hstack(pgram)
             pgram = pd.DataFrame(pgram)
             pgram['t0'] = self.t[0] + (pgram['col']+pgram['twd']/2)*config.lc
@@ -89,24 +111,26 @@ class Grid(object):
             pgram['mean'] = pgram['depth_2d']
             pgram['noise'] = 1/np.sqrt(pgram['depth_ivar_2d'])
 
+        pgram['P'] = self.dt * pgram['Pcad']
+        pgram['tdur'] = self.dt * pgram['twd']
         self.pgram = pgram
         return pgram
 
     def _pgram_ffa(self,par):
-        rtd = tdpep(self.t,self.fm,par)
+        rtd = tdpep(self.t, self.fm, par)
         r = tdmarg(rtd)
         return r
 
     def _pgram_max(self,par):
-        pgram = pgram_max(self.t,self.fm,par)
+        pgram = pgram_max(self.t, self.fm, par)
         return pgram
 
     def _pgram_bls(self,par):
-        pgram = bls(self.t,self.fm,par)
+        pgram = bls(self.t, self.fm, par)
         return pgram
 
     def _pgram_fm(self,par):
-        pgram = foreman_mackey(self.t,self.fm,par)
+        pgram = foreman_mackey(self.t, self.fm, par)
         return pgram
 
 def perGrid(tbase,ftdurmi,Pmin=100.,Pmax=None):

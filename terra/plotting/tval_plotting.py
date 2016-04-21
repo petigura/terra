@@ -73,8 +73,6 @@ def diag(dv,tpar=False):
 
     d = dict([k,getattr(dv,k)] for k in dv.attrs_keys)
     s = """
-%(starname)s
-
 P     %(P).3f 
 t0    %(t0).2f 
 tdur  %(tdur).2f 
@@ -130,7 +128,7 @@ grass %(grass).2f""" % d
 
 def periodogram(dv):
     cax = gca()
-    res,lc = dv.RES,dv.lc
+    res,lc = dv.pgram,dv.lc
     x = res['Pcad']*config.lc
     y = res['s2n']
 
@@ -251,7 +249,7 @@ def single_event_statistic_stack(dv):
 def transit_stack(dv):
     d = dict(time=True)
 
-    res,lc = dv.RES,dv.lc
+    res,lc = dv.pgram,dv.lc
     ym = ma.masked_array(lc['fcal']*1e6,lc['fmask'])
     wrapHelp(dv,lc['t'],ym,d,time=True)
     ylabel('SES (ppm)')

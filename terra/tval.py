@@ -27,7 +27,7 @@ class DV(h5plus.iohelper):
     """
     Data Validation Object
     """
-    def __init__(self,h5file):
+    def __init__(self, lc, pgram):
         """
         Instantiate new data validation object from h5 file.
 
@@ -40,50 +40,49 @@ class DV(h5plus.iohelper):
         Parameters
         ----------
         h5   : h5 file (post grid-search)
+
+        # To do remove dependence on Pcad.
+
         """
 
         # Calls the __init__ constructor of h5plus.iohelper. Then we
         # can do other things
         super(DV,self).__init__()
+        self.add_dset('lc', lc, description='Light curve')
+        self.add_dset('pgram',pgram,description='Periodogram')
 
-        h5 = h5py.File(h5file,'r')
-
-        self.add_dset('lc',h5['/pp/cal'][:],description='Light curve')
-        self.add_dset('RES',h5['/it0/RES'][:],description='Periodogram')
-
-        idmax = np.argmax(self.RES['s2n'])        
-        rmax = self.RES[idmax] # Peak SNR
+        idmax = np.argmax(self.pgram['s2n'])        
+        rmax = self.pgram[idmax] # Peak SNR
 
         self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
-        self.add_attr('Pcad', rmax['Pcad'], 
-                      description='Peak period [cadences]')
-        self.add_attr('t0', rmax['t0'], 
-                      description='Epoch')
-        self.add_attr('twd', rmax['twd'], 
-                      description='Peak duration [cadences]')
-        self.add_attr('mean', rmax['mean'], 
-                      description='Mean transit depth')
-        self.add_attr('noise', rmax['noise'],
-                      description='Mean light curve noise')
-
+        self.add_attr('mean', rmax['mean'], description='Mean transit depth')
+        self.add_attr('t0', rmax['t0'], description='Epoch')
+        self.add_attr('tdur',rmax['twd']*config.lc,description='twd [days]')
+        self.add_attr('P',rmax['Pcad']*config.lc,description='Pcad [days]')
+        self.add_attr(
+            'Pcad', rmax['Pcad'], description='Peak period [cadences]'
+        )
+        self.add_attr(
+            'twd', rmax['twd'], description='Peak duration [cadences]'
+        )
+        self.add_attr(
+            'noise', rmax['noise'], description='Mean light curve noise'
+        )
         self.twd = int(self.twd)
 
         f_not_normalized_med =  \
             pd.DataFrame(self.lc).describe().ix['50%','f_not_normalized']
-            
 
-        self.add_attr('f_not_normalized_med', f_not_normalized_med,
-                      description='Median flux before normalizing')
-
-        self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
-        self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
+        self.add_attr(
+            'f_not_normalized_med', f_not_normalized_med,
+            description='Median flux before normalizing'
+        )
 
         # Convenience
         self._attach_convenience()
-        h5.close()
  
     def _attach_convenience(self):
-        self.fm = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
+        self.fm = ma.masked_array(self.lc['f'],self.lc['fmask'])
         self.dM = tfind.mtd(self.fm,self.twd)
         self.t  = self.lc['t']
 
@@ -104,13 +103,13 @@ class DV(h5plus.iohelper):
 
         fac = 1.4 # bin ranges from P/fac to P*fac.
         nbins = 100
-        RES = self.RES
+        pgram = self.pgram
 
         bins  = np.logspace(np.log10(self.P/fac),
                             np.log10(self.P*fac),
                             nbins+1)
 
-        xp,yp = findpks(RES['Pcad']*config.lc,RES['s2n'],bins)
+        xp,yp = findpks(pgram['Pcad']*config.lc,pgram['s2n'],bins)
         grass = np.median(np.sort(yp)[-ntop:])
         self.add_attr('grass',grass,description='SNR of nearby peaks')        
 
@@ -268,9 +267,12 @@ class DV(h5plus.iohelper):
         tmask = tmask.astype(bool)
         fmcut.mask = fmcut.mask | tmask
         grid = tfind.Grid(self.t,fmcut)
-        parL = [dict(Pcad1=self.Pcad-1,Pcad2=self.Pcad+1,twdG=[self.twd])]
-        grid.set_parL(parL)
-        pgram = grid.periodogram('max')
+
+
+        pgram_params = [
+            dict(Pcad1=self.Pcad - 1, Pcad2=self.Pcad + 1, twdG = [self.twd])
+        ]
+        pgram = grid.periodogram(pgram_params,mode='max')
         idxmax = pgram.s2n.idxmax()
 
         dkeys = 's2ncut s2ncut_t0 s2ncut_mean'.split()
@@ -334,8 +336,6 @@ class DV(h5plus.iohelper):
         self.add_dset('corr',corr,description='Auto correlation amplitude')
         self.add_attr('autor',autor,description=\
             'Ratio of second highest peak to primary autocorrelation peak')
-
-
 
 
 def read_hdf(h5file,group):
