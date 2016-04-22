@@ -344,77 +344,67 @@ def t0shft(t,P,t0):
 
     return dt
 
-def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
+def label_transit(t, P, t0, tdur, cfrac=1, cpad=0):
+    """Label transits
+    
+    Given transit ephemerides and time array, assign labels to transit points.
+
+    Args:
+        t (numpy.array) : time
+        P (float) : Period of transit
+        t0 (float) : transit midpoint
+        tdur (float) : transit duratoin, i.e. T14
+        cfrac (float) : length of continuum region, units of tdur.
+        cpad (float) : padding between nominal end of transit, and 
+            beginning of continuum region, units of tdur. 
+
+    Returns:
+        labels (record array) : Same length as `t`. Contains the following 
+            columns:
+
+            transit : Transit region
+            contiuum : Continuum region
+            all : Continuum region and everything inside
+
+            Values correspond to transit number. Points not belonging to any 
+            transit are -1.
     """
-    Transit Label
-
-    Mark cadences as:
-    - transit   : in transit
-    - continuum : just outside of transit (used for fitting)
-    - other     : all other data
-
-    Parameters
-    ----------
-    t     : time series
-    P     : Period of transit
-    t0    : epoch of one transit
-    tdur  : transit duration (days not cadences)
-    cfrac : continuum defined as points between tdur * (0.5 + cpad)
-            and tdur * (0.5 + cpad + cfrac) of transit midpoint cpad
-    cpad  : how far away from the transit do we start the continuum
-            region in units of tdur.
-
-
-    Returns
-    -------
-
-    A record array the same length has the input. Most of the indecies
-    are set to -1 as uninteresting regions. If a region is interesting
-    (transit or continuum) I label it with the number of the transit
-    (starting at 0).
-
-    - tLbl      : Index closest to the center of the transit
-    - tRegLbl   : Transit region
-    - cRegLbl   : Continuum region
-    - totRegLbl : Continuum region and everything inside
-
-    Notes
-    -----
-    tLbl might not be the best way to find the mid transit index.  In
-    many cases, dM[rec['tLbl']] will decrease with time, meaning there
-    is a cumulative error that's building up.
-
-    """
-
     t = t.copy()
     t += t0shft(t,P,t0)
 
-    names = ['totRegLbl','tRegLbl','cRegLbl','tLbl']
-    rec  = np.zeros(t.size,dtype=zip(names,[int]*len(names)) )
-    for n in rec.dtype.names:
-        rec[n] -= 1
+    names = [
+        'transit_id','transit','continuum','continuum_before','continuum_after'
+    ]
+
+    labels  = np.zeros(t.size, dtype=zip( names, [int] * len(names) ) )
+    labels['transit_id'] -= 1
     
-    iTrans   = 0 # number of transit, starting at 0.
+    transit_id   = 0 # number of transit, starting at 0.
     tmdTrans = 0 # time of iTrans mid transit time.  
     while tmdTrans < t[-1]:
         # Time since mid transit in units of tdur
-        t0dt = np.abs(t - tmdTrans) / tdur 
-        it   = t0dt.argmin()
-        bt   = t0dt < 0.5
-        bc   = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
-        btot = t0dt < 0.5 + cpad + cfrac
+        dt = (t - tmdTrans) / tdur
         
-        rec['tRegLbl'][bt] = iTrans
-        rec['cRegLbl'][bc] = iTrans
-        rec['tLbl'][it]    = iTrans
-        rec['totRegLbl'][btot] = iTrans
+        # In transit points
+        labels['transit'][ np.abs(dt) < 0.5 ] = 1
 
-        iTrans += 1 
-        tmdTrans = iTrans * P
+        # Continuum points
+        continuum_before = ( -0.5 - cpad - cfrac < dt) & (dt < -0.5 - cpad) 
+        continuum_after = ( 0.5 + cpad < dt) & (dt < 0.5 + cpad + cfrac) 
 
-    return rec
+        labels['continuum_before'][continuum_before] = 1
+        labels['continuum_after'][continuum_after] = 1
+        labels['continuum'][continuum_before | continuum_after] = 1
+        
+        # All transit points
+        labels['transit_id'][np.abs(dt) < 0.5 + cpad + cfrac] = transit_id
 
-def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
+        transit_id += 1 
+        tmdTrans = transit_id * P
+
+    return labels
+
+def local_detrending(t, f, labels, deg=1, nCont=4, verbose=False):
     """
     Local Detrending
 
@@ -423,37 +413,35 @@ def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
     least two valid data points on either side of the transit to
     include it in the fit.
 
-    Parameters
-    ----------
-    t      : time
-    fm     : masked flux array
-    recLbl : Out put of transit label record array with following labels 
-             - cRegLbl   : Region to fit the continuum
-             - totRegLbl : Entire region to detrend.
-             - tLbl   : Middle of transit
-    nCont  : Number of continuum points before and after transit in
-             order to use the transit
+    Args:
+        t (array) : time
+        f (array) : flux
+        labels (record array) : See output of label_transit
+        deg (Optional[int]) : degree of polynomial used to model continuum
+        nCont (int) : Number of continuum points before and after transit in
+            order to use the transit
 
-    Returns
-    -------
-    fldt : local detrended flux
+    Returns:
+        fldt : local detrended flux
+
     """
-    fldt    = ma.masked_array( np.zeros(t.size) , True ) 
     assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
-    cLbl = recLbl['cRegLbl']
-    for i in range(cLbl.max() + 1):
+
+    fldt = ma.masked_array( np.zeros(t.size) , True ) 
+
+    for i in range(labels['continuum'].max() + 1):
         # Points corresponding to continuum region.
-        bc = (cLbl == i ) 
+        bc = (labels['continuum'] == i ) 
 
         fc = fm[bc]  # masked array
         tc = t[bc]
 
         # Identifying the detrending region.
-        bldt = (recLbl['totRegLbl']==i)
+        bldt = (labels['totRegLbl']==i)
         tldt = t[bldt]
 
         # Times of transit
-        bt = (recLbl['tLbl'] == i )
+        bt = (labels['tLbl'] == i )
         tt = t[bt]
 
         # There must be a critical number of valid points before and
@@ -480,9 +468,8 @@ def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
         
     return fldt
 
-def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
-    """
-    Phase Fold
+def phase_fold(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
+    """Phase fold light curve
     
     Convience function that runs the local detrender and then phase
     folds the lightcurve.
