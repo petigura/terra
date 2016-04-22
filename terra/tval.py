@@ -23,95 +23,37 @@ import tfind
 import keplerio
 import config
 
-class DV(h5plus.iohelper):
+import utils.hdfstore
+
+class DataValidation(utils.hdfstore.HDFStore):
+    """ Object for handling transit validation checks
+    
+    Args:
+        lc (pandas DataFrame) : Light curve. Must have `t`, `f`, and `ferr`, 
+            and `fmask`
+        P (float) : Period of transit
+        t0 (float) : time of transit
+        tdur (float) : duration of transit
     """
-    Data Validation Object
-    """
-    def __init__(self, lc, pgram):
-        """
-        Instantiate new data validation object from h5 file.
-
-        Pulls in data from h5['/pp/cal'] and ['/it0/RES']
-
-        Default action is to choose the highest SNR peak. However, the
-        't0,'Pcad','twd','mean','s2n','noise' keys maybe changed post
-        instantiation
-        
-        Parameters
-        ----------
-        h5   : h5 file (post grid-search)
-
-        # To do remove dependence on Pcad.
-
-        """
-
+    def __init__(self, lc, P, t0, tdur, dt):
         # Calls the __init__ constructor of h5plus.iohelper. Then we
         # can do other things
-        super(DV,self).__init__()
-        self.add_dset('lc', lc, description='Light curve')
-        self.add_dset('pgram',pgram,description='Periodogram')
-
-        idmax = np.argmax(self.pgram['s2n'])        
-        rmax = self.pgram[idmax] # Peak SNR
-
-        self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
-        self.add_attr('mean', rmax['mean'], description='Mean transit depth')
-        self.add_attr('t0', rmax['t0'], description='Epoch')
-        self.add_attr('tdur',rmax['twd']*config.lc,description='twd [days]')
-        self.add_attr('P',rmax['Pcad']*config.lc,description='Pcad [days]')
-        self.add_attr(
-            'Pcad', rmax['Pcad'], description='Peak period [cadences]'
-        )
-        self.add_attr(
-            'twd', rmax['twd'], description='Peak duration [cadences]'
-        )
-        self.add_attr(
-            'noise', rmax['noise'], description='Mean light curve noise'
-        )
-        self.twd = int(self.twd)
-
-        f_not_normalized_med =  \
-            pd.DataFrame(self.lc).describe().ix['50%','f_not_normalized']
-
-        self.add_attr(
-            'f_not_normalized_med', f_not_normalized_med,
-            description='Median flux before normalizing'
-        )
+        super(DataValidation,self).__init__()
+        self.update_header('P', P, 'Transit period')
+        self.update_header('t0', t0, 'Time of transit')
+        self.update_header('tdur', tdur, 'Duration of transit')
+        tdurcad = int(np.round(tdur / dt))
+        self.update_header('tdurcad', tdurcad, 'Transit duration (cadences)')
+        self.update_header('dt', dt, 'Observing cadence')
+        self.update_table('lc', lc, 'Light curve')
 
         # Convenience
         self._attach_convenience()
  
     def _attach_convenience(self):
+        self.t  = np.array(self.lc['t'])
         self.fm = ma.masked_array(self.lc['f'],self.lc['fmask'])
-        self.dM = tfind.mtd(self.fm,self.twd)
-        self.t  = self.lc['t']
-
-
-    #
-    # Functions for adding features to DV object
-    #
-    def at_grass(self):
-        """
-        Attach Grass Feature
-        
-        Breakup the periodogram into a bunch of bins and find the
-        highest point in each bin. Grass is the median height of the
-        top 5 peaks
-        """
-        ntop = 5 # Number of peaks to consider. Median of top 5 should
-                 # ignore the primary peak
-
-        fac = 1.4 # bin ranges from P/fac to P*fac.
-        nbins = 100
-        pgram = self.pgram
-
-        bins  = np.logspace(np.log10(self.P / fac),
-                            np.log10(self.P * fac),
-                            nbins+1)
-
-        xp,yp = findpks(pgram['Pcad']*config.lc,pgram['s2n'],bins)
-        grass = np.median(np.sort(yp)[-ntop:])
-        self.add_attr('grass',grass,description='SNR of nearby peaks')        
+        self.dM = tfind.mtd(self.fm, self.tdurcad)
 
     def at_SES(self):
         """
@@ -169,7 +111,7 @@ class DV(h5plus.iohelper):
             self.add_attr('SES_%i' % i, medses,
                           description='Median SES [Season %i]' % i )
 
-    def at_phaseFold(self,ph,**PF_kw):
+    def at_phaseFold(self, ph, **PF_kw):
         """ 
         Attach locally detrended light curve
 
@@ -180,12 +122,10 @@ class DV(h5plus.iohelper):
         """
         # Epoch at arbitrary phase, ph
         t0 = self.t0 + ph / 360. * self.P 
-        rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
+        lcPF = PF(self.t, self.fm, self.P, t0, self.tdur, **PF_kw) 
+        lcPF = pd.DataFrame(lcPF)
+        self.update_table('lcPF%i' % ph, lcPF,'Phase folded light curve')
 
-        # Attach the quarter, doesn't do anything for K2
-        #qarr = keplerio.t2q( rPF['t'] ).astype(int)
-        #rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
-        self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
 
     def at_binPhaseFold(self,ph,bwmin):
         """Attach binned phase-folded light curve
@@ -261,7 +201,7 @@ class DV(h5plus.iohelper):
         tmask = self.rLbl['tRegLbl'] >= 0
         tmask = np.convolve(
             tmask.astype(float),
-            np.ones(self.twd * 2),
+            np.ones(self.header['tdurcad'] * 2),
             mode='same'
             )
         tmask = tmask.astype(bool)
@@ -270,7 +210,7 @@ class DV(h5plus.iohelper):
 
 
         pgram_params = [
-            dict(Pcad1=self.Pcad - 1, Pcad2=self.Pcad + 1, twdG = [self.twd])
+            dict(Pcad1=self.Pcad - 1, Pcad2=self.Pcad + 1, twdG = [self.header['tdurcad']])
         ]
         pgram = grid.periodogram(pgram_params,mode='max')
         idxmax = pgram.s2n.idxmax()
@@ -296,7 +236,7 @@ class DV(h5plus.iohelper):
 
     def at_med_filt(self):
         """Add median detrended lc"""
-        fmed = self.fm - nd.median_filter(self.fm, size=self.twd*3)
+        fmed = self.fm - nd.median_filter(self.fm, size=self.header['tdurcad']*3)
 
         # Shift t-series so first transit is at t = 0 
         dt = t0shft(self.t,self.P,self.t0)

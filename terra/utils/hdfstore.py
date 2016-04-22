@@ -1,4 +1,3 @@
-
 import pandas as pd
 
 class HDFStore(object):
@@ -27,7 +26,7 @@ class HDFStore(object):
             value : value of header attribute
             description : short description of value
         """
-
+        setattr(self, name, value)
         self.header.loc[name] = [value, description]
 
     def update_table(self, name, table, description):
@@ -75,6 +74,10 @@ class HDFStore(object):
         """ Read info from HDF file """
         self.header = pd.read_hdf(h5file, group + '/header')
         self.tables = pd.read_hdf(h5file, group + '/tables')
+
         for table_name, row in self.tables.iterrows():
             table = pd.read_hdf(h5file, group + '/' + table_name)
             setattr(self, table_name, table)
+
+        for name, row in self.header.iterrows():
+            setattr(self, name, value)

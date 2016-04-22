@@ -118,9 +118,15 @@ class Pipeline(object):
             pgram = pgram.sort(['Pbin','s2n']).groupby('Pbin').last()
             pgram = pgram.reset_index()
             
+
+        idx = pgram.s2n.idxmax()
+        maxrow = pgram.ix[idx]
+        self.header['grid_P'] = maxrow['P']
+        self.header['grid_t0'] = maxrow['t0']
+        self.header['grid_tdur'] = maxrow['tdur']
         self.pgram = pgram
         self.header['finished_grid_search'] = True
-        print self.pgram.sort('s2n').iloc[-1]
+        print maxrow
 
     def data_validation(self, PF_kw=None, 
                         climb = [0.773, -0.679, 1.14, -0.416] ):
@@ -128,10 +134,9 @@ class Pipeline(object):
         if PF_kw==None:
             PF_kw = {}
             
-        dv = tval.DV( self.lc.to_records(), self.pgram.to_records() )
+        
+        dv = tval.DV( self.lc.to_records(), self.header['grid_P'], self.pgram.to_records() )
         dv.climb = np.array( climb )
-        dv.at_grass()
-        dv.at_SES()
         dv.at_phaseFold(0, **PF_kw)
         dv.at_phaseFold(180, **PF_kw)
 
