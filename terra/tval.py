@@ -105,8 +105,8 @@ class DV(h5plus.iohelper):
         nbins = 100
         pgram = self.pgram
 
-        bins  = np.logspace(np.log10(self.P/fac),
-                            np.log10(self.P*fac),
+        bins  = np.logspace(np.log10(self.P / fac),
+                            np.log10(self.P * fac),
                             nbins+1)
 
         xp,yp = findpks(pgram['Pcad']*config.lc,pgram['s2n'],bins)
