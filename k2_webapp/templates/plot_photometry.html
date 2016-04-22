@@ -1,9 +1,0 @@
-{% macro plot_photometry(phot_basename) %}
-{% for ext,w in imagepars %}
-<div id="image">
-  <a href={{phot_basename ~ ext}}>
-  <img src={{phot_basename ~ ext}} width={{w}}>
-  </a>
-</div>
-{% endfor %}
-{% endmacro %}
