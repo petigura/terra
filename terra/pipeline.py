@@ -39,32 +39,53 @@ import config
 from k2utils import photometry
 import transit_model as tm
 from utils import h5plus
+import copy
+import tval
+from lmfit import minimize, fit_report
 
 deltaPcad = 10
  
-class Pipeline(object):
+from utils.hdfstore import HDFStore
+
+class Pipeline(HDFStore):
     lc_required_columns = ['t','f','ferr','fmask']
     pgram_nbins = 2000 # Bin the periodogram down to save storage space
 
-    def __init__(self, lc, header=dict(starname='starname') ):
+    def __init__(self, lc=None, header=dict(starname='starname') ):
         """Initialize a pipeline model.
 
         Args:
-            lc (pandas.DataFrame): Light curve. Must have the following 
-                columns: t, f, ferr, fmask
+            lc (Optional[pandas.DataFrame]): Light curve. Must have the 
+                following columns: t, f, ferr, fmask. Setting equal to None is 
+                done for reading from disk
             header (Optional[dict]): metadata to be stored with the
                 pipeline object. At a bare minimum, it must include
                 the star name
         """
+
+        super(Pipeline,self).__init__()
+
+        if type(lc)==type(None):
+            return None 
+
         for col in self.lc_required_columns:
             assert list(lc.columns).index(col) >= 0, \
                 "light curve lc must contain {}".format(col)
 
-        header['finished_preprocess'] = False
-        header['finished_grid_search'] = False
-        header['finished_data_validation'] = False
-        self.header = pd.Series(header)
-        self.lc = lc
+        self.update_header(
+            'finished_preprocess', False, 
+            'Have we preprocessed data in time domain?'
+            )
+        self.update_header(
+            'finished_grid_search', False, 
+            'Have we run the grid search?'
+            )
+        self.update_header(
+            'finished_data_validation', False, 
+            'Have we completed data validation?'
+           )
+
+        self.update_table('lc',lc,'light curve')
 
     def _get_fm(self):
         """Convenience function to return masked flux array"""
@@ -89,7 +110,7 @@ class Pipeline(object):
         print "preprocess: {} measurements, {} are masked out".format(
             len(self.lc) , self.lc['fmask'].sum())
 
-        self.header['finished_preprocess'] = True
+        self.update_header('finished_preprocess',True)
 
     def grid_search(self, P1=0.5, P2=None, periodogram_mode='max'):
         """Run the grid based search
@@ -106,6 +127,7 @@ class Pipeline(object):
         tbase = self.lc.t.max() - self.lc.t.min()
         pgram_params = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
         pgram = grid.periodogram(pgram_params, mode=periodogram_mode)
+        pgram = pgram.query('P > 0') # cut out candences that failed
 
         if len(pgram) > self.pgram_nbins:
             log10P = np.log10(pgram.P)
@@ -117,115 +139,205 @@ class Pipeline(object):
             # Take the highest s2n row at each period bin
             pgram = pgram.sort(['Pbin','s2n']).groupby('Pbin').last()
             pgram = pgram.reset_index()
-            
 
-        idx = pgram.s2n.idxmax()
-        maxrow = pgram.ix[idx]
-        self.header['grid_P'] = maxrow['P']
-        self.header['grid_t0'] = maxrow['t0']
-        self.header['grid_tdur'] = maxrow['tdur']
-        self.pgram = pgram
-        self.header['finished_grid_search'] = True
-        print maxrow
+        row = pgram.sort('s2n').iloc[-1]
+        self.update_header('grid_P', row.P, "Period with highest s2n")
+        self.update_header(
+            'grid_t0', row.t0, "Time of transit with highest s2n"
+        )
+        self.update_header(
+            'grid_tdur', row.tdur, "transit duration with highest s2n"
+        )
+        self.update_table('pgram',pgram,'periodogram')
+        self.update_header('finished_grid_search',True)
+        print row
 
-    def data_validation(self, PF_kw=None, 
-                        climb = [0.773, -0.679, 1.14, -0.416] ):
-        
-        if PF_kw==None:
-            PF_kw = {}
-            
-        
-        dv = tval.DV( self.lc.to_records(), self.header['grid_P'], self.pgram.to_records() )
-        dv.climb = np.array( climb )
-        dv.at_phaseFold(0, **PF_kw)
-        dv.at_phaseFold(180, **PF_kw)
 
-        for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
-            dv.at_binPhaseFold(ph,binsize)
-
-        dv.at_s2ncut()
-        dv.at_phaseFold_SecondaryEclipse()
-        dv.at_med_filt()
-        dv.at_autocorr()
-
-        trans = tm.from_dv(dv,bin_period=0.1)
-        trans.register()
-        trans.pdict = trans.fit_lightcurve()[0]
-        dv.trans = trans
-        self.dv = dv
-        self.header['finished_data_validation'] = True
+#    def data_validation(self, PF_kw=None, 
+#                        climb = [0.773, -0.679, 1.14, -0.416] ):
+#        
+#        if PF_kw==None:
+#            PF_kw = {}
+#            
+#        
+#        dv = tval.DV( self.lc.to_records(), self.header['grid_P'], self.pgram.to_records() )
+#        dv.climb = np.array( climb )
+#        dv.at_phaseFold(0, **PF_kw)
+#        dv.at_phaseFold(180, **PF_kw)
+#
+#        for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
+#            dv.at_binPhaseFold(ph,binsize)
+#
+#        dv.at_s2ncut()
+#        dv.at_phaseFold_SecondaryEclipse()
+#        dv.at_med_filt()
+#        dv.at_autocorr()
+#
+#        trans = tm.from_dv(dv,bin_period=0.1)
+#        trans.register()
+#        trans.pdict = trans.fit_lightcurve()[0]
+#        dv.trans = trans
+#        self.dv = dv
+#        self.header['finished_data_validation'] = True
     
-    def to_hdf(self,hdffile):
-        """Write the pipeline object out to an hdf5 directory
+
+def read_hdf(hdffile, group):
+    pipe = Pipeline()
+    pipe.read_hdf(hdffile, group)
+    return pipe
 
 
-        Args:
-             outfile (str): path to output file
-        """
+def fit_transits(pipe):
+    batman_kw = dict(supersample_factor=4, exp_time=1/48.)
+    label_transit_kw = dict(cpad=0, cfrac=2)
+    local_detrending_kw = dict(poly_degree=1, label_transit_kw=label_transit_kw)
 
-        if self.header['finished_preprocess']:
-            self.lc.to_hdf(hdffile,'lc')
+    # Compute initial parameters. Fits are more robust if we star with
+    # transits that are too wide as opposed to to narrow
+    P = pipe.grid_P
+    t0 = pipe.grid_t0 
+    tdur = pipe.grid_tdur * 2 
+    rp = np.sqrt(pipe.pgram.sort('s2n').iloc[-1]['mean'])
+    b = 0.5
 
-        if self.header['finished_grid_search']:
-            self.pgram.to_hdf(hdffile,'pgram')
 
-        self.header.to_hdf(hdffile,'header')
+    # Grab data, perform local detrending, and split by tranists.
+    lc = pipe.lc.copy()
+    lc = lc[~lc.fmask].drop(['ftnd_t_roll_2D'],axis=1)
+    lc = tval.local_detrending(lc, P, t0, tdur, **local_detrending_kw)
+    lc['ferr'] = lc.query('continuum==1').f.std()
+    time_base = np.mean(lc['t'])
+    lc['t_shift'] = lc['t'] - time_base
+    t = np.array(lc.t_shift)
+    f = np.array(lc.f)
+    ferr = np.array(lc.ferr)
 
-def read_hdf(hdffile):
-    header = pd.read_hdf(hdffile,'header')
-    if header['finished_preprocess']:
-        lc = pd.read_hdf(hdffile,'lc')
+    # Perform global fit
+    tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
+    tm.lm_params['rp'].min = 0.0
+    tm.lm_params['tdur'].min = 0.0
+    tm.lm_params['b'].min = 0.0
+    tm.lm_params['b'].max = 1.0
+    tm_initial = copy.deepcopy(tm)
+    out = minimize(
+        tm.residual, tm.lm_params, args=(t, f, ferr), method='nelder'
+    )
+    tm_global = copy.deepcopy(tm)
+    print "Global fit values"
+    print fit_report(out)
 
-    pipe = Pipeline(lc, header=dict(starname='starname'))
-    pipe.header = header
+    # Store best fit parameters
+    par = tm.lm_params
+    pipe.update_header('fit_P', par['per'].value, "Best fit period")
+    pipe.update_header('fit_uP', par['per'].stderr, "Uncertainty")
+    t0 = par['t0'].value + time_base
+    pipe.update_header('fit_t0', t0,  "Best fit transit mid-point" )
+    pipe.update_header('fit_rp', par['rp'].value, "Best fit Rp/Rstar")
+    pipe.update_header('fit_b', par['b'].value, "Best fit impact parameter")
+    for k in 't0 rp tdur b'.split():
+        pipe.update_header('fit_u{}'.format(k), par[k].stderr, "Uncertainty")
 
-    if pipe.header['finished_grid_search']:
-        pipe.pgram = pd.read_hdf(hdffile,'pgram')
-    if pipe.header['finished_data_validation']:
-        pipe.dv = pd.read_hdf(hdffile,'grid')
+    lc0 = pipe.lc.copy()
+    lc0['t'] -= time_base
+    tfit = np.linspace(lc0.t.min(), lc0.t.max(), len(lc0) * 4 )
+    lcfit = pd.DataFrame(tfit,columns=['t'])
 
+    lcfit['f'] = tm.model(tm.lm_params, np.array(lcfit.t))
+    lcfit['f_initial'] = tm.model(tm_initial.lm_params, np.array(lcfit.t))
+    lcfit['t'] += time_base
+
+    # Add in phase folded time
+    fit_P = pipe.fit_P
+    fit_t0 = tm.lm_params['t0'].value
+    dt = tval.t0shft( np.array(pipe.lc.t), fit_P, fit_t0)
+    def t_phasefold(t):
+        _t_phasefold = t + dt
+        _t_phasefold = np.mod(_t_phasefold + fit_P/2, fit_P) - fit_P/2 
+        return _t_phasefold
+    lc['t_phasefold'] = t_phasefold(lc.t)
+    lcfit['t_phasefold'] = t_phasefold(lcfit.t)
+    pipe.update_table('lcdt', lc, "Same as lc with f detrended")
+    pipe.update_table('lcfit', lcfit, "Supersampled best fit light curve.")
+
+    # Fit inidvidual transits
+    transits = []
+    for transit_id, idx in lc.groupby('transit_id').groups.iteritems():
+        transit = dict(transit_id=transit_id)
+        lc_single = lc.ix[idx]
+        t = np.array(lc_single.t_shift) 
+        f = np.array(lc_single.f)
+        ferr = np.array(lc_single.ferr)
+        def _get_tm():
+            tm = copy.deepcopy(tm_global)
+            for key in 'per t0 rp tdur b'.split():
+                tm.lm_params[key].vary = False
+            return tm
+
+        # Fit the transit times, holding other parameters constant
+        tm = _get_tm()
+        tm.lm_params['t0'].vary = True
+        out = minimize(tm.residual, tm.lm_params, args=(t,f,ferr) )
+        transit['t0'] = out.params['t0'].value
+        transit['ut0'] = out.params['t0'].stderr
+
+        # Fit the transit depths, holding other parameters constant
+        tm = _get_tm()
+        tm.lm_params['rp'].vary = True
+        out = minimize(tm.residual, tm.lm_params, args=(t,f,ferr) )
+        transit['rp'] = out.params['rp'].value
+        transit['urp'] = out.params['rp'].stderr
+        transits+=[transit]
+
+    # Constant ephemeris, then adjust for observed O - C.
+    transits = pd.DataFrame(transits)
+    transits['omc'] = transits['t0'] - tm_global.lm_params['t0']
+    transits['t0'] = fit_t0 + transits.transit_id * fit_P + transits['omc']
+    pipe.update_table(
+        'transits', transits,
+        'Inidividual t0 and rp, holding other parameters fixed.'
+    )
     return pipe
 
         
-def terra():
-    """
-    Top level wrapper for terra, all parameters are passed in as
-    keyword arguments
-
-    """
-    @print_timestamp
-    def pp(self):
-        con = sqlite3.connect(self.pardb)
-        df = pd.read_sql('select * from pp',con,index_col='id')
-        d = dict(df.ix[self.starname])
-        d['outfile'] = self.star_gridfile
-        d['path_phot'] = self.lcfile
-        terra.pp(d)
-
-    @print_timestamp
-    def grid(self,debug=False):
-        con = sqlite3.connect(self.pardb)
-        df = pd.read_sql('select * from grid',con,index_col='id')
-        d = dict(df.ix[self.starname])
-        d['outfile'] = self.star_gridfile
-        if debug:
-            d['p1'] = 1.
-            d['p2'] = 2.
-    
-        terra.grid(d)
-
-    @print_timestamp
-    def data_validation(self):
-        con = sqlite3.connect(self.pardb)
-        df = pd.read_sql('select * from dv',con,index_col='id')
-        d = dict(df.ix[self.starname])
-        d['outfile'] = self.star_gridfile
-        terra.data_validation(d)
-        dscrape = dv_h5_scrape(self.star_gridfile)
-        print pd.Series(dscrape)
-        # insert into sqlite3 database
-        #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
-
+#def terra():
+#    """
+#    Top level wrapper for terra, all parameters are passed in as
+#    keyword arguments
+#
+#    """
+#    @print_timestamp
+#    def pp(self):
+#        con = sqlite3.connect(self.pardb)
+#        df = pd.read_sql('select * from pp',con,index_col='id')
+#        d = dict(df.ix[self.starname])
+#        d['outfile'] = self.star_gridfile
+#        d['path_phot'] = self.lcfile
+#        terra.pp(d)
+#
+#    @print_timestamp
+#    def grid(self,debug=False):
+#        con = sqlite3.connect(self.pardb)
+#        df = pd.read_sql('select * from grid',con,index_col='id')
+#        d = dict(df.ix[self.starname])
+#        d['outfile'] = self.star_gridfile
+#        if debug:
+#            d['p1'] = 1.
+#            d['p2'] = 2.
+#    
+#        terra.grid(d)
+#
+#    @print_timestamp
+#    def data_validation(self):
+#        con = sqlite3.connect(self.pardb)
+#        df = pd.read_sql('select * from dv',con,index_col='id')
+#        d = dict(df.ix[self.starname])
+#        d['outfile'] = self.star_gridfile
+#        terra.data_validation(d)
+#        dscrape = dv_h5_scrape(self.star_gridfile)
+#        print pd.Series(dscrape)
+#        # insert into sqlite3 database
+#        #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
+#
 
 
 def data_validation(par):

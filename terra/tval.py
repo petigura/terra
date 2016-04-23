@@ -344,7 +344,7 @@ def t0shft(t,P,t0):
 
     return dt
 
-def label_transit(t, P, t0, tdur, cfrac=1, cpad=0):
+def label_transit(t, P, t0, tdur, cpad=0.5, cfrac=3):
     """Label transits
     
     Given transit ephemerides and time array, assign labels to transit points.
@@ -354,20 +354,19 @@ def label_transit(t, P, t0, tdur, cfrac=1, cpad=0):
         P (float) : Period of transit
         t0 (float) : transit midpoint
         tdur (float) : transit duratoin, i.e. T14
-        cfrac (float) : length of continuum region, units of tdur.
-        cpad (float) : padding between nominal end of transit, and 
+        cfrac (Optional[float]) : length of continuum region, units of tdur.
+        cpad (Optional[float]) : padding between nominal end of transit, and 
             beginning of continuum region, units of tdur. 
 
     Returns:
         labels (record array) : Same length as `t`. Contains the following 
             columns:
 
-            transit : Transit region
-            contiuum : Continuum region
-            all : Continuum region and everything inside
-
-            Values correspond to transit number. Points not belonging to any 
-            transit are -1.
+            transit_id : integer identification for transit
+            transit : 1 if transit, 0 if not
+            continuum : 1 if continuum, 0 if not. 
+            continuum_before : 1 if continuum before transit, 0 if not.
+            continuum_after : 1 if continuum after transit, 0 if not.
     """
     t = t.copy()
     t += t0shft(t,P,t0)
@@ -404,7 +403,8 @@ def label_transit(t, P, t0, tdur, cfrac=1, cpad=0):
 
     return labels
 
-def local_detrending(t, f, labels, deg=1, nCont=4, verbose=False):
+def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=4, 
+                     label_transit_kw=None):
     """
     Local Detrending
 
@@ -414,61 +414,134 @@ def local_detrending(t, f, labels, deg=1, nCont=4, verbose=False):
     include it in the fit.
 
     Args:
-        t (array) : time
-        f (array) : flux
-        labels (record array) : See output of label_transit
-        deg (Optional[int]) : degree of polynomial used to model continuum
-        nCont (int) : Number of continuum points before and after transit in
-            order to use the transit
+        lc (pandas DataFrame) : light curve. Must contain following keys: 
+            - t : time 
+            - f : flux
+            - can contain other keys that come along for the ride.
+        P (float) : Period of transit
+        t0 (float) : transit midpoint
+        tdur (float) : transit duratoin, i.e. T14
+
+        min_continuum (int) : minimum number of continuum points before and 
+            after transit to be used. If this is not met, drop the transit
 
     Returns:
-        fldt : local detrended flux
+         lcdt : Detrended light curve with the following keys
+             - t : time
+             - f : detrended flux
+             - other keys from transit_label
+             - other keys that were along for the rid
+
 
     """
-    assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
+    if label_transit_kw==None:
+        label_transit_kw = {}
 
-    fldt = ma.masked_array( np.zeros(t.size) , True ) 
+    lcdt = lc.copy()
+    t = np.array(lcdt.t)
+    labels = label_transit(t, P, t0, tdur, **label_transit_kw)
+    labels = pd.DataFrame(labels)
 
-    for i in range(labels['continuum'].max() + 1):
-        # Points corresponding to continuum region.
-        bc = (labels['continuum'] == i ) 
+    g = labels.query('transit_id >= 0').groupby('transit_id',as_index=False)
+    labels_sum = g.sum()
+    transit_id_good = labels_sum[
+        (labels_sum.continuum_before > min_continuum) & 
+        (labels_sum.continuum_after > min_continuum)
+        ].transit_id
 
-        fc = fm[bc]  # masked array
-        tc = t[bc]
+    # Reset indecies to join
+    labels = labels.reset_index()
+    lcdt = lcdt.reset_index()    
+    lcdt = pd.concat([lcdt,labels],axis=1)
 
-        # Identifying the detrending region.
-        bldt = (labels['totRegLbl']==i)
-        tldt = t[bldt]
+    lcdt = lcdt[lcdt.transit_id.isin(transit_id_good)]
 
-        # Times of transit
-        bt = (labels['tLbl'] == i )
-        tt = t[bt]
+    def detrend(x):
+        """Function that detrends a single light section of light curve"""
 
-        # There must be a critical number of valid points before and
-        # after the transit.
-        ncBefore = fc[ tc < tt ].count()  
-        ncAfter  = fc[ tc > tt ].count()  
+        t = x['t']
+        f = x['f']
+        t0 = np.mean(x['t'])
+        time_since_transit = t - t0
 
-        if (ncBefore >= nCont) & (ncAfter >= nCont) :        
-            tc   -= tt
-            tldt -= tt
+        # select out just the continuum points
+        continuum = x['continuum']==1
 
-            tc = tc[~fc.mask]
-            fc = fc[~fc.mask]
+        pfit = np.polyfit(
+            time_since_transit[continuum], f[continuum], poly_degree
+            )
 
-            pfit = np.polyfit(tc,fc,deg)
-            fcontfit = np.polyval(pfit,tldt)
+        fldt = f.copy()
+        fldt -= np.polyval(pfit,time_since_transit)
+        return fldt
 
-            fldt[bldt] = fm[bldt] - fcontfit
-            fldt.mask[bldt] = fm.mask[bldt]
-        elif verbose==True:
-            print "no data for trans # %i" % (i)
-        else:
-            pass
-        
-    return fldt
+    g = lcdt.groupby('transit_id')
+    fldt = map(detrend,[ lcdt.ix[idx] for idx in g.groups.values() ] )
+    fldt = pd.concat(fldt)
+    lcdt['f'] = fldt
+    return lcdt
 
-def phase_fold(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
+import batman
+from lmfit import Parameters, minimize, fit_report, minimizer
+
+class TransitModel(object):
+    """Simple container object can compute synthetic transit models"""
+    def __init__(self, P, t0, rp, tdur, b, ecc=0.0, w=0.0, limb_dark='linear',
+                 u=[0.66], batman_kw=None):
+        if batman_kw==None:
+            batman_kw = {}
+
+        lm_params = Parameters()
+        lm_params.add('per', value=P, vary=True )
+        lm_params.add('t0', value=t0, vary=True )
+        lm_params.add('rp', value=rp, vary=True, min=0.0)
+        lm_params.add('tdur', value=tdur)
+        lm_params.add('b', value=b) 
+
+        self.ecc = ecc
+        self.w = w
+        self.limb_dark = limb_dark
+        self.u = u
+        self.lm_params = lm_params
+        self.batman_kw = batman_kw
+
+    def model(self, lm_params, t):
+        per = lm_params['per'].value
+        t0 = lm_params['t0'].value
+        rp = lm_params['rp'].value
+        tdur = lm_params['tdur'].value
+        b = lm_params['b'].value
+        bm_params = batman.TransitParams()
+        bm_params.per = per
+        bm_params.t0 = t0
+        bm_params.rp = rp 
+        bm_params.a = compute_a(per, tdur, rp, b)
+        bm_params.inc = compute_inc(per, tdur, rp, b)
+        bm_params.ecc = self.ecc  
+        bm_params.w = self.w 
+        bm_params.limb_dark = self.limb_dark
+        bm_params.u = self.u 
+        m = batman.TransitModel(bm_params, t, **self.batman_kw)
+        _model = m.light_curve(bm_params) - 1
+        return _model
+
+    def residual(self, lm_params, t, f, ferr):
+        _model = self.model(lm_params, t)
+        resid = (f - _model) / ferr
+        return resid    
+
+def compute_a(P, T14, rp, b):
+    """ Compute scaled semi-major axis from P, T14, rp, and b """
+    _a = P / np.pi / T14 * np.sqrt( (1+ rp)**2 - b )
+    return _a
+
+def compute_inc(P, T14, rp, b):
+    """ Compute inclination from P, T14, rp, and b """
+    _inc = np.arccos(b / compute_a(P, T14, rp, b) )
+    _inc = np.rad2deg(_inc)
+    return _inc
+
+def phase_fold(t, fm, P, t0, tdur, cfrac=3, cpad=1, LDT_deg=1, nCont=4):
     """Phase fold light curve
     
     Convience function that runs the local detrender and then phase
