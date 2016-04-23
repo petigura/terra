@@ -18,7 +18,7 @@ class HDFStore(object):
         self.tables = pd.DataFrame(index=[],columns=['shape','description'])
         self.tables.index.name = 'name'
 
-    def update_header(self, name, value, description):
+    def update_header(self, *args):
         """ Update header information, create if it doesn't exist 
         
         Args:
@@ -26,10 +26,17 @@ class HDFStore(object):
             value : value of header attribute
             description : short description of value
         """
+        name = args[0]
+        value = args[1]
         setattr(self, name, value)
-        self.header.loc[name] = [value, description]
 
-    def update_table(self, name, table, description):
+        if len(args)==3:
+            description = args[2]
+            self.header.loc[name] = [value, description]
+        elif len(args)==2:
+            self.header.loc[name,'value'] = value
+
+    def update_table(self, *args):
         """ Update table information, create if it doesn't exist.
         
         Args:
@@ -37,10 +44,15 @@ class HDFStore(object):
             table (pandas DataFrame) : table data 
             description : short description of value
         """
-        
+        name = args[0]
+        table = args[1]
         setattr(self, name, table)
-        self.tables.loc[name] = [table.shape, description]
 
+        if len(args)==3:
+            description = args[2]
+            self.tables.loc[name] = [table.shape, description]
+        elif len(args)==2:
+            self.tables.loc[name,'shape'] = table.shape
 
     def info(self):
         """ Print info about the object
@@ -80,4 +92,4 @@ class HDFStore(object):
             setattr(self, table_name, table)
 
         for name, row in self.header.iterrows():
-            setattr(self, name, value)
+            setattr(self, name, row['value'])
