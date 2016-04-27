@@ -439,8 +439,7 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
  
     return sb
 
-
-def wrapHelp(dv,x,ym,d,**kwargs):
+def wrapHelp(dv, x, ym, d, **kwargs):
     scale = 1e6
     pad =  dv.mean*3*scale
 
@@ -455,62 +454,6 @@ def wrapHelp(dv,x,ym,d,**kwargs):
     y1 = max(df['yshft']) + pad 
     ylim(y0,y1)
 
-
-def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
-    """
-    Stack a long time series.
-
-    Parameters
-    ----------
-    t : time (independent variable)
-    y : y (dependent variable)
-    P : Period at which to break time series
-    t0 : time of transit (put at phase = 0.25)
-    time : plot time since mid transit (as opposed to phase)
-    step : spacing between the traces
-    maxhlines : maximum number of horizontal lines
-
-    Notes
-    -----
-    Will alternate colors of the traces according to the axes.colorcycle
-    """
-    ax = gca()
-    t = t.copy()
-
-    # Shift t-series so first transit is at t = 0 
-    dt = tval.t0shft(t,P,t0)
-    t += dt
-    phase = mod(t+P/4,P)/P-1./4
-
-    # Associate each section of length P to a specific
-    # transit. Sections start 1/4 P before and end 3/4 P after.
-    label = np.floor(t/P+1./4).astype(int) 
-    labelL = unique(label)
-
-    df  = pd.DataFrame(labelL,columns=['label'])
-
-    row,col = np.modf(1.*df.label/maxhlines)
-    row = row*maxhlines    
-    df['row'] = row
-    df['col'] = col
-    df['xshft'] = col
-    df['yshft'] = -df.row*step
-    df['tmid']  = df['label']*P-dt
-
-    def plot(x):
-        blabel = label==x['label']
-        phseg = phase[blabel]
-        yseg  = y[blabel]
-        if time:
-            phseg = phseg*P
-
-        ax.plot(phseg +x['xshft'], yseg + x['yshft'],**pltkw)
-
-        xy = (x['xshft'],x['yshft'])
-        ax.annotate('%.1f ' % x['tmid'], xy=xy, xytext=(10, 10),**annkw)
-
-    df.apply(plot,axis=1)
-    return df
 
 
 def plot_lc(pipe):
