@@ -241,6 +241,7 @@ def fit_transits(pipe):
     ferr = np.array(lcdt.ferr)
 
     # Perform global fit. Set some common-sense limits on parameters
+    ntransits = P / lcdt.t.ptp()
     tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
     tm.lm_params['rp'].min = 0.0
     tm.lm_params['tdur'].min = 0.0
@@ -248,8 +249,8 @@ def fit_transits(pipe):
     tm.lm_params['b'].max = 1.0
     tm.lm_params['t0'].min = tm.lm_params['t0'] - tdur 
     tm.lm_params['t0'].max = tm.lm_params['t0'] + tdur 
-    tm.lm_params['per'].min = tm.lm_params['per'] - tdur / tm.lm_params['per']
-    tm.lm_params['per'].max = tm.lm_params['per'] + tdur / tm.lm_params['per']
+    tm.lm_params['per'].min = tm.lm_params['per'] - tdur / ntransits
+    tm.lm_params['per'].max = tm.lm_params['per'] + tdur / ntransits
 
     tm_initial = copy.deepcopy(tm)
     out = minimize(
