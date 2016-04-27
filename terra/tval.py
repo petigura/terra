@@ -22,8 +22,86 @@ import keptoy
 import tfind
 import keplerio
 import config
-
+import batman
+from lmfit import Parameters, minimize, fit_report, minimizer
 import utils.hdfstore
+
+def phasefold(t, P, t0, starting_phase=-0.5):
+    """Return the phase-folded time
+    
+    Args:
+        t (array) : time
+        P (float) : Period to fold at
+        t0 (float) : reference time. Mapped to phase 0.
+        starting_phase (Optional[float]): Lowest phase returned. For example,
+            starting_phase = 0.5 runs from -0.5 to 0.5.
+
+    Returns
+        t_phasefold (array): Time phase-folded
+        phase (array) : phase from 0 to 1.
+        cycle (array) : integer labels
+    """
+    t = np.array(t)
+    dt = t0shft( np.array(t), P, t0)
+    tshift = t + dt
+    t_phasefold = np.mod(tshift - starting_phase*P, P) + starting_phase * P
+    phase = t_phasefold / P
+    cycle = np.floor(tshift/P - starting_phase).astype(int)
+    return t_phasefold, phase, cycle
+
+def add_phasefold(lc, t, P, t0, starting_phase=-0.5):
+    """Simple wrapper around phasefold that attaches columns to dataframe
+
+    Args:
+        lc : pandas DataFrame
+        *args : See `phasefold`
+        **kwargs : See `phasefold`
+
+    Returns
+        lc (pandas DataFrame) : t_phasefold, phase, cycle keywords are added
+    """
+    assert isinstance(lc, pd.core.frame.DataFrame),"lc must be DataFrame"
+    t_phasefold, phase, cycle = phasefold(
+        t, P, t0, starting_phase=starting_phase
+    )
+
+    lc['t_phasefold'] = t_phasefold
+    lc['phase'] = phase
+    lc['cycle'] = cycle
+    return lc
+
+def bin_phasefold(lc, t_phasefold_bins):
+    """Takes the phase folded light curve and bins up the flux
+
+    Splits the light curve up into specified bins and computes mean,
+    median, std, and counts of flux in the given bin.
+
+    Args:
+        lc (pandas DataFrame) : Light curve. Must have t_phasefold, and f keys
+        t_phasefold_bins : numpy array with the boundaries of the bins
+
+    Returns:
+        lcbin (pandas DataFrame) : binned and phase-folded lightcurve
+
+    """
+
+    t_phasefold_bins_center = (
+        0.5 * (t_phasefold_bins[:-1] + t_phasefold_bins[1:])
+        )
+
+    labels = pd.cut(
+        lc.t_phasefold, t_phasefold_bins, labels=t_phasefold_bins_center
+    )
+    g = lc.groupby(labels, as_index=False )
+    lcbin = pd.DataFrame(t_phasefold_bins_center, columns=['t_phasefold'])
+    lcbin['fcount'] = g['f'].count()
+    lcbin['fmean'] = g['f'].mean()
+    lcbin['fmed'] = g['f'].median()
+    lcbin['fstd'] = g['f'].std()
+    lcbin['ferr'] = lcbin.fstd/np.sqrt(lcbin.fcount)
+    return lcbin
+
+
 
 class DataValidation(utils.hdfstore.HDFStore):
     """ Object for handling transit validation checks
@@ -450,8 +528,8 @@ def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=4,
         ].transit_id
 
     # Reset indecies to join
-    labels = labels.reset_index()
-    lcdt = lcdt.reset_index()    
+    labels = labels.reset_index(drop=True)
+    lcdt = lcdt.reset_index(drop=True)    
     lcdt = pd.concat([lcdt,labels],axis=1)
 
     lcdt = lcdt[lcdt.transit_id.isin(transit_id_good)]
@@ -481,8 +559,6 @@ def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=4,
     lcdt['f'] = fldt
     return lcdt
 
-import batman
-from lmfit import Parameters, minimize, fit_report, minimizer
 
 class TransitModel(object):
     """Simple container object can compute synthetic transit models"""
