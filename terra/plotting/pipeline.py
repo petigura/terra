@@ -118,9 +118,6 @@ def diagnostic(pipe):
     plt.sca(axTransitStack)
     transit_stack(pipe,ystep=ystep)
 
-#    fig.set_tight_layout(True)
-#    fig.subplots_adjust(hspace=0.4)
-
 
     axL = [
         ax_transit, ax_transit_zoom, ax_phasefold_180, ax_phasefold, 
@@ -135,14 +132,6 @@ def diagnostic(pipe):
     ]
     for ax in fig.get_axes():
         ax.grid()
-
-
-
-
-        #scale = 1e3
-        #ticks = ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x*scale))
-        #ax.yaxis.set_major_formatter(ticks)
-
 
 def header_text(pipe):
     
@@ -430,7 +419,7 @@ def transit_stack(pipe, ystep=None):
 
     xl = lcdt.t_phasefold.min(), lcdt.t_phasefold.max()
     plt.xlim(*xl)
-    plt.xlabel('t-t0')
+    plt.xlabel('Time Since Mid Transit (days)')
     AddAnchored("Transit Stack",prop=tprop,frameon=True,loc=2)
 
 def transits(pipe,mode='transit-times'):
