@@ -51,7 +51,7 @@ class Pipeline(HDFStore):
     lc_required_columns = ['t','f','ferr','fmask']
     pgram_nbins = 2000 # Bin the periodogram down to save storage space
 
-    def __init__(self, lc=None, header=dict(starname='starname') ):
+    def __init__(self, lc=None, starname=None, header=None):
         """Initialize a pipeline model.
 
         Args:
@@ -72,6 +72,7 @@ class Pipeline(HDFStore):
             assert list(lc.columns).index(col) >= 0, \
                 "light curve lc must contain {}".format(col)
 
+        self.update_header('starname', starname, 'String Star ID')
         self.update_header(
             'finished_preprocess', False, 
             'Have we preprocessed data in time domain?'
@@ -89,8 +90,8 @@ class Pipeline(HDFStore):
 
     def _get_fm(self):
         """Convenience function to return masked flux array"""
-        fm = np.array(self.lc.f)
-        fm = ma.masked_array(fm, self.lc.fmask, fill_value=0 )
+        fm = ma.masked_array(
+            self.lc.f.copy(), self.lc.fmask.copy(), fill_value=0 )
         fm -= ma.median(fm)
         return fm
 
@@ -123,6 +124,7 @@ class Pipeline(HDFStore):
         t = np.array(self.lc.t)
         fm = self._get_fm() 
         grid = tfind.Grid(t, fm)
+        self.update_header('dt',grid.dt,'Exposure time (days)')
 
         tbase = self.lc.t.max() - self.lc.t.min()
         pgram_params = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
@@ -141,6 +143,7 @@ class Pipeline(HDFStore):
             pgram = pgram.reset_index()
 
         row = pgram.sort('s2n').iloc[-1]
+        self.update_header('grid_s2n', row.s2n, "Highest s2n")
         self.update_header('grid_P', row.P, "Period with highest s2n")
         self.update_header(
             'grid_t0', row.t0, "Time of transit with highest s2n"
@@ -148,6 +151,7 @@ class Pipeline(HDFStore):
         self.update_header(
             'grid_tdur', row.tdur, "transit duration with highest s2n"
         )
+
         self.update_table('pgram',pgram,'periodogram')
         self.update_header('finished_grid_search',True)
         print row
@@ -179,7 +183,32 @@ class Pipeline(HDFStore):
 #        dv.trans = trans
 #        self.dv = dv
 #        self.header['finished_data_validation'] = True
-    
+
+def secondary_eclipse_search(pipe):
+    """Search for secondary eclipse
+    """
+    phase_limit = 0.1
+    fm = pipe._get_fm()
+    t = np.array(pipe.lc.t)
+    transit_mask = np.abs(pipe.lc.phase) < phase_limit
+    fm.mask = fm.mask | transit_mask
+    grid = tfind.Grid(t, fm)
+    Pcad1 = pipe.grid_P / pipe.dt - 1
+    Pcad2 = pipe.grid_P / pipe.dt + 1
+    twd = pipe.grid_tdur / pipe.dt
+    pgram_params = [dict(Pcad1=Pcad1, Pcad2=Pcad2, twdG=[twd])]
+    pgram = grid.periodogram(pgram_params,mode='max')
+    row = pgram.sort('s2n').iloc[-1]
+
+    pipe.update_header('se_s2n',row['s2n'],'Secondary eclipse candidate SNR') 
+    pipe.update_header('se_t0',row['t0'],'Secondary eclipse candidate epoch')
+    se_phase = (pipe.se_t0 - pipe.grid_t0) / pipe.grid_P 
+    pipe.update_header(
+        'se_phase',se_phase,'phase offset of secondary eclipse (deg)'
+    )
+
+    return pipe
+
 
 def read_hdf(hdffile, group):
     pipe = Pipeline()
@@ -200,24 +229,28 @@ def fit_transits(pipe):
     rp = np.sqrt(pipe.pgram.sort('s2n').iloc[-1]['mean'])
     b = 0.5
 
-
     # Grab data, perform local detrending, and split by tranists.
-    lc = pipe.lc.copy()
-    lc = lc[~lc.fmask].drop(['ftnd_t_roll_2D'],axis=1)
-    lc = tval.local_detrending(lc, P, t0, tdur, **local_detrending_kw)
-    lc['ferr'] = lc.query('continuum==1').f.std()
-    time_base = np.mean(lc['t'])
-    lc['t_shift'] = lc['t'] - time_base
-    t = np.array(lc.t_shift)
-    f = np.array(lc.f)
-    ferr = np.array(lc.ferr)
+    lcdt = pipe.lc.copy()
+    lcdt = lcdt[~lcdt.fmask].drop(['ftnd_t_roll_2D'],axis=1)
+    lcdt = tval.local_detrending(lcdt, P, t0, tdur, **local_detrending_kw)
+    lcdt['ferr'] = lcdt.query('continuum==1').f.std()
+    time_base = np.mean(lcdt['t'])
+    lcdt['t_shift'] = lcdt['t'] - time_base
+    t = np.array(lcdt.t_shift)
+    f = np.array(lcdt.f)
+    ferr = np.array(lcdt.ferr)
 
-    # Perform global fit
+    # Perform global fit. Set some common-sense limits on parameters
     tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
     tm.lm_params['rp'].min = 0.0
     tm.lm_params['tdur'].min = 0.0
     tm.lm_params['b'].min = 0.0
     tm.lm_params['b'].max = 1.0
+    tm.lm_params['t0'].min = tm.lm_params['t0'] - tdur 
+    tm.lm_params['t0'].max = tm.lm_params['t0'] + tdur 
+    tm.lm_params['per'].min = tm.lm_params['per'] - tdur / tm.lm_params['per']
+    tm.lm_params['per'].max = tm.lm_params['per'] + tdur / tm.lm_params['per']
+
     tm_initial = copy.deepcopy(tm)
     out = minimize(
         tm.residual, tm.lm_params, args=(t, f, ferr), method='nelder'
@@ -233,40 +266,29 @@ def fit_transits(pipe):
     t0 = par['t0'].value + time_base
     pipe.update_header('fit_t0', t0,  "Best fit transit mid-point" )
     pipe.update_header('fit_rp', par['rp'].value, "Best fit Rp/Rstar")
+    pipe.update_header('fit_tdur', par['tdur'].value,  
+        "Best fit transit duration" 
+    )
     pipe.update_header('fit_b', par['b'].value, "Best fit impact parameter")
     for k in 't0 rp tdur b'.split():
         pipe.update_header('fit_u{}'.format(k), par[k].stderr, "Uncertainty")
-
-    lc0 = pipe.lc.copy()
-    lc0['t'] -= time_base
-    tfit = np.linspace(lc0.t.min(), lc0.t.max(), len(lc0) * 4 )
+        
+    # Add in best-fit lightcurve
+    lcfit = pipe.lc.copy()
+    tfit = np.linspace(pipe.lc.t.min(), pipe.lc.t.max(), len(pipe.lc) * 4 )
     lcfit = pd.DataFrame(tfit,columns=['t'])
-
-    lcfit['f'] = tm.model(tm.lm_params, np.array(lcfit.t))
-    lcfit['f_initial'] = tm.model(tm_initial.lm_params, np.array(lcfit.t))
-    lcfit['t'] += time_base
-
-    # Add in phase folded time
-    fit_P = pipe.fit_P
-    fit_t0 = tm.lm_params['t0'].value
-    dt = tval.t0shft( np.array(pipe.lc.t), fit_P, fit_t0)
-    def t_phasefold(t):
-        _t_phasefold = t + dt
-        _t_phasefold = np.mod(_t_phasefold + fit_P/2, fit_P) - fit_P/2 
-        return _t_phasefold
-    lc['t_phasefold'] = t_phasefold(lc.t)
-    lcfit['t_phasefold'] = t_phasefold(lcfit.t)
-    pipe.update_table('lcdt', lc, "Same as lc with f detrended")
-    pipe.update_table('lcfit', lcfit, "Supersampled best fit light curve.")
+    lcfit['t_shift'] = lcfit.t - time_base
+    lcfit['f'] = tm.model(tm.lm_params, np.array(lcfit.t_shift))
+    lcfit['f_initial'] = tm.model(tm_initial.lm_params, np.array(lcfit.t_shift))
 
     # Fit inidvidual transits
     transits = []
-    for transit_id, idx in lc.groupby('transit_id').groups.iteritems():
+    for transit_id, idx in lcdt.groupby('transit_id').groups.iteritems():
         transit = dict(transit_id=transit_id)
-        lc_single = lc.ix[idx]
-        t = np.array(lc_single.t_shift) 
-        f = np.array(lc_single.f)
-        ferr = np.array(lc_single.ferr)
+        lcdt_single = lcdt.ix[idx]
+        t = np.array(lcdt_single.t_shift) 
+        f = np.array(lcdt_single.f)
+        ferr = np.array(lcdt_single.ferr)
         def _get_tm():
             tm = copy.deepcopy(tm_global)
             for key in 'per t0 rp tdur b'.split():
@@ -289,55 +311,90 @@ def fit_transits(pipe):
         transits+=[transit]
 
     # Constant ephemeris, then adjust for observed O - C.
+    fit_P = pipe.fit_P
+    fit_t0 = pipe.fit_t0
     transits = pd.DataFrame(transits)
     transits['omc'] = transits['t0'] - tm_global.lm_params['t0']
     transits['t0'] = fit_t0 + transits.transit_id * fit_P + transits['omc']
+
+    def add_phasefold(lc):
+        return tval.add_phasefold(lc, lc.t, fit_P, fit_t0)
+
+    lcfit = add_phasefold(lcfit)
+    lcdt = add_phasefold(lcdt)
+    lc = add_phasefold(pipe.lc)
+
+    pipe.update_table('lc', lc)
+    pipe.update_table('lcdt', lcdt, "Same as lc with f detrended")
+    pipe.update_table('lcfit', lcfit, "Supersampled best fit light curve.")
     pipe.update_table(
         'transits', transits,
         'Inidividual t0 and rp, holding other parameters fixed.'
     )
     return pipe
 
-        
-#def terra():
-#    """
-#    Top level wrapper for terra, all parameters are passed in as
-#    keyword arguments
-#
-#    """
-#    @print_timestamp
-#    def pp(self):
-#        con = sqlite3.connect(self.pardb)
-#        df = pd.read_sql('select * from pp',con,index_col='id')
-#        d = dict(df.ix[self.starname])
-#        d['outfile'] = self.star_gridfile
-#        d['path_phot'] = self.lcfile
-#        terra.pp(d)
-#
-#    @print_timestamp
-#    def grid(self,debug=False):
-#        con = sqlite3.connect(self.pardb)
-#        df = pd.read_sql('select * from grid',con,index_col='id')
-#        d = dict(df.ix[self.starname])
-#        d['outfile'] = self.star_gridfile
-#        if debug:
-#            d['p1'] = 1.
-#            d['p2'] = 2.
-#    
-#        terra.grid(d)
-#
-#    @print_timestamp
-#    def data_validation(self):
-#        con = sqlite3.connect(self.pardb)
-#        df = pd.read_sql('select * from dv',con,index_col='id')
-#        d = dict(df.ix[self.starname])
-#        d['outfile'] = self.star_gridfile
-#        terra.data_validation(d)
-#        dscrape = dv_h5_scrape(self.star_gridfile)
-#        print pd.Series(dscrape)
-#        # insert into sqlite3 database
-#        #insert_dict(dscrape, 'candidate', self.tps_resultsdb)
-#
+def bin_phasefold(pipe):
+    P = pipe.fit_P
+    t0 = pipe.fit_t0
+    dt = pipe.dt
+    n_phase_bins = np.round(P / dt)
+    t_phasefold_bins = np.linspace(-0.5 * pipe.fit_P, 0.5 * P, n_phase_bins)
+    lc = pipe.lc.copy()
+    lc = lc[~lc.fmask]
+    lcpfbin = tval.bin_phasefold(lc, t_phasefold_bins)
+    lcdtpfbin = tval.bin_phasefold(pipe.lcdt, t_phasefold_bins)
+
+    pipe.update_table(
+        'lcpfbin', lcpfbin, 'phase folded and binned version of lc'
+    )
+    pipe.update_table(
+        'lcdtpfbin', lcdtpfbin, 'phase folded and binned verion of lcdt'
+    )
+    return pipe
+
+def autocorr(pipe, clip_factor=3):
+    """Compute the auto-correlation of light curve.
+
+    Fold at the best-fitting period and compute the auto
+    auto-correlation.
+
+    Args: 
+        pipe (pipeline object) : Pipeline objec
+        clip_width (float) : 
+    """
+
+    # Prepare DataFrames
+    lc = pipe.lcpfbin.copy() 
+    lc['f'] = lc.fmed.fillna(value=0)
+    lcshift = lc.copy()
+    auto = pd.DataFrame(np.array(lc.index),columns=['i_shift'])
+
+    t = np.array(lc.t_phasefold)
+    dt = np.median(t[1:] - t[:-1]) # Compute spacing between bins
+
+    # Compute auto correlation
+    auto['autocorr'] = 0
+    for i_shift in auto.i_shift:
+        lcshift.index = np.roll(lc.index,i_shift)
+        auto.ix[i_shift,'autocorr'] = np.sum(lc.f * lcshift.f)
+
+    i_shift, _, _ = tval.phasefold(auto.i_shift, len(auto.i_shift), 0)
+    auto['i_shift'] = i_shift
+    auto['t_shift'] = auto.i_shift * dt
+    auto = auto.sort('i_shift')
+    
+    idx = auto.autocorr.idxmax()
+    clip_width = clip_factor * pipe.header.value.fit_tdur
+    idxclip = auto[np.abs(auto['t_shift']) > clip_width].autocorr.idxmax()
+    autor = auto.ix[idxclip,'autocorr'] / auto.ix[idx,'autocorr'] 
+
+    pipe.update_table('auto',auto, 'Auto correlation of binned light curve')
+    pipe.update_header('autor', autor, 
+        'max autocorr divided by max out of transit autocorr'
+    )
+    return pipe
+
+
 
 
 def data_validation(par):
