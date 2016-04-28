@@ -29,7 +29,7 @@ def diagnostic(pipe):
 
     # Provision the upper plots
     gs1 = GridSpec(3,10)
-    gs1.update(hspace=0.05, wspace=0.5,bottom=0.65,top=0.95, **gs_kw)
+    gs1.update(hspace=0.2, wspace=0.6,bottom=0.65,top=0.95, **gs_kw)
     axPeriodogram  = fig.add_subplot(gs1[0,0:8])
     axAutoCorr = fig.add_subplot(gs1[0,8])
     
@@ -118,10 +118,9 @@ def diagnostic(pipe):
     plt.sca(axTransitStack)
     transit_stack(pipe,ystep=ystep)
 
-
     axL = [
-        ax_transit, ax_transit_zoom, ax_phasefold_180, ax_phasefold, 
-        axTransitTimes, axTransitRp
+        ax_transit, ax_transit_zoom, ax_phasefold_180, ax_phasefold_secondary,
+        ax_phasefold, axTransitTimes, axTransitRp
     ]
     for ax in axL:
         ax.yaxis.set_major_locator(MaxNLocator(4))
@@ -134,14 +133,24 @@ def diagnostic(pipe):
         ax.grid()
 
 def header_text(pipe):
-    
+
+    fmt = dict(**pipe.header.value)
+    fmt['fit_rp^2_ppm'] = fmt['fit_rp']**2 * 1e6
     text = """\
-name  {starname}
-P     {fit_P:.3f}
-t0    {fit_t0:.2f}
-tdur  {fit_tdur:.2f} 
-SNR   {grid_s2n:.2f}
-""".format(**pipe.header.value)
+name      {starname}
+cand      {candidate}
+grid_s2n  {grid_s2n:.2f}
+fit_P     {fit_P:.3f}
+fit_t0    {fit_t0:.2f}
+fit_rp    {fit_rp:.2f} 
+fit_tdur  {fit_tdur:.2f} 
+fit_b     {fit_b:.2f} 
+fit_rp^2  {fit_rp^2_ppm:.0f} [ppm]
+autor     {autor:.3f}
+se_s2n    {se_s2n:.1f}
+se_t0     {se_t0:.2f}
+se_phase  {se_phase:.2f}
+""".format(**fmt)
     return text
 
 def periodogram(pipe):
@@ -164,7 +173,7 @@ def periodogram(pipe):
     grid_s2n = pipe.header.ix['grid_s2n'].value
 
     plt.semilogx()
-    peak = pgram.sort('s2n').iloc[-1]
+    peak = pgram.sort_values('s2n').iloc[-1]
 
     # Plot periogram, peak, and harmonics
     plt.plot(pgram.P, pgram.s2n)
@@ -194,46 +203,6 @@ def autocorr(pipe):
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-
-
-#def phaseFold(dv,ph,diag=False,zoom=False):
-#    PF = getattr(dv,'lcPF%i' % ph )
-#    x  = PF['tPF']
-#
-#    @handelKeyError
-#    def plot_phase_folded():
-#        if zoom==False:
-#            plot(x,PF['f'],'.',ms=2,color='k')
-#        bPF = getattr(dv,'blc30PF%i' % ph)
-#        t   = bPF['tb']
-#        f   = bPF['med']
-#        plot(t,f,'+',ms=5,mew=1.5,color='Chartreuse')
-#
-#    @handelKeyError
-#    def plot_fit():
-#        trans  = dv.trans
-#        plot(trans.t,trans.fit,'--',color='Tomato',lw=3,alpha=1)
-#
-#    plot_phase_folded()
-#    if ph==0:
-#        plot_fit()
-#        title='ph = 0'
-#        xl   ='t - t0 [days]'
-#    else:
-#        title='ph = 180'
-#        xl   ='t - (t0 + P/2) [days]'
-#    
-#    if dv.mean < 1e-4:
-#        ylim(-5*dv.mean,5*dv.mean)
-#
-#    if zoom==True:
-#        autoscale(axis='y')
-#    if diag:
-#        AddAnchored(title,prop=tprop,frameon=False,loc=4)
-#    
-#    autoscale('x')    
-#    xlabel(xl)
-
 def roblims(x,p,fac):
     """
     Robust Limits
@@ -250,6 +219,15 @@ def roblims(x,p,fac):
     span = phi - plo
     lim = plo - span*fac, phi + span*fac
     return lim
+
+def plot_boarder(*args,**kwargs):
+    kwargs_bg = dict(**kwargs)
+    kwargs_bg['color'] = 'k'
+    kwargs_bg['markersize'] += 1.6
+
+    plt.plot(*args,**kwargs_bg)
+    lines = plt.plot(*args,**kwargs)
+    return lines
 
 def phasefold_transit(pipe, mode='transit'):
     """
@@ -273,18 +251,22 @@ def phasefold_transit(pipe, mode='transit'):
     label=mode
 
     # plot the unbinned data points
-    plt.plot(lc.t_phasefold,lc.f,'o',color='k',alpha=0.8,ms=2,mew=0)
+    plt.plot(lc.t_phasefold,lc.f,'o',color='k',markersize=2,alpha=0.8,mew=0)
 
     # plot the binned data points
-    if np.mean(lcbin.fcount) > 3:
+    if lcbin.query('fcount > 0').fcount.mean() > 3:
         lcbin = lcbin.query('fcount > 0')
-        plt.errorbar(
-            lcbin.t_phasefold, lcbin.fmed, yerr=lcbin. ferr, fmt='o', ms=5, 
-            mew=0, capsize=0)
+        #plot_boarder(
+        #    lcbin[xdata], lcbin.fmed,'o', markersize=4, mew=0, color='Orange'
+        #)
+
+        plot_boarder(
+            lcbin.t_phasefold, lcbin.fmed, 'o', 
+            mew=0, color='Orange',markersize=4)
 
     if type(lcfit) is not type(None):
-        lcfit = lcfit.sort('t_phasefold')
-        plt.plot(lcfit.t_phasefold,lcfit.f,lw=2,color='Tomato',alpha=0.9)
+        lcfit = lcfit.sort_values('t_phasefold')
+        plt.plot(lcfit.t_phasefold,lcfit.f,lw=3,color='RoyalBlue')
 
     plt.xlim(*xl) # reset the x-limits 
     plt.ylim(*yl) # reset the x-limits 
@@ -323,9 +305,9 @@ def phasefold_shifted(pipe, phase_shift, xdata='t_phasefold'):
     # plot the unbinned data points
     plt.plot(lc[xdata],lc.f,'o',color='k',alpha=0.8,ms=2,mew=0)
     lcbin = lcbin.query('fcount > 0')
-    plt.errorbar(
-        lcbin[xdata], lcbin.fmed, yerr=lcbin. ferr, fmt='o', ms=5, 
-        mew=0, capsize=0, lw=0)
+    plot_boarder(
+        lcbin[xdata], lcbin.fmed,'o', markersize=4, mew=0, color='Orange'
+    )
 
     xl = (-3.0 * pipe.fit_tdur, 3.0 * pipe.fit_tdur )
     fmed = lcbin[lcbin[xdata].between(*xl)].fmed
@@ -390,7 +372,7 @@ def single_event_statistic_stack(pipe, ystep=None):
     g = lc.groupby('cycle')
     for cycle, idx in g.groups.iteritems():
         lc_single = lc.ix[idx]
-        lc_single = lc_single.sort('phase')
+        lc_single = lc_single.sort_values('phase')
         plt.plot(lc_single.phase,lc_single.dM + yshift,ms=4)
         yshift -= ystep
 
@@ -407,13 +389,19 @@ def transit_stack(pipe, ystep=None):
         ystep = depth*2
 
     lcdt = pipe.lcdt
-    lcfit = pipe.lcfit.sort('t_phasefold')
+    lcfit = pipe.lcfit.sort_values('t_phasefold')
     g = pipe.lcdt.groupby('transit_id')
 
     yshift = 0
     for transit_id, idx in g.groups.iteritems():
         lc = pipe.lcdt.ix[idx]
-        plt.plot(lc.t_phasefold,lc.f + yshift,'o-k',ms=5)
+        color = ['RoyalBlue','Tomato'][transit_id % 2]
+
+        x,y = lc.t_phasefold,lc.f + yshift
+        #lines, = plot_boarder(x,y,'o',markersize=4,color=color)
+        lines, = plot_boarder(x,y,'.',markersize=6,color='k')
+        zorder = lines.get_zorder()-0.1
+        l, = plt.plot(x,y,lw=1,color=color,alpha=0.5,zorder=zorder )
         plt.plot(lcfit.t_phasefold,lcfit.f + yshift,'-',lw=2)
         yshift -= ystep
 
@@ -434,11 +422,16 @@ def transits(pipe,mode='transit-times'):
         ylabel = 'Rp/Rstar'
 
     x = _transits.transit_id
+    xl = x.min() -1, x.max() + 1 
     xlabel = 'transit-id'
-    xl = x.min() -1, x.max()+1 
+
+    yspan = y.ptp()
+    yl = y.min() - 1*yspan, y.max() + 1*yspan
+
 
     plt.errorbar(x, y, yerr=yerr, fmt='o', ms=5, mew=0, capsize=0)
     plt.xlim(*xl)
+    plt.ylim(*yl)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     AddAnchored(mode,prop=tprop,frameon=True,loc=2)
