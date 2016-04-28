@@ -1,7 +1,6 @@
 """Pipeline
 
 Defines the components of the TERRA pipeline.
-
 """
 
 import copy
@@ -9,28 +8,13 @@ import os
 
 import numpy as np
 from numpy import ma
-import h5py
-from utils.h5plus import h5F
 import pandas as pd
-from matplotlib import pylab as plt
-from matplotlib import mlab
+from lmfit import minimize, fit_report
 
-from plotting import kplot, tval_plotting
+from utils.hdfstore import HDFStore
 import prepro
 import tfind
 import tval
-import keptoy
-import config
-from k2utils import photometry
-import transit_model as tm
-from utils import h5plus
-import copy
-import tval
-from lmfit import minimize, fit_report
-
-deltaPcad = 10
- 
-from utils.hdfstore import HDFStore
 
 class Pipeline(HDFStore):
     """Initialize a pipeline model.
@@ -387,27 +371,3 @@ def autocorr(pipe, clip_factor=3):
     )
     return 
 
-def multiCopyCut(file0,file1,pdict=None):
-    """
-    Multi Planet Copy Cut
-
-    Copys the calibrated light curve to file1. Cuts the transit out.
-    """
-
-    with h5py.File(file0) as h5, h5py.File(file1) as h5new:
-        h5new.create_group('pp')
-        h5new.copy(h5['/pp/mqcal'],'/pp/mqcal')
-        lc   = h5['/pp/mqcal'][:]
-
-        if pdict is None:
-            print "Cutting out transit (using lcPF0)"
-            lcPF = h5['lcPF0'][:]
-            j    = mlab.rec_join('t',lc,lcPF,jointype='leftouter')
-            addmask = j['tPF']!=0
-        else:
-            print "Cutting out transit %s " % pdict
-            tlbl = tval.transLabel(lc['t'],pdict['P'],pdict['t0'],pdict['tdur'])
-            addmask = tlbl['tRegLbl'] >=0
-
-        lc['fmask'] = lc['fmask'] | addmask
-        h5new['/pp/mqcal'][:] = lc
