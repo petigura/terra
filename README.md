@@ -6,17 +6,19 @@ A suite of codes to find extrasolar planets
 
 ### Public Python modules ###
 ```
-- matplotlib / pylab (tested with v1.1.0, 1.3.1)
-- NumPy (tested with v1.6.2, 1.8.1)
+- NumPy (tested with v1.11)
 - SciPy (tested with 0.7.0, 0.10.1, 0.14.0)
-- Pandas (v0.14.1)
-- emcee
+- matplotlib 
+- pandas (v0.18)
+- lmfit, for transit fitting ()
+- batman
 ```
 
 ## Installation Instructions ##
 
 1. clone the git repo. Will create a `</path/to/terra>` directory
 2. cd into traget directory
+   
    ```
    /global/homes/p/petigura/code_carver/terra
    ```
