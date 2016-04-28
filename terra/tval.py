@@ -22,97 +22,116 @@ import keptoy
 import tfind
 import keplerio
 import config
+import batman
+from lmfit import Parameters, minimize, fit_report, minimizer
+import utils.hdfstore
 
-class DV(h5plus.iohelper):
+def phasefold(t, P, t0, starting_phase=-0.5):
+    """Return the phase-folded time
+    
+    Args:
+        t (array) : time
+        P (float) : Period to fold at
+        t0 (float) : reference time. Mapped to phase 0.
+        starting_phase (Optional[float]): Lowest phase returned. For example,
+            starting_phase = 0.5 runs from -0.5 to 0.5.
+
+    Returns
+        t_phasefold (array): Time phase-folded
+        phase (array) : phase from 0 to 1.
+        cycle (array) : integer labels
     """
-    Data Validation Object
+    t = np.array(t)
+    dt = t0shft( np.array(t), P, t0)
+    tshift = t + dt
+    t_phasefold = np.mod(tshift - starting_phase*P, P) + starting_phase * P
+    phase = t_phasefold / P
+    cycle = np.floor(tshift/P - starting_phase).astype(int)
+    return t_phasefold, phase, cycle
+
+def add_phasefold(lc, t, P, t0, starting_phase=-0.5):
+    """Simple wrapper around phasefold that attaches columns to dataframe
+
+    Args:
+        lc : pandas DataFrame
+        *args : See `phasefold`
+        **kwargs : See `phasefold`
+
+    Returns
+        lc (pandas DataFrame) : t_phasefold, phase, cycle keywords are added
     """
-    def __init__(self,h5file):
-        """
-        Instantiate new data validation object from h5 file.
+    assert isinstance(lc, pd.core.frame.DataFrame),"lc must be DataFrame"
+    t_phasefold, phase, cycle = phasefold(
+        t, P, t0, starting_phase=starting_phase
+    )
 
-        Pulls in data from h5['/pp/cal'] and ['/it0/RES']
+    lc['t_phasefold'] = t_phasefold
+    lc['phase'] = phase
+    lc['cycle'] = cycle
+    return lc
 
-        Default action is to choose the highest SNR peak. However, the
-        't0,'Pcad','twd','mean','s2n','noise' keys maybe changed post
-        instantiation
-        
-        Parameters
-        ----------
-        h5   : h5 file (post grid-search)
-        """
+def bin_phasefold(lc, t_phasefold_bins):
+    """Takes the phase folded light curve and bins up the flux
 
+    Splits the light curve up into specified bins and computes mean,
+    median, std, and counts of flux in the given bin.
+
+    Args:
+        lc (pandas DataFrame) : Light curve. Must have t_phasefold, and f keys
+        t_phasefold_bins : numpy array with the boundaries of the bins
+
+    Returns:
+        lcbin (pandas DataFrame) : binned and phase-folded lightcurve
+
+    """
+
+    t_phasefold_bins_center = (
+        0.5 * (t_phasefold_bins[:-1] + t_phasefold_bins[1:])
+        )
+
+    labels = pd.cut(
+        lc.t_phasefold, t_phasefold_bins, labels=t_phasefold_bins_center
+    )
+    g = lc.groupby(labels, as_index=False )
+    lcbin = pd.DataFrame(t_phasefold_bins_center, columns=['t_phasefold'])
+    lcbin['fcount'] = g['f'].count()
+    lcbin['fmean'] = g['f'].mean()
+    lcbin['fmed'] = g['f'].median()
+    lcbin['fstd'] = g['f'].std()
+    lcbin['ferr'] = lcbin.fstd/np.sqrt(lcbin.fcount)
+    return lcbin
+
+
+
+class DataValidation(utils.hdfstore.HDFStore):
+    """ Object for handling transit validation checks
+    
+    Args:
+        lc (pandas DataFrame) : Light curve. Must have `t`, `f`, and `ferr`, 
+            and `fmask`
+        P (float) : Period of transit
+        t0 (float) : time of transit
+        tdur (float) : duration of transit
+    """
+    def __init__(self, lc, P, t0, tdur, dt):
         # Calls the __init__ constructor of h5plus.iohelper. Then we
         # can do other things
-        super(DV,self).__init__()
-
-        h5 = h5py.File(h5file,'r')
-
-        self.add_dset('lc',h5['/pp/cal'][:],description='Light curve')
-        self.add_dset('RES',h5['/it0/RES'][:],description='Periodogram')
-
-        idmax = np.argmax(self.RES['s2n'])        
-        rmax = self.RES[idmax] # Peak SNR
-
-        self.add_attr('s2n', rmax['s2n'], description='Peak SNR')
-        self.add_attr('Pcad', rmax['Pcad'], 
-                      description='Peak period [cadences]')
-        self.add_attr('t0', rmax['t0'], 
-                      description='Epoch')
-        self.add_attr('twd', rmax['twd'], 
-                      description='Peak duration [cadences]')
-        self.add_attr('mean', rmax['mean'], 
-                      description='Mean transit depth')
-        self.add_attr('noise', rmax['noise'],
-                      description='Mean light curve noise')
-
-        self.twd = int(self.twd)
-
-        f_not_normalized_med =  \
-            pd.DataFrame(self.lc).describe().ix['50%','f_not_normalized']
-            
-
-        self.add_attr('f_not_normalized_med', f_not_normalized_med,
-                      description='Median flux before normalizing')
-
-        self.add_attr('tdur',self.twd*config.lc,description='twd [days]')
-        self.add_attr('P',self.Pcad*config.lc,description='Pcad [days]')
+        super(DataValidation,self).__init__()
+        self.update_header('P', P, 'Transit period')
+        self.update_header('t0', t0, 'Time of transit')
+        self.update_header('tdur', tdur, 'Duration of transit')
+        tdurcad = int(np.round(tdur / dt))
+        self.update_header('tdurcad', tdurcad, 'Transit duration (cadences)')
+        self.update_header('dt', dt, 'Observing cadence')
+        self.update_table('lc', lc, 'Light curve')
 
         # Convenience
         self._attach_convenience()
-        h5.close()
  
     def _attach_convenience(self):
-        self.fm = ma.masked_array(self.lc['fcal'],self.lc['fmask'])
-        self.dM = tfind.mtd(self.fm,self.twd)
-        self.t  = self.lc['t']
-
-
-    #
-    # Functions for adding features to DV object
-    #
-    def at_grass(self):
-        """
-        Attach Grass Feature
-        
-        Breakup the periodogram into a bunch of bins and find the
-        highest point in each bin. Grass is the median height of the
-        top 5 peaks
-        """
-        ntop = 5 # Number of peaks to consider. Median of top 5 should
-                 # ignore the primary peak
-
-        fac = 1.4 # bin ranges from P/fac to P*fac.
-        nbins = 100
-        RES = self.RES
-
-        bins  = np.logspace(np.log10(self.P/fac),
-                            np.log10(self.P*fac),
-                            nbins+1)
-
-        xp,yp = findpks(RES['Pcad']*config.lc,RES['s2n'],bins)
-        grass = np.median(np.sort(yp)[-ntop:])
-        self.add_attr('grass',grass,description='SNR of nearby peaks')        
+        self.t  = np.array(self.lc['t'])
+        self.fm = ma.masked_array(self.lc['f'],self.lc['fmask'])
+        self.dM = tfind.mtd(self.fm, self.tdurcad)
 
     def at_SES(self):
         """
@@ -170,7 +189,7 @@ class DV(h5plus.iohelper):
             self.add_attr('SES_%i' % i, medses,
                           description='Median SES [Season %i]' % i )
 
-    def at_phaseFold(self,ph,**PF_kw):
+    def at_phaseFold(self, ph, **PF_kw):
         """ 
         Attach locally detrended light curve
 
@@ -181,12 +200,10 @@ class DV(h5plus.iohelper):
         """
         # Epoch at arbitrary phase, ph
         t0 = self.t0 + ph / 360. * self.P 
-        rPF = PF(self.t,self.fm,self.P,t0,self.tdur,**PF_kw)
+        lcPF = PF(self.t, self.fm, self.P, t0, self.tdur, **PF_kw) 
+        lcPF = pd.DataFrame(lcPF)
+        self.update_table('lcPF%i' % ph, lcPF,'Phase folded light curve')
 
-        # Attach the quarter, doesn't do anything for K2
-        #qarr = keplerio.t2q( rPF['t'] ).astype(int)
-        #rPF  = mlab.rec_append_fields(rPF,'qarr',qarr)
-        self.add_dset('lcPF%i' % ph,rPF,'Phase folded light curve')
 
     def at_binPhaseFold(self,ph,bwmin):
         """Attach binned phase-folded light curve
@@ -262,15 +279,18 @@ class DV(h5plus.iohelper):
         tmask = self.rLbl['tRegLbl'] >= 0
         tmask = np.convolve(
             tmask.astype(float),
-            np.ones(self.twd * 2),
+            np.ones(self.header['tdurcad'] * 2),
             mode='same'
             )
         tmask = tmask.astype(bool)
         fmcut.mask = fmcut.mask | tmask
         grid = tfind.Grid(self.t,fmcut)
-        parL = [dict(Pcad1=self.Pcad-1,Pcad2=self.Pcad+1,twdG=[self.twd])]
-        grid.set_parL(parL)
-        pgram = grid.periodogram('max')
+
+
+        pgram_params = [
+            dict(Pcad1=self.Pcad - 1, Pcad2=self.Pcad + 1, twdG = [self.header['tdurcad']])
+        ]
+        pgram = grid.periodogram(pgram_params,mode='max')
         idxmax = pgram.s2n.idxmax()
 
         dkeys = 's2ncut s2ncut_t0 s2ncut_mean'.split()
@@ -294,7 +314,7 @@ class DV(h5plus.iohelper):
 
     def at_med_filt(self):
         """Add median detrended lc"""
-        fmed = self.fm - nd.median_filter(self.fm, size=self.twd*3)
+        fmed = self.fm - nd.median_filter(self.fm, size=self.header['tdurcad']*3)
 
         # Shift t-series so first transit is at t = 0 
         dt = t0shft(self.t,self.P,self.t0)
@@ -334,8 +354,6 @@ class DV(h5plus.iohelper):
         self.add_dset('corr',corr,description='Auto correlation amplitude')
         self.add_attr('autor',autor,description=\
             'Ratio of second highest peak to primary autocorrelation peak')
-
-
 
 
 def read_hdf(h5file,group):
@@ -404,77 +422,67 @@ def t0shft(t,P,t0):
 
     return dt
 
-def transLabel(t,P,t0,tdur,cfrac=1,cpad=0):
+def label_transit(t, P, t0, tdur, cpad=0.5, cfrac=3):
+    """Label transits
+    
+    Given transit ephemerides and time array, assign labels to transit points.
+
+    Args:
+        t (numpy.array) : time
+        P (float) : Period of transit
+        t0 (float) : transit midpoint
+        tdur (float) : transit duratoin, i.e. T14
+        cfrac (Optional[float]) : length of continuum region, units of tdur.
+        cpad (Optional[float]) : padding between nominal end of transit, and 
+            beginning of continuum region, units of tdur. 
+
+    Returns:
+        labels (record array) : Same length as `t`. Contains the following 
+            columns:
+
+            transit_id : integer identification for transit
+            transit : 1 if transit, 0 if not
+            continuum : 1 if continuum, 0 if not. 
+            continuum_before : 1 if continuum before transit, 0 if not.
+            continuum_after : 1 if continuum after transit, 0 if not.
     """
-    Transit Label
-
-    Mark cadences as:
-    - transit   : in transit
-    - continuum : just outside of transit (used for fitting)
-    - other     : all other data
-
-    Parameters
-    ----------
-    t     : time series
-    P     : Period of transit
-    t0    : epoch of one transit
-    tdur  : transit duration (days not cadences)
-    cfrac : continuum defined as points between tdur * (0.5 + cpad)
-            and tdur * (0.5 + cpad + cfrac) of transit midpoint cpad
-    cpad  : how far away from the transit do we start the continuum
-            region in units of tdur.
-
-
-    Returns
-    -------
-
-    A record array the same length has the input. Most of the indecies
-    are set to -1 as uninteresting regions. If a region is interesting
-    (transit or continuum) I label it with the number of the transit
-    (starting at 0).
-
-    - tLbl      : Index closest to the center of the transit
-    - tRegLbl   : Transit region
-    - cRegLbl   : Continuum region
-    - totRegLbl : Continuum region and everything inside
-
-    Notes
-    -----
-    tLbl might not be the best way to find the mid transit index.  In
-    many cases, dM[rec['tLbl']] will decrease with time, meaning there
-    is a cumulative error that's building up.
-
-    """
-
     t = t.copy()
     t += t0shft(t,P,t0)
 
-    names = ['totRegLbl','tRegLbl','cRegLbl','tLbl']
-    rec  = np.zeros(t.size,dtype=zip(names,[int]*len(names)) )
-    for n in rec.dtype.names:
-        rec[n] -= 1
+    names = [
+        'transit_id','transit','continuum','continuum_before','continuum_after'
+    ]
+
+    labels  = np.zeros(t.size, dtype=zip( names, [int] * len(names) ) )
+    labels['transit_id'] -= 1
     
-    iTrans   = 0 # number of transit, starting at 0.
+    transit_id   = 0 # number of transit, starting at 0.
     tmdTrans = 0 # time of iTrans mid transit time.  
     while tmdTrans < t[-1]:
         # Time since mid transit in units of tdur
-        t0dt = np.abs(t - tmdTrans) / tdur 
-        it   = t0dt.argmin()
-        bt   = t0dt < 0.5
-        bc   = (t0dt > 0.5 + cpad) & (t0dt < 0.5 + cpad + cfrac)
-        btot = t0dt < 0.5 + cpad + cfrac
+        dt = (t - tmdTrans) / tdur
         
-        rec['tRegLbl'][bt] = iTrans
-        rec['cRegLbl'][bc] = iTrans
-        rec['tLbl'][it]    = iTrans
-        rec['totRegLbl'][btot] = iTrans
+        # In transit points
+        labels['transit'][ np.abs(dt) < 0.5 ] = 1
 
-        iTrans += 1 
-        tmdTrans = iTrans * P
+        # Continuum points
+        continuum_before = ( -0.5 - cpad - cfrac < dt) & (dt < -0.5 - cpad) 
+        continuum_after = ( 0.5 + cpad < dt) & (dt < 0.5 + cpad + cfrac) 
 
-    return rec
+        labels['continuum_before'][continuum_before] = 1
+        labels['continuum_after'][continuum_after] = 1
+        labels['continuum'][continuum_before | continuum_after] = 1
+        
+        # All transit points
+        labels['transit_id'][np.abs(dt) < 0.5 + cpad + cfrac] = transit_id
 
-def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
+        transit_id += 1 
+        tmdTrans = transit_id * P
+
+    return labels
+
+def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=4, 
+                     label_transit_kw=None):
     """
     Local Detrending
 
@@ -483,66 +491,134 @@ def LDT(t,fm,recLbl,verbose=False,deg=1,nCont=4):
     least two valid data points on either side of the transit to
     include it in the fit.
 
-    Parameters
-    ----------
-    t      : time
-    fm     : masked flux array
-    recLbl : Out put of transit label record array with following labels 
-             - cRegLbl   : Region to fit the continuum
-             - totRegLbl : Entire region to detrend.
-             - tLbl   : Middle of transit
-    nCont  : Number of continuum points before and after transit in
-             order to use the transit
+    Args:
+        lc (pandas DataFrame) : light curve. Must contain following keys: 
+            - t : time 
+            - f : flux
+            - can contain other keys that come along for the ride.
+        P (float) : Period of transit
+        t0 (float) : transit midpoint
+        tdur (float) : transit duratoin, i.e. T14
 
-    Returns
-    -------
-    fldt : local detrended flux
+        min_continuum (int) : minimum number of continuum points before and 
+            after transit to be used. If this is not met, drop the transit
+
+    Returns:
+         lcdt : Detrended light curve with the following keys
+             - t : time
+             - f : detrended flux
+             - other keys from transit_label
+             - other keys that were along for the rid
+
+
     """
-    fldt    = ma.masked_array( np.zeros(t.size) , True ) 
-    assert type(fm) is np.ma.core.MaskedArray,'Must have mask'
-    cLbl = recLbl['cRegLbl']
-    for i in range(cLbl.max() + 1):
-        # Points corresponding to continuum region.
-        bc = (cLbl == i ) 
+    if label_transit_kw==None:
+        label_transit_kw = {}
 
-        fc = fm[bc]  # masked array
-        tc = t[bc]
+    lcdt = lc.copy()
+    t = np.array(lcdt.t)
+    labels = label_transit(t, P, t0, tdur, **label_transit_kw)
+    labels = pd.DataFrame(labels)
 
-        # Identifying the detrending region.
-        bldt = (recLbl['totRegLbl']==i)
-        tldt = t[bldt]
+    g = labels.query('transit_id >= 0').groupby('transit_id',as_index=False)
+    labels_sum = g.sum()
+    transit_id_good = labels_sum[
+        (labels_sum.continuum_before > min_continuum) & 
+        (labels_sum.continuum_after > min_continuum)
+        ].transit_id
 
-        # Times of transit
-        bt = (recLbl['tLbl'] == i )
-        tt = t[bt]
+    # Reset indecies to join
+    labels = labels.reset_index(drop=True)
+    lcdt = lcdt.reset_index(drop=True)    
+    lcdt = pd.concat([lcdt,labels],axis=1)
 
-        # There must be a critical number of valid points before and
-        # after the transit.
-        ncBefore = fc[ tc < tt ].count()  
-        ncAfter  = fc[ tc > tt ].count()  
+    lcdt = lcdt[lcdt.transit_id.isin(transit_id_good)]
 
-        if (ncBefore >= nCont) & (ncAfter >= nCont) :        
-            tc   -= tt
-            tldt -= tt
+    def detrend(x):
+        """Function that detrends a single light section of light curve"""
 
-            tc = tc[~fc.mask]
-            fc = fc[~fc.mask]
+        t = x['t']
+        f = x['f']
+        t0 = np.mean(x['t'])
+        time_since_transit = t - t0
 
-            pfit = np.polyfit(tc,fc,deg)
-            fcontfit = np.polyval(pfit,tldt)
+        # select out just the continuum points
+        continuum = x['continuum']==1
 
-            fldt[bldt] = fm[bldt] - fcontfit
-            fldt.mask[bldt] = fm.mask[bldt]
-        elif verbose==True:
-            print "no data for trans # %i" % (i)
-        else:
-            pass
-        
-    return fldt
+        pfit = np.polyfit(
+            time_since_transit[continuum], f[continuum], poly_degree
+            )
 
-def PF(t,fm,P,t0,tdur,cfrac=3,cpad=1,LDT_deg=1,nCont=4):
-    """
-    Phase Fold
+        fldt = f.copy()
+        fldt -= np.polyval(pfit,time_since_transit)
+        return fldt
+
+    g = lcdt.groupby('transit_id')
+    fldt = map(detrend,[ lcdt.ix[idx] for idx in g.groups.values() ] )
+    fldt = pd.concat(fldt)
+    lcdt['f'] = fldt
+    return lcdt
+
+
+class TransitModel(object):
+    """Simple container object can compute synthetic transit models"""
+    def __init__(self, P, t0, rp, tdur, b, ecc=0.0, w=0.0, limb_dark='linear',
+                 u=[0.66], batman_kw=None):
+        if batman_kw==None:
+            batman_kw = {}
+
+        lm_params = Parameters()
+        lm_params.add('per', value=P, vary=True )
+        lm_params.add('t0', value=t0, vary=True )
+        lm_params.add('rp', value=rp, vary=True, min=0.0)
+        lm_params.add('tdur', value=tdur)
+        lm_params.add('b', value=b) 
+
+        self.ecc = ecc
+        self.w = w
+        self.limb_dark = limb_dark
+        self.u = u
+        self.lm_params = lm_params
+        self.batman_kw = batman_kw
+
+    def model(self, lm_params, t):
+        per = lm_params['per'].value
+        t0 = lm_params['t0'].value
+        rp = lm_params['rp'].value
+        tdur = lm_params['tdur'].value
+        b = lm_params['b'].value
+        bm_params = batman.TransitParams()
+        bm_params.per = per
+        bm_params.t0 = t0
+        bm_params.rp = rp 
+        bm_params.a = compute_a(per, tdur, rp, b)
+        bm_params.inc = compute_inc(per, tdur, rp, b)
+        bm_params.ecc = self.ecc  
+        bm_params.w = self.w 
+        bm_params.limb_dark = self.limb_dark
+        bm_params.u = self.u 
+        m = batman.TransitModel(bm_params, t, **self.batman_kw)
+        _model = m.light_curve(bm_params) - 1
+        return _model
+
+    def residual(self, lm_params, t, f, ferr):
+        _model = self.model(lm_params, t)
+        resid = (f - _model) / ferr
+        return resid    
+
+def compute_a(P, T14, rp, b):
+    """ Compute scaled semi-major axis from P, T14, rp, and b """
+    _a = P / np.pi / T14 * np.sqrt( (1+ rp)**2 - b )
+    return _a
+
+def compute_inc(P, T14, rp, b):
+    """ Compute inclination from P, T14, rp, and b """
+    _inc = np.arccos(b / compute_a(P, T14, rp, b) )
+    _inc = np.rad2deg(_inc)
+    return _inc
+
+def phase_fold(t, fm, P, t0, tdur, cfrac=3, cpad=1, LDT_deg=1, nCont=4):
+    """Phase fold light curve
     
     Convience function that runs the local detrender and then phase
     folds the lightcurve.

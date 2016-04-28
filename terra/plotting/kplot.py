@@ -439,8 +439,7 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
  
     return sb
 
-
-def wrapHelp(dv,x,ym,d,**kwargs):
+def wrapHelp(dv, x, ym, d, **kwargs):
     scale = 1e6
     pad =  dv.mean*3*scale
 
@@ -456,85 +455,28 @@ def wrapHelp(dv,x,ym,d,**kwargs):
     ylim(y0,y1)
 
 
-def stack(t,y,P=0,t0=0,time=False,step=1e-3,maxhlines=50,pltkw={}):
-    """
-    Stack a long time series.
 
-    Parameters
-    ----------
-    t : time (independent variable)
-    y : y (dependent variable)
-    P : Period at which to break time series
-    t0 : time of transit (put at phase = 0.25)
-    time : plot time since mid transit (as opposed to phase)
-    step : spacing between the traces
-    maxhlines : maximum number of horizontal lines
-
-    Notes
-    -----
-    Will alternate colors of the traces according to the axes.colorcycle
-    """
-    ax = gca()
-    t = t.copy()
-
-    # Shift t-series so first transit is at t = 0 
-    dt = tval.t0shft(t,P,t0)
-    t += dt
-    phase = mod(t+P/4,P)/P-1./4
-
-    # Associate each section of length P to a specific
-    # transit. Sections start 1/4 P before and end 3/4 P after.
-    label = np.floor(t/P+1./4).astype(int) 
-    labelL = unique(label)
-
-    df  = pd.DataFrame(labelL,columns=['label'])
-
-    row,col = np.modf(1.*df.label/maxhlines)
-    row = row*maxhlines    
-    df['row'] = row
-    df['col'] = col
-    df['xshft'] = col
-    df['yshft'] = -df.row*step
-    df['tmid']  = df['label']*P-dt
-
-    def plot(x):
-        blabel = label==x['label']
-        phseg = phase[blabel]
-        yseg  = y[blabel]
-        if time:
-            phseg = phseg*P
-
-        ax.plot(phseg +x['xshft'], yseg + x['yshft'],**pltkw)
-
-        xy = (x['xshft'],x['yshft'])
-        ax.annotate('%.1f ' % x['tmid'], xy=xy, xytext=(10, 10),**annkw)
-
-    df.apply(plot,axis=1)
-    return df
-
-
-def plot_lc(outfile):
-    with h5py.File(outfile) as h5:
-        lc = h5['/pp/cal'][:]
+def plot_lc(pipe):
+    lc = pipe.lc
 
     isOutlier = np.array(lc['isOutlier'])
     fig,axL = plt.subplots(nrows=2,figsize=(20,8),sharex=True)
     plt.sca(axL[0])
 
-    fcal = ma.masked_array(lc['fcal'],lc['fmask'],fill_value=0)
+    f = ma.masked_array(lc['f'],lc['fmask'],fill_value=0)
 
-    plt.plot(lc['t'],fcal.data,label='Full light curve')
-    plt.plot(lc['t'],fcal,color='RoyalBlue',
+    plt.plot(lc['t'],f.data,label='Full light curve')
+    plt.plot(lc['t'],f,color='RoyalBlue',
              label='Masked light curve')
     plt.plot(
-        lc['t'][isOutlier],fcal.data[isOutlier],'or',mew=0,
+        lc['t'][isOutlier],f.data[isOutlier],'or',mew=0,
         alpha=0.5,label='Outliers Identfied in time-domain'
         )
-    plt.ylabel('fcal')
+    plt.ylabel('f')
     plt.legend(loc='best')
 
     plt.sca(axL[1])
-    plt.plot(lc['t'],fcal,label='Masked light curve')
+    plt.plot(lc['t'],f,label='Masked light curve')
     plt.xlabel('Time')
     plt.legend(loc='best')
     fig.set_tight_layout(True)

@@ -52,3 +52,4 @@ def df_to_ndarray(df):
     res = np.rec.fromarrays(arrayList,names=list(df.columns))
     res = np.array(res)
     return res  
+
