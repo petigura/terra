@@ -1,22 +1,7 @@
-"""
-TERRA
-The top level controller.  
+"""Pipeline
 
-To Do:
+Defines the components of the TERRA pipeline.
 
-Make terra object oriented.
-
-lc = 
-header = dict(starname='', other meta-data)
-
-pipe.process() # Conditions data in the time domain
-pipe.grid_search() # Perform the grid search.
-pipe.data_validation()
-
-pipe.to_hdf(outfile) # Should be able to read different checkpoints
-
-terra(t, f, ferr, fmask, plimb=[passed to batman], P1=[passed to grid], P2)
-terra(t, f, ferr, fmask, plimb=[passed to batman], P2=)
 """
 
 import copy
@@ -48,44 +33,48 @@ deltaPcad = 10
 from utils.hdfstore import HDFStore
 
 class Pipeline(HDFStore):
+    """Initialize a pipeline model.
+
+    The pipeline object itself is just a container object that can easily write
+    to hdf5 using pandas. Different codes can perform module operations on the
+    pipeline object.
+    
+    Args:
+        lc (Optional[pandas.DataFrame]): Light curve. Must have the 
+            following columns: t, f, ferr, fmask. Setting equal to None is 
+            done for reading from disk
+        header (Optional[dict]): metadata to be stored with the
+            pipeline object. At a bare minimum, it must include
+            the star name
+
+    Example:
+    
+        # Working with the pipeline
+        >>> pipe = Pipeline(lc=lc, starname='temp',header)
+        >>> pipeline.preprocess(pipe) 
+        >>> pipeline.grid_search(pipe) 
+        >>> pipeline.data_validation(pipe)
+        >>> pipeline.fit_transits(pipe)
+    """
     lc_required_columns = ['t','f','ferr','fmask']
     pgram_nbins = 2000 # Bin the periodogram down to save storage space
-
     def __init__(self, lc=None, starname=None, header=None):
-        """Initialize a pipeline model.
-
-        Args:
-            lc (Optional[pandas.DataFrame]): Light curve. Must have the 
-                following columns: t, f, ferr, fmask. Setting equal to None is 
-                done for reading from disk
-            header (Optional[dict]): metadata to be stored with the
-                pipeline object. At a bare minimum, it must include
-                the star name
-        """
-
         super(Pipeline,self).__init__()
-
         if type(lc)==type(None):
-            return None 
+            return 
 
         for col in self.lc_required_columns:
             assert list(lc.columns).index(col) >= 0, \
                 "light curve lc must contain {}".format(col)
 
         self.update_header('starname', starname, 'String Star ID')
+        for key,value in header.iteritems():
+            self.update_header(key, value,'')
+        self.update_header('finished_preprocess',False,'preprocess complete?')
+        self.update_header('finished_grid_search',False,'grid_serach complete?')
         self.update_header(
-            'finished_preprocess', False, 
-            'Have we preprocessed data in time domain?'
-            )
-        self.update_header(
-            'finished_grid_search', False, 
-            'Have we run the grid search?'
-            )
-        self.update_header(
-            'finished_data_validation', False, 
-            'Have we completed data validation?'
-           )
-
+            'finished_data_validation',False,'Data validation complete?'
+        )
         self.update_table('lc',lc,'light curve')
 
     def _get_fm(self):
@@ -95,128 +84,106 @@ class Pipeline(HDFStore):
         fm -= ma.median(fm)
         return fm
 
-    def preprocess(self):
-        """Process light curve in the time domain
-
-        Args:
-            None
-
-        """
-        fm = self._get_fm()
-        isOutlier = prepro.isOutlier(fm, [-1e3,10], interp='constant')
-        self.lc['isOutlier'] = isOutlier
-        self.lc['fmask'] = fm.mask | isOutlier | np.isnan(fm.data)
-        print "preprocess: identified {} outliers in the time domain".format(
-              isOutlier.sum() )
-        print "preprocess: {} measurements, {} are masked out".format(
-            len(self.lc) , self.lc['fmask'].sum())
-
-        self.update_header('finished_preprocess',True)
-
-    def grid_search(self, P1=0.5, P2=None, periodogram_mode='max'):
-        """Run the grid based search
-
-        Args:
-            P1 (Optional[float]) : Minimum period to search over
-            P2 
-        """
-
-        t = np.array(self.lc.t)
-        fm = self._get_fm() 
-        grid = tfind.Grid(t, fm)
-        self.update_header('dt',grid.dt,'Exposure time (days)')
-
-        tbase = self.lc.t.max() - self.lc.t.min()
-        pgram_params = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
-        pgram = grid.periodogram(pgram_params, mode=periodogram_mode)
-        pgram = pgram.query('P > 0') # cut out candences that failed
-
-        if len(pgram) > self.pgram_nbins:
-            log10P = np.log10(pgram.P)
-            bins = np.logspace(log10P.min(),log10P.max(),self.pgram_nbins)
-            pgram['Pbin'] = pd.cut(
-                pgram.P, bins, include_lowest=True, precision=4,labels=False
-                )
-            
-            # Take the highest s2n row at each period bin
-            pgram = pgram.sort(['Pbin','s2n']).groupby('Pbin').last()
-            pgram = pgram.reset_index()
-
-        row = pgram.sort('s2n').iloc[-1]
-        self.update_header('grid_s2n', row.s2n, "Highest s2n")
-        self.update_header('grid_P', row.P, "Period with highest s2n")
-        self.update_header(
-            'grid_t0', row.t0, "Time of transit with highest s2n"
-        )
-        self.update_header(
-            'grid_tdur', row.tdur, "transit duration with highest s2n"
-        )
-
-        self.update_table('pgram',pgram,'periodogram')
-        self.update_header('finished_grid_search',True)
-        print row
-
-
-#    def data_validation(self, PF_kw=None, 
-#                        climb = [0.773, -0.679, 1.14, -0.416] ):
-#        
-#        if PF_kw==None:
-#            PF_kw = {}
-#            
-#        
-#        dv = tval.DV( self.lc.to_records(), self.header['grid_P'], self.pgram.to_records() )
-#        dv.climb = np.array( climb )
-#        dv.at_phaseFold(0, **PF_kw)
-#        dv.at_phaseFold(180, **PF_kw)
-#
-#        for ph,binsize in zip([0,0,180,180],[10,30,10,30]):
-#            dv.at_binPhaseFold(ph,binsize)
-#
-#        dv.at_s2ncut()
-#        dv.at_phaseFold_SecondaryEclipse()
-#        dv.at_med_filt()
-#        dv.at_autocorr()
-#
-#        trans = tm.from_dv(dv,bin_period=0.1)
-#        trans.register()
-#        trans.pdict = trans.fit_lightcurve()[0]
-#        dv.trans = trans
-#        self.dv = dv
-#        self.header['finished_data_validation'] = True
-
-def secondary_eclipse_search(pipe):
-    """Search for secondary eclipse
-    """
-    phase_limit = 0.1
-    fm = pipe._get_fm()
-    t = np.array(pipe.lc.t)
-    transit_mask = np.abs(pipe.lc.phase) < phase_limit
-    fm.mask = fm.mask | transit_mask
-    grid = tfind.Grid(t, fm)
-    Pcad1 = pipe.grid_P / pipe.dt - 1
-    Pcad2 = pipe.grid_P / pipe.dt + 1
-    twd = pipe.grid_tdur / pipe.dt
-    pgram_params = [dict(Pcad1=Pcad1, Pcad2=Pcad2, twdG=[twd])]
-    pgram = grid.periodogram(pgram_params,mode='max')
-    row = pgram.sort('s2n').iloc[-1]
-
-    pipe.update_header('se_s2n',row['s2n'],'Secondary eclipse candidate SNR') 
-    pipe.update_header('se_t0',row['t0'],'Secondary eclipse candidate epoch')
-    se_phase = (pipe.se_t0 - pipe.grid_t0) / pipe.grid_P 
-    pipe.update_header(
-        'se_phase',se_phase,'phase offset of secondary eclipse (deg)'
-    )
-
-    return pipe
-
-
 def read_hdf(hdffile, group):
     pipe = Pipeline()
     pipe.read_hdf(hdffile, group)
     return pipe
 
+def preprocess(pipe):
+    """Process light curve in the time domain
+
+    Args:
+        pipe (Pipeline object)
+
+    Returns:
+        None 
+
+    """
+    fm = pipe._get_fm()
+    isOutlier = prepro.isOutlier(fm, [-1e3,10], interp='constant')
+    pipe.lc['isOutlier'] = isOutlier
+    pipe.lc['fmask'] = fm.mask | isOutlier | np.isnan(fm.data)
+    print "preprocess: identified {} outliers in the time domain".format(
+          isOutlier.sum() )
+    print "preprocess: {} measurements, {} are masked out".format(
+        len(pipe.lc) , pipe.lc['fmask'].sum())
+
+    pipe.update_header('finished_preprocess',True)
+    return
+
+def grid_search(pipe, P1=0.5, P2=None, periodogram_mode='max'):
+    """Run the grid based search
+
+    Args:
+        P1 (Optional[float]): Minimum period to search over. Default is 0.5
+        P2 (Optional[float]): Maximum period to search over. Default is half 
+            the time baseline
+        **kwargs : passed to grid.periodogram
+
+    Returns:
+        None
+
+    """
+    if type(P2) is type(None):
+        P2 = 0.49 * pipe.lc.t.ptp() 
+
+    t = np.array(pipe.lc.t)
+    fm = pipe._get_fm() 
+    grid = tfind.Grid(t, fm)
+    pipe.update_header('dt',grid.dt,'Exposure time (days)')
+    tbase = pipe.lc.t.max() - pipe.lc.t.min()
+    pgram_params = tfind.periodogram_parameters(P1, P2 , tbase, nseg=10)
+    pgram = grid.periodogram(pgram_params, mode=periodogram_mode)
+    pgram = pgram.query('P > 0') # cut out candences that failed
+
+    if len(pgram) > pipe.pgram_nbins:
+        log10P = np.log10(pgram.P)
+        bins = np.logspace(log10P.min(),log10P.max(),pipe.pgram_nbins)
+        pgram['Pbin'] = pd.cut(
+            pgram.P, bins, include_lowest=True, precision=4,labels=False
+            )
+
+        # Take the highest s2n row at each period bin
+        pgram = pgram.sort_values(['Pbin','s2n']).groupby('Pbin').last()
+        pgram = pgram.reset_index()
+
+    row = pgram.sort_values('s2n').iloc[-1]
+    pipe.update_header('grid_s2n', row.s2n, "Periodogram peak s2n")
+    pipe.update_header('grid_P', row.P, "Periodogram peak period")
+    pipe.update_header('grid_t0', row.t0, "Periodogram peak transit time")
+    pipe.update_header(
+        'grid_tdur', row.tdur, "Periodogram peak transit duration"
+    )
+    pipe.update_table('pgram',pgram,'periodogram')
+    pipe.update_header('finished_grid_search',True)
+    print row
+    return None
 
 def fit_transits(pipe):
+    """Fit transits
+
+    Performs the following tasks:
+        1. Performs local detrending
+        2. Fits a light curve with constant ephemeris
+        3. Fits signle transits starting with 2., allowing transit times to vary
+        4. Fits signle transits starting with 2., allowing Rp/Rstar to vary
+
+    Args:
+        pipe (Pipeline object): pipeline objec
+
+    Notes:
+        Tables updated:
+            - lc
+        Tables added:
+            - lcdt
+            - lcfit
+            - transits
+
+
+    Returns:
+        None
+
+    """
     batman_kw = dict(supersample_factor=4, exp_time=1/48.)
     label_transit_kw = dict(cpad=0, cfrac=2)
     local_detrending_kw = dict(poly_degree=1, label_transit_kw=label_transit_kw)
@@ -226,7 +193,7 @@ def fit_transits(pipe):
     P = pipe.grid_P
     t0 = pipe.grid_t0 
     tdur = pipe.grid_tdur * 2 
-    rp = np.sqrt(pipe.pgram.sort('s2n').iloc[-1]['mean'])
+    rp = np.sqrt(pipe.pgram.sort_values('s2n').iloc[-1]['mean'])
     b = 0.5
 
     # Grab data, perform local detrending, and split by tranists.
@@ -332,7 +299,32 @@ def fit_transits(pipe):
         'transits', transits,
         'Inidividual t0 and rp, holding other parameters fixed.'
     )
-    return pipe
+    return None
+
+def secondary_eclipse_search(pipe):
+    """Search for secondary eclipse
+    """
+    phase_limit = 0.1
+    fm = pipe._get_fm()
+    t = np.array(pipe.lc.t)
+    transit_mask = np.abs(pipe.lc.phase) < phase_limit
+    fm.mask = fm.mask | transit_mask
+    grid = tfind.Grid(t, fm)
+    Pcad1 = pipe.grid_P / pipe.dt - 1
+    Pcad2 = pipe.grid_P / pipe.dt + 1
+    twd = pipe.grid_tdur / pipe.dt
+    pgram_params = [dict(Pcad1=Pcad1, Pcad2=Pcad2, twdG=[twd])]
+    pgram = grid.periodogram(pgram_params,mode='max')
+    row = pgram.sort_values('s2n').iloc[-1]
+
+    pipe.update_header('se_s2n',row['s2n'],'Secondary eclipse candidate SNR') 
+    pipe.update_header('se_t0',row['t0'],'Secondary eclipse candidate epoch')
+    se_phase = (pipe.se_t0 - pipe.grid_t0) / pipe.grid_P 
+    pipe.update_header(
+        'se_phase',se_phase,'phase offset of secondary eclipse (deg)'
+    )
+
+    return None
 
 def bin_phasefold(pipe):
     P = pipe.fit_P
@@ -351,7 +343,7 @@ def bin_phasefold(pipe):
     pipe.update_table(
         'lcdtpfbin', lcdtpfbin, 'phase folded and binned verion of lcdt'
     )
-    return pipe
+    return None
 
 def autocorr(pipe, clip_factor=3):
     """Compute the auto-correlation of light curve.
@@ -382,7 +374,7 @@ def autocorr(pipe, clip_factor=3):
     i_shift, _, _ = tval.phasefold(auto.i_shift, len(auto.i_shift), 0)
     auto['i_shift'] = i_shift
     auto['t_shift'] = auto.i_shift * dt
-    auto = auto.sort('i_shift')
+    auto = auto.sort_values('i_shift')
     
     idx = auto.autocorr.idxmax()
     clip_width = clip_factor * pipe.header.value.fit_tdur
@@ -393,45 +385,7 @@ def autocorr(pipe, clip_factor=3):
     pipe.update_header('autor', autor, 
         'max autocorr divided by max out of transit autocorr'
     )
-    return pipe
-
-
-
-
-def data_validation(par):
-    """
-    Data Validation
-    
-    Parameters
-    ----------
-    par : dictionary with the following keys
-          - LDT_deg : polynomial degree of local detrender
-          - cfrac   : size of continuum region multiple of tranist durtaion
-          - cpad    : size of padding between in/egress and start of
-                      continuum region
-          - nCont   : minimum number of continuum points to use transit
-          - a[1-4]  : limb-darkening coeffs
-          - outfile : which h5 file to read
-          - skic    : star
-          - update  : If True, we can modify the h5 file.
-
-          optional keys
-          - P    : Alternative period to fold on
-          - t0   : Alt epoch. BJD - 2454833 days. 
-                   t=0 <->  12:00 on Jan 1, 2009 UTC
-          - tdur : transit durtaion (days)
-
-    Example
-    -------
-
-    >>> import terra
-    >>> ddv = {'LDT_deg': 3,'cfrac': 3, 'cpad': 0.5, 'nCont': 4, 
-              'a1': 0.773,'a2': -0.679,'a3': 1.140, 'a4': -0.416, 
-              'outfile':'202073438.grid.h5'}
-    >>> terra.data_validation(ddv)
-
-    """
-
+    return 
 
 def multiCopyCut(file0,file1,pdict=None):
     """
@@ -457,256 +411,3 @@ def multiCopyCut(file0,file1,pdict=None):
 
         lc['fmask'] = lc['fmask'] | addmask
         h5new['/pp/mqcal'][:] = lc
-
-####################
-
-def dictSetup(pardict0):
-    """
-    Check Set necessary fields in pardict
-    """
-    pardict = copy.copy(pardict0)
-    if pardict['rel'] == False:
-        pardict = addPaths(pardict)
-
-    # P1,P2 define the range of candences we sample the outlier
-    # spectrum at.
-    if pardict.has_key('P1') == False:
-        pardict['P1'] = int(config.P1 / config.lc)
-        pardict['P2'] = int(config.P2 / config.lc)    
-
-    # P1_FFA,P2_FFA define range over which we compute the FFA 
-    if ~pardict.has_key('P1_FFA'):
-        if pardict['type']=='mcS':
-            P1 = int(pardict['inj_P']/config.lc - deltaPcad)
-            pardict['P1_FFA'] = max(P1, int(config.P1 / config.lc))
-
-            P2 = int(pardict['inj_P']/config.lc + deltaPcad)
-            pardict['P2_FFA'] = min(P2, int(config.P2 / config.lc))
-        else:
-            pardict['P1_FFA'] = pardict['P1']
-            pardict['P2_FFA'] = pardict['P2']
-    if pardict['type'] =='mcS':
-        assert pardict.has_key('gridfile'),'must point to full res file'
-    return pardict
-
-def pardict_print(pardict):
-    """Print nicely formatted summary of input/output files"""
-
-    print "Run type:  %(type)s" % pardict
-    print "\ninput files:"
-    print "-"*50
-    print pardict['rawfile']
-    print pardict['svd_folder']
-    if pardict.has_key('gridfile'):
-        print pardict['gridfile']
-
-    print "\noutput files:"
-    print "-"*50
-    if pardict.has_key('storeGrid'):
-        print pardict['storeGrid']
-    if pardict.has_key('pngStore'):
-        print pardict['pngStore']
-    print ""
-            
-def plot(h5out,pardict):
-    import matplotlib
-    matplotlib.use('Agg')
-    import kplot
-    from matplotlib.pylab import plt
-    kplot.plot_diag(h5out)
-    plt.gcf().savefig(pardict['pngGrid'])
-
-def DVout(h5out,pardict):
-    # DV
-    DV(h5out,pardict)
-    out = tval.flatten(h5out,h5out.noDBRE)
-    pL  = h5out['fit'].attrs['upL0'][1]
-    out['p0']   = pL[0]
-    out['tau0'] = pL[1]
-    out['b0']   = pL[2]
-    return out
-
-def findItMax(h5):
-    # Find maximum iteration 
-    itL = [i[0] for i in h5.items() if i[0].find('it')!=-1]
-    itMax = np.sort(itL)[-1]        
-    return itMax
-
-def inj(h5,pardict):
-    """
-    Inject Signal
-
-
-    Parameters
-    ----------
-    h5       : h5plus object.  Must have /pp/cal dataset
-    injdict  : full pardict.  Will strip off only the necessary columns
-    """
-    injdict = {}
-    injkeys = [k for k in pardict.keys() if k.find('inj_') !=-1 ]
-    for k in injkeys:
-        injdict[k[4:]] = pardict[k]
-
-    for i in range(1,5):
-        injdict['a%i' % i]=pardict['a%i' %i]
-    
-    lc = h5['/pp/cal'][:]
-    ft = keptoy.synMA(injdict,lc['t'])
-    lc['f'] +=ft
-    lc = mlab.rec_append_fields(lc,'finj',ft)
-
-    del h5['/pp/cal']
-    h5['/pp/cal'] = lc
-    
-
-        
-def addPaths(d0):
-    """
-    Paths are referenced with respect to a base directory, which can
-    changed from machine to machine.
-    """
-    d = copy.copy(d0)
-    assert os.environ.has_key('KEPSCRATCH'),'KEPSCRATCH must be defined'
-    wkdir = os.environ['KEPSCRATCH']
-    for k in ['storeGrid','pngGrid','gridfile','svd_folder','rawfile']:
-        if d.has_key(k):
-            d[k] = wkdir + d[k]
-    return d
-
-
-def gridShort(h5,pardict):
-    """
-
-    """
-    with h5py.File(pardict['gridfile'],'r+') as grid0:
-    # Only compute the grid over a narrow region in period
-        res0 = grid0['it0']['RES'][:]
-
-    h5.attrs['P1_FFA'] = pardict['P1_FFA']
-    h5.attrs['P2_FFA'] = pardict['P2_FFA']
-
-    tfind.grid(h5)
-
-    # Add that narrow region to the already computed grid.
-    res  = h5['it0']['RES'][:]
-    start = np.where(res0['Pcad']==res['Pcad'][0])[0]
-    stop  = np.where(res0['Pcad']==res['Pcad'][-1])[0]
-    if len(start) > 1:
-        start = start[1]
-    if len(stop) > 1:
-        stop = stop[0]
-    res0[start:stop+1] = res
-    del h5['it0']['RES']
-    h5['it0']['RES'] = res0
-    
-
-### Mstar, 
-G          = 6.67e-8 # [cm3 g^-1 s^-2]
-Rsun       = 6.95e10 # cm
-Rearth     = 6.37e8 # cm
-Msun       = 1.98e33 # [g]
-AU         = 1.50e13 # [cm]
-sec_in_day = 86400
-
-def simPts(stars,nsim,limD):
-    """
-    Simulate Planet Parameters
-
-    Parameters
-    ----------
-    stars : DataFrame of stellar parameters. Must have the following keys
-            - Mstar
-            - Rstar
-    nsim : Number of simulations
-    limD : Specify the range of P and Re
-
-    """
-    nsim = int(nsim)
-    nstars = len(stars)
-    np.random.seed(100)
-
-    # Make a DataFrame with P and Rp
-    simPar = {}
-    for k in limD.keys():
-        lim = limD[k]
-        lo,hi = lim[0],lim[1]
-        x = np.random.random(nsim)
-        x = (np.log10(hi) -np.log10(lo) ) * x + np.log10(lo)
-        x = 10**x
-        simPar[k] = x
-    simPar = pd.DataFrame(simPar)
-
-    idxstars = np.random.random_integers(0,nstars-1,nsim)
-    stars = stars.ix[idxstars]
-    stars.index = range(nsim)
-    simPar = pd.concat([ stars, simPar],axis=1)
-    
-    # Return a in cm
-    def a(x):
-        Mstar = Msun*x['Mstar']
-        P = x['P']*sec_in_day
-        return (G * Mstar * P**2 / (4*np.pi**2))**(1/3.)
-
-    a = simPar.apply(a,axis=1) # [cm]
-    n = 2*np.pi / (simPar['P']*sec_in_day) # [s^-1]
-    tau = (Rsun*simPar['Rstar'] / a / n)/sec_in_day # [day]
-    p = simPar['Re']*Rearth/(simPar['Rstar']*Rsun)
-
-    simPar['inj_tau'] = tau
-    simPar['inj_p'] = p
-    simPar['id'] = simPar.index
-    
-    simPar['inj_b'] = np.random.random(nsim)
-    simPar['inj_phase'] = np.random.random(nsim) 
-    simPar['inj_P'] = simPar['P']
-
-    return simPar
-
-PKG_DIR = os.path.dirname(__file__)
-testfitsfn = os.path.join(PKG_DIR,'tests/data/201367065.fits')
-
-def test_terra():    
-    dpp = {
-        'outfile':'test.h5',
-        'path_phot':testfitsfn,
-        'type':'tps',
-        'update':True,
-        'plot_lc':True
-        }
-    pp(dpp)
-
-    dgrid = {
-        'outfile':'test.h5',
-        'update':True,
-        'P1': 9,
-        'P2': 11,
-        'fluxField': 'fcal',
-        'fluxMask': 'fmask',
-        'outfile': 'test.h5',
-        'tbase':80
-        }
-
-    grid(dgrid)
-
-    ddv = {
-        'LDT_deg': 3,
-        'cfrac': 3,
-        'cpad': 0.5,
-        'nCont': 4, 
-        'a1': 0.773,
-        'a2': -0.679,
-        'a3': 1.140,
-        'a4': -0.416, 
-        'outfile':'test.h5',
-        'plot_diag':True,
-        }
-
-    data_validation(ddv)
-
-    print "Pipeline ran to competion"
-    print "verify that the following files look OK"
-    print "\n".join(["test.lc.png","test.pk.png"])
-
-
-
-
