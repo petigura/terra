@@ -27,6 +27,8 @@ def print_traceback(f):
         except Exception:
             ax = plt.gca()
             error = traceback.format_exc()
+            print error
+            error = textwrap.fill(error,50)
             ax.text(0, 1, error, transform=ax.transAxes, va='top')
     return wrapper_function
 
@@ -46,7 +48,7 @@ def diagnostic(pipe):
     gs1 = GridSpec(3,10)
     gs1.update(hspace=0.2, wspace=0.6,bottom=0.65,top=0.95, **gs_kw)
     axPeriodogram  = fig.add_subplot(gs1[0,0:8])
-    axAutoCorr = fig.add_subplot(gs1[0,8])
+    axACF = fig.add_subplot(gs1[0,8])
     
     # These 4 plots all share an xaxis
     ax_transit = fig.add_subplot(gs1[1,0:2])
@@ -72,7 +74,7 @@ def diagnostic(pipe):
     ax.add_artist(at)
 
     # Auto correlation plot, and header text, defined to the right
-    plt.sca(axAutoCorr)
+    plt.sca(axACF)
     ax = plt.gca()
     autocorr(pipe)
     AddAnchored("ACF",prop=tprop,frameon=True,loc=2)    
@@ -142,41 +144,55 @@ def diagnostic(pipe):
     for ax in fig.get_axes():
         ax.grid()
 
+    plt.sca(axACF)
     text = header_text(pipe)
     plt.text(
         1.1, 1.0, text, family='monospace', size='large', 
-        transform=ax.transAxes, va='top',
+        transform=axACF.transAxes, va='top',
     )
 
 
+
+import collections
+
 def header_text(pipe):
-    fmt = dict(**pipe.header.value)
-    fmt['depth_ppm'] = fmt['fit_rp']**2 * 1e6
-    fmt['udepth_ppm'] = (
-        2 * ( fmt['fit_urp'] / fmt['fit_rp'] ) * fmt['depth_ppm']
+    header = dict(**pipe.header.value)
+    header['depth_ppm'] = header['fit_rp']**2 * 1e6
+    header['udepth_ppm'] = (
+        2 * ( header['fit_urp'] / header['fit_rp'] ) * header['depth_ppm']
         )
-    text = """\
-name       {starname}
-cand       {candidate}
-grid_s2n   {grid_s2n:.2f}
-fit_P      {fit_P:.3f}
-fit_uP     {fit_uP:.3f}
-fit_t0     {fit_t0:.2f}
-fit_ut0    {fit_ut0:.2f}
-fit_rp     {fit_rp:.2f} 
-fit_urp    {fit_urp:.2f} 
-fit_tdur   {fit_tdur:.2f} 
-fit_utdur  {fit_utdur:.2f} 
-fit_b      {fit_b:.2f} 
-fit_ub     {fit_ub:.2f} 
-fit_rchisq {fit_rchisq:.2f}
-depth      {depth_ppm:.0f} [ppm]
-udepth     {udepth_ppm:.0f} [ppm]
-autor      {autor:.3f}
-se_s2n     {se_s2n:.1f}
-se_t0      {se_t0:.2f}
-se_phase   {se_phase:.2f}
-""".format(**fmt)
+
+    fmtd = collections.OrderedDict()
+    fmtd['starname'] = 's'
+    fmtd['candidate'] = 'd'
+    fmtd['grid_s2n'] = '.2f'
+    fmtd['fit_P'] = '.3f'
+    fmtd['fit_uP'] = '.3f'
+    fmtd['fit_t0'] = '.2f'
+    fmtd['fit_ut0'] = '.2f'
+    fmtd['fit_rp'] = '.2f'
+    fmtd['fit_urp'] = '.2f'
+    fmtd['fit_tdur'] = '.2f'
+    fmtd['fit_utdur'] = '.2f'
+    fmtd['fit_b'] = '.2f'
+    fmtd['fit_ub'] = '.2f'
+    fmtd['fit_rchisq'] = '.2f'
+    fmtd['depth_ppm'] = '.0f'
+    fmtd['udepth_ppm'] = '.0f'
+    fmtd['autor'] = '.2f'
+    fmtd['se_s2n'] = '.1f'
+    fmtd['se_t0'] = '.2f'
+    fmtd['se_phase'] = '.2f'
+        
+    text = ""
+
+    for key, fmt in fmtd.iteritems():
+        if header.has_key(key):
+            value = header[key]
+            text += "{:13s}{:{}}\n".format(key,value,fmt)
+        else:
+            text += "{:13s}{:{}}\n".format(key,'none','s')
+
     return text
 
 @print_traceback
