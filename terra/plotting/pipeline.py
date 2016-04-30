@@ -161,11 +161,6 @@ def header_text(pipe):
     header = dict(**pipe.header.value)
     header['depth_ppm'] = header['fit_rp']**2 * 1e6
 
-    if ~np.isnan(pipe.fit_urp):
-        header['udepth_ppm'] = (
-            2 * ( header['fit_urp'] / header['fit_rp'] ) * header['depth_ppm']
-        )
-
     fmtd = collections.OrderedDict()
     fmtd['starname'] = 's'
     fmtd['candidate'] = 'd'
