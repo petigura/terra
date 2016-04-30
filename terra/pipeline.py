@@ -168,9 +168,11 @@ def fit_transits(pipe):
         None
 
     """
-    batman_kw = dict(supersample_factor=4, exp_time=1/48.)
+    batman_kw = dict(supersample_factor=4, exp_time=1.0/48.0)
     label_transit_kw = dict(cpad=0, cfrac=2)
-    local_detrending_kw = dict(poly_degree=1, label_transit_kw=label_transit_kw)
+    local_detrending_kw = dict(
+        poly_degree=1, min_continuum=2, label_transit_kw=label_transit_kw
+    )
 
     # Compute initial parameters. Fits are more robust if we star with
     # transits that are too wide as opposed to to narrow
@@ -192,10 +194,12 @@ def fit_transits(pipe):
     ferr = np.array(lcdt.ferr)
 
     # Perform global fit. Set some common-sense limits on parameters
-    ntransits = P / lcdt.t.ptp()
+    ntransits = lcdt.t.ptp() / P 
     tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
     tm.lm_params['rp'].min = 0.0
+    tm.lm_params['rp'].max = rp *2 
     tm.lm_params['tdur'].min = 0.0
+    tm.lm_params['tdur'].max = tdur
     tm.lm_params['b'].min = 0.0
     tm.lm_params['b'].max = 1.0
     tm.lm_params['t0'].min = tm.lm_params['t0'] - tdur 
@@ -204,28 +208,37 @@ def fit_transits(pipe):
     tm.lm_params['per'].max = tm.lm_params['per'] + tdur / ntransits
 
     tm_initial = copy.deepcopy(tm)
-    out = minimize(
-        tm.residual, tm.lm_params, args=(t, f, ferr), method='nelder'
-    )
-    tm_global = copy.deepcopy(tm)
-    print "Global fit values"
-    print fit_report(out)
 
-    # Store best fit parameters
+    print "Running differential evolution to get global minumum"
+    out = minimize(
+        tm.residual, tm.lm_params, args=(t, f, ferr), 
+        method='differential_evolution'
+    )
+    print fit_report(out)
+    print "Running Levenberg Marquart to get errors"
+    out = minimize(
+        tm.residual, tm.lm_params, args=(t, f, ferr), 
+        method='leastsq'
+    )
+    print fit_report(out)
+    tm_global = copy.deepcopy(tm)
+
+    # Store away best fit parameters
     par = tm.lm_params
+    t0 = par['t0'].value + time_base
     pipe.update_header('fit_P', par['per'].value, "Best fit period")
     pipe.update_header('fit_uP', par['per'].stderr, "Uncertainty")
-    t0 = par['t0'].value + time_base
     pipe.update_header('fit_t0', t0,  "Best fit transit mid-point" )
+    pipe.update_header('fit_ut0', par['t0'].stderr, "Uncertainty")
     pipe.update_header('fit_rp', par['rp'].value, "Best fit Rp/Rstar")
-    pipe.update_header('fit_tdur', par['tdur'].value,  
-        "Best fit transit duration" 
-    )
+    pipe.update_header('fit_urp', par['rp'].stderr, "Uncertainty")
+    pipe.update_header('fit_tdur', par['tdur'].value, "Best fit duration")
+    pipe.update_header('fit_utdur', par['tdur'].stderr, "Best fit duration")
     pipe.update_header('fit_b', par['b'].value, "Best fit impact parameter")
-    for k in 't0 rp tdur b'.split():
-        pipe.update_header('fit_u{}'.format(k), par[k].stderr, "Uncertainty")
+    pipe.update_header('fit_ub', par['b'].stderr, "Uncertainty")
+    pipe.update_header('fit_rchisq', out.redchi, "Reduced Chi-squared")
         
-    # Add in best-fit lightcurve
+    # Compute best fit lightcurve
     lcfit = pipe.lc.copy()
     tfit = np.linspace(pipe.lc.t.min(), pipe.lc.t.max(), len(pipe.lc) * 4 )
     lcfit = pd.DataFrame(tfit,columns=['t'])
@@ -279,9 +292,8 @@ def fit_transits(pipe):
     pipe.update_table('lc', lc)
     pipe.update_table('lcdt', lcdt, "Same as lc with f detrended")
     pipe.update_table('lcfit', lcfit, "Supersampled best fit light curve.")
-    pipe.update_table(
-        'transits', transits,
-        'Inidividual t0 and rp, holding other parameters fixed.'
+    pipe.update_table('transits', transits, 
+        "Single transit t0 and rp, holding other parameters fixed."
     )
     return None
 
@@ -329,7 +341,7 @@ def bin_phasefold(pipe):
     )
     return None
 
-def autocorr(pipe, clip_factor=3):
+def autocorr(pipe, clip_factor=1):
     """Compute the auto-correlation of light curve.
 
     Fold at the best-fitting period and compute the auto
@@ -359,11 +371,15 @@ def autocorr(pipe, clip_factor=3):
     auto['i_shift'] = i_shift
     auto['t_shift'] = auto.i_shift * dt
     auto = auto.sort_values('i_shift')
-    
+
     idx = auto.autocorr.idxmax()
     clip_width = clip_factor * pipe.header.value.fit_tdur
-    idxclip = auto[np.abs(auto['t_shift']) > clip_width].autocorr.idxmax()
-    autor = auto.ix[idxclip,'autocorr'] / auto.ix[idx,'autocorr'] 
+    autoclip = auto[np.abs(auto['t_shift']) > clip_width]
+    if len(autoclip) > 0:
+        idxclip = autoclip.autocorr.idxmax()
+        autor = auto.ix[idxclip,'autocorr'] / auto.ix[idx,'autocorr'] 
+    else:
+        autor = None # If no autocorr values pass the clip, return none
 
     pipe.update_table('auto',auto, 'Auto correlation of binned light curve')
     pipe.update_header('autor', autor, 

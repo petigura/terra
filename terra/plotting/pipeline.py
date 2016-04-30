@@ -5,17 +5,32 @@ from matplotlib import pylab as plt
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 from matplotlib import ticker
+import traceback
 
 from kplot import wrapHelp,yticksppm,tprop,bbox,annkw
 from terra import tfind
 from .. import tval
-
+import sys
+import textwrap
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
 plt.rc('axes',color_cycle=['RoyalBlue','Tomato'])
 plt.rc('font',size=8)
+def print_traceback(f):
+    """
+    Decorator so that we can fail gracefully from a plotting mishap
+    """
+    def wrapper_function(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception:
+            ax = plt.gca()
+            error = traceback.format_exc()
+            ax.text(0, 1, error, transform=ax.transAxes, va='top')
+    return wrapper_function
 
+@print_traceback
 def diagnostic(pipe):
     """
     Print a 1-page diagnostic plot of a given pipeline object
@@ -61,11 +76,6 @@ def diagnostic(pipe):
     ax = plt.gca()
     autocorr(pipe)
     AddAnchored("ACF",prop=tprop,frameon=True,loc=2)    
-    text = header_text(pipe)
-    plt.text(
-        1.1, 1.0, text, family='monospace', size='large', 
-        transform=ax.transAxes, va='top',
-    )
 
     # Transit times, holding depth constant
     plt.sca(axTransitTimes)
@@ -132,34 +142,50 @@ def diagnostic(pipe):
     for ax in fig.get_axes():
         ax.grid()
 
-def header_text(pipe):
+    text = header_text(pipe)
+    plt.text(
+        1.1, 1.0, text, family='monospace', size='large', 
+        transform=ax.transAxes, va='top',
+    )
 
+
+def header_text(pipe):
     fmt = dict(**pipe.header.value)
-    fmt['fit_rp^2_ppm'] = fmt['fit_rp']**2 * 1e6
+    fmt['depth_ppm'] = fmt['fit_rp']**2 * 1e6
+    fmt['udepth_ppm'] = (
+        2 * ( fmt['fit_urp'] / fmt['fit_rp'] ) * fmt['depth_ppm']
+        )
     text = """\
-name      {starname}
-cand      {candidate}
-grid_s2n  {grid_s2n:.2f}
-fit_P     {fit_P:.3f}
-fit_t0    {fit_t0:.2f}
-fit_rp    {fit_rp:.2f} 
-fit_tdur  {fit_tdur:.2f} 
-fit_b     {fit_b:.2f} 
-fit_rp^2  {fit_rp^2_ppm:.0f} [ppm]
-autor     {autor:.3f}
-se_s2n    {se_s2n:.1f}
-se_t0     {se_t0:.2f}
-se_phase  {se_phase:.2f}
+name       {starname}
+cand       {candidate}
+grid_s2n   {grid_s2n:.2f}
+fit_P      {fit_P:.3f}
+fit_uP     {fit_uP:.3f}
+fit_t0     {fit_t0:.2f}
+fit_ut0    {fit_ut0:.2f}
+fit_rp     {fit_rp:.2f} 
+fit_urp    {fit_urp:.2f} 
+fit_tdur   {fit_tdur:.2f} 
+fit_utdur  {fit_utdur:.2f} 
+fit_b      {fit_b:.2f} 
+fit_ub     {fit_ub:.2f} 
+fit_rchisq {fit_rchisq:.2f}
+depth      {depth_ppm:.0f} [ppm]
+udepth     {udepth_ppm:.0f} [ppm]
+autor      {autor:.3f}
+se_s2n     {se_s2n:.1f}
+se_t0      {se_t0:.2f}
+se_phase   {se_phase:.2f}
 """.format(**fmt)
     return text
 
+@print_traceback
 def periodogram(pipe):
     """Create a plot of the periodogram with nice labels.
 
     Highlights highest SNR point and also overplots harmonics
     """
     pgram = pipe.pgram
-
 
     # Nicely formatted periodogram ticks
     xt = [ 
@@ -196,6 +222,7 @@ def periodogram(pipe):
     plt.ylabel('SNR')
     plt.draw()
 
+@print_traceback
 def autocorr(pipe):
     """Simple plot of auto correlation"""
     auto = pipe.auto
@@ -203,32 +230,7 @@ def autocorr(pipe):
     plt.gca().xaxis.set_visible(False)
     plt.gca().yaxis.set_visible(False)
 
-def roblims(x,p,fac):
-    """
-    Robust Limits
-
-    Return the robust limits for a plot
-
-    Parameters
-    ----------
-    x  : input array
-    p : percentile (compared to 50) to use as lower limit
-    fac : add some space
-    """
-    plo, pmed, phi = np.percentile(x,[p,50,100-p])
-    span = phi - plo
-    lim = plo - span*fac, phi + span*fac
-    return lim
-
-def plot_boarder(*args,**kwargs):
-    kwargs_bg = dict(**kwargs)
-    kwargs_bg['color'] = 'k'
-    kwargs_bg['markersize'] += 1.6
-
-    plt.plot(*args,**kwargs_bg)
-    lines = plt.plot(*args,**kwargs)
-    return lines
-
+@print_traceback
 def phasefold_transit(pipe, mode='transit'):
     """
     Plot a phasefolded plot of the photometry
@@ -256,23 +258,20 @@ def phasefold_transit(pipe, mode='transit'):
     # plot the binned data points
     if lcbin.query('fcount > 0').fcount.mean() > 3:
         lcbin = lcbin.query('fcount > 0')
-        #plot_boarder(
-        #    lcbin[xdata], lcbin.fmed,'o', markersize=4, mew=0, color='Orange'
-        #)
-
         plot_boarder(
             lcbin.t_phasefold, lcbin.fmed, 'o', 
             mew=0, color='Orange',markersize=4)
 
     if type(lcfit) is not type(None):
         lcfit = lcfit.sort_values('t_phasefold')
-        plt.plot(lcfit.t_phasefold,lcfit.f,lw=3,color='RoyalBlue')
+        plt.plot(lcfit.t_phasefold, lcfit.f, lw=2, color='RoyalBlue')
 
     plt.xlim(*xl) # reset the x-limits 
     plt.ylim(*yl) # reset the x-limits 
     AddAnchored(label,prop=tprop,frameon=True,loc=3)
     plt.xlabel('Time Since Transit (days)')
 
+@print_traceback
 def phasefold_shifted(pipe, phase_shift, xdata='t_phasefold'):
     """
     Plot a phasefolded plot of the photometry
@@ -320,38 +319,7 @@ def phasefold_shifted(pipe, phase_shift, xdata='t_phasefold'):
     plt.xlabel('Time Since Reference Phase (days)')
     return lc, lcbin
 
-def handelKeyError(func):
-    """
-    Cut down on the number of try except statements
-    """
-    def handelProblems():
-        try:
-            func()
-        except KeyError:
-            print "%s: KeyError" %  func.__name__ 
-    return handelProblems
-
-def secondary_eclipse(dv):
-    """
-    Plot secondary eclipse
-    """
-    plot(dv.lcPF_SE['tPF'],dv.lcPF_SE['f'])
-    title = 'ph = %.1f' % dv.ph_SE
-    AddAnchored(title,prop=tprop, frameon=False,loc=4)
-    xl   ='t - (t0 + %.1f) [days]' % dv.t0shft_SE
-    xlabel(xl)
-
-def single_event_statistic(dv):    
-    cax = gca()
-    rses = dv.SES
-    plot(rses['tnum'],rses['ses']*1e6,'_',mfc='k',mec='k',ms=4,mew=2)
-    cax.xaxis.set_visible(False)
-    AddAnchored('Transit SES',prop=tprop, frameon=False,loc=3)
-    xl = xlim()
-    xlim(xl[0]-1,xl[-1]+1)
-    yl = ylim()
-    ylim(-100,yl[1])
-
+@print_traceback
 def single_event_statistic_stack(pipe, ystep=None):
     if ystep==None:
         depth = pipe.fit_rp**2
@@ -379,10 +347,11 @@ def single_event_statistic_stack(pipe, ystep=None):
     plt.xlim(-0.25,0.75)
     plt.xlabel('Phase')
     plt.ylabel('Transit Depth (Box Width = {} cadences)'.format(twd) )
-    plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
-    plt.axvline(0.5, alpha=.1,lw=10,color='m',zorder=1)
-    AddAnchored("SES Stack",prop=tprop,frameon=True,loc=2)
+    plt.axvline(0, alpha=0.1, lw=10, color='m', zorder=1)
+    plt.axvline(0.5, alpha=0.1, lw=10, color='m', zorder=1)
+    AddAnchored("SES Stack", prop=tprop, frameon=True, loc=2)
 
+@print_traceback
 def transit_stack(pipe, ystep=None):
     if ystep==None:
         depth = pipe.fit_rp**2
@@ -401,8 +370,8 @@ def transit_stack(pipe, ystep=None):
         #lines, = plot_boarder(x,y,'o',markersize=4,color=color)
         lines, = plot_boarder(x,y,'.',markersize=6,color='k')
         zorder = lines.get_zorder()-0.1
-        l, = plt.plot(x,y,lw=1,color=color,alpha=0.5,zorder=zorder )
-        plt.plot(lcfit.t_phasefold,lcfit.f + yshift,'-',lw=2)
+        l, = plt.plot(x, y, lw=1, color=color, alpha=0.5, zorder=zorder )
+        plt.plot(lcfit.t_phasefold, lcfit.f + yshift, '-', lw=2)
         yshift -= ystep
 
     xl = lcdt.t_phasefold.min(), lcdt.t_phasefold.max()
@@ -410,6 +379,7 @@ def transit_stack(pipe, ystep=None):
     plt.xlabel('Time Since Mid Transit (days)')
     AddAnchored("Transit Stack",prop=tprop,frameon=True,loc=2)
 
+@print_traceback
 def transits(pipe,mode='transit-times'):
     _transits = pipe.transits
     if mode=='transit-times':
@@ -426,7 +396,7 @@ def transits(pipe,mode='transit-times'):
     xlabel = 'transit-id'
 
     yspan = y.ptp()
-    yl = y.min() - 1*yspan, y.max() + 1*yspan
+    yl = y.min() - 1 * yspan, y.max() + 1 * yspan
 
 
     plt.errorbar(x, y, yerr=yerr, fmt='o', ms=5, mew=0, capsize=0)
@@ -436,7 +406,6 @@ def transits(pipe,mode='transit-times'):
     plt.ylabel(ylabel)
     AddAnchored(mode,prop=tprop,frameon=True,loc=2)
 
-
 def AddAnchored(*args,**kwargs):
     # Hack to get rid of warnings
     for k in 'ha va'.split():
@@ -445,3 +414,28 @@ def AddAnchored(*args,**kwargs):
 
     at = AnchoredText(*args,**kwargs)
     plt.gca().add_artist(at)
+
+def roblims(x,p,fac):
+    """
+    Robust Limits
+
+    Return the robust limits for a plot
+
+    Parameters
+    ----------
+    x  : input array
+    p : percentile (compared to 50) to use as lower limit
+    fac : add some space
+    """
+    plo, pmed, phi = np.percentile(x,[p,50,100-p])
+    span = phi - plo
+    lim = plo - span*fac, phi + span*fac
+    return lim
+
+def plot_boarder(*args,**kwargs):
+    kwargs_bg = dict(**kwargs)
+    kwargs_bg['color'] = 'k'
+    kwargs_bg['markersize'] += 1.6
+    plt.plot(*args,**kwargs_bg)
+    lines = plt.plot(*args,**kwargs)
+    return lines

@@ -481,7 +481,7 @@ def label_transit(t, P, t0, tdur, cpad=0.5, cfrac=3):
 
     return labels
 
-def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=4, 
+def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=2, 
                      label_transit_kw=None):
     """
     Local Detrending
