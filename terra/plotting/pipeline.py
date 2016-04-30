@@ -1,19 +1,22 @@
 """Plotting of pipeline objects"""
-
-import pandas as pd
-from matplotlib import pylab as plt
-from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
-from matplotlib import ticker
+import collections
 import traceback
-
-from kplot import wrapHelp,yticksppm,tprop,bbox,annkw
-from terra import tfind
-from .. import tval
 import sys
 import textwrap
-from matplotlib.ticker import MaxNLocator
+
 import numpy as np
+import pandas as pd
+
+from matplotlib import pylab as plt
+from matplotlib.gridspec import GridSpec
+from matplotlib import ticker
+from matplotlib.ticker import MaxNLocator
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+
+from kplot import tprop
+from .. import tfind
+from .. import tval
+
 pd.set_eng_float_format(accuracy=3,use_eng_prefix=True)
 plt.rc('axes',color_cycle=['RoyalBlue','Tomato'])
 plt.rc('font',size=8)
@@ -153,13 +156,14 @@ def diagnostic(pipe):
 
 
 
-import collections
 
 def header_text(pipe):
     header = dict(**pipe.header.value)
     header['depth_ppm'] = header['fit_rp']**2 * 1e6
-    header['udepth_ppm'] = (
-        2 * ( header['fit_urp'] / header['fit_rp'] ) * header['depth_ppm']
+
+    if ~np.isnan(pipe.fit_urp):
+        header['udepth_ppm'] = (
+            2 * ( header['fit_urp'] / header['fit_rp'] ) * header['depth_ppm']
         )
 
     fmtd = collections.OrderedDict()
