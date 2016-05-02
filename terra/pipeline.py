@@ -178,14 +178,14 @@ def fit_transits(pipe):
     # transits that are too wide as opposed to to narrow
     P = pipe.grid_P
     t0 = pipe.grid_t0 
-    tdur = pipe.grid_tdur * 2 
+    tdur = pipe.grid_tdur 
     rp = np.sqrt(pipe.pgram.sort_values('s2n').iloc[-1]['mean'])
     b = 0.5
 
     # Grab data, perform local detrending, and split by tranists.
     lcdt = pipe.lc.copy()
     lcdt = lcdt[~lcdt.fmask].drop(['ftnd_t_roll_2D'],axis=1)
-    lcdt = tval.local_detrending(lcdt, P, t0, tdur, **local_detrending_kw)
+    lcdt = tval.local_detrending(lcdt, P, t0, 2.0 * tdur, **local_detrending_kw)
     lcdt['ferr'] = lcdt.query('continuum==1').f.std()
     time_base = np.mean(lcdt['t'])
     lcdt['t_shift'] = lcdt['t'] - time_base
@@ -197,9 +197,9 @@ def fit_transits(pipe):
     ntransits = lcdt.t.ptp() / P 
     tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
     tm.lm_params['rp'].min = 0.0
-    tm.lm_params['rp'].max = rp *2 
+    tm.lm_params['rp'].max = rp*2 
     tm.lm_params['tdur'].min = 0.0
-    tm.lm_params['tdur'].max = tdur
+    tm.lm_params['tdur'].max = tdur*4
     tm.lm_params['b'].min = 0.0
     tm.lm_params['b'].max = 1.0
     tm.lm_params['t0'].min = tm.lm_params['t0'] - tdur 
@@ -215,12 +215,12 @@ def fit_transits(pipe):
         method='differential_evolution'
     )
     print fit_report(out)
-    print "Running Levenberg Marquart to get errors"
-    out = minimize(
-        tm.residual, tm.lm_params, args=(t, f, ferr), 
-        method='leastsq'
-    )
-    print fit_report(out)
+#    print "Running Levenberg Marquart to get errors"
+#    out = minimize(
+#        tm.residual, tm.lm_params, args=(t, f, ferr), 
+#        method='leastsq'
+#    )
+#    print fit_report(out)
     tm_global = copy.deepcopy(tm)
 
     # Store away best fit parameters
