@@ -197,9 +197,9 @@ def fit_transits(pipe):
     ntransits = lcdt.t.ptp() / P 
     tm = tval.TransitModel(P, t0 - time_base, rp, tdur, b, )
     tm.lm_params['rp'].min = 0.0
-    tm.lm_params['rp'].max = rp*2 
+    tm.lm_params['rp'].max = 2.0 * rp
     tm.lm_params['tdur'].min = 0.0
-    tm.lm_params['tdur'].max = tdur*4
+    tm.lm_params['tdur'].max = 4.0 * tdur
     tm.lm_params['b'].min = 0.0
     tm.lm_params['b'].max = 1.0
     tm.lm_params['t0'].min = tm.lm_params['t0'] - tdur 
@@ -209,22 +209,22 @@ def fit_transits(pipe):
 
     tm_initial = copy.deepcopy(tm)
 
-    print "Running differential evolution to get global minumum"
-    out = minimize(
-        tm.residual, tm.lm_params, args=(t, f, ferr), 
-        method='differential_evolution'
-    )
+    method = 'nelder'
+    print 
+    print "Fitting constant ephem model using method={}".format(method)
+    print "Initial parameters"
+    print "------------------"
+    tm.lm_params.pretty_print() 
+
+    out = minimize(tm.residual, tm.lm_params, args=(t, f, ferr), method=method)
+    print 
+    print "Best fit parameters"
+    print "-------------------"
+    print out.params.pretty_print()
     print fit_report(out)
-#    print "Running Levenberg Marquart to get errors"
-#    out = minimize(
-#        tm.residual, tm.lm_params, args=(t, f, ferr), 
-#        method='leastsq'
-#    )
-#    print fit_report(out)
-    tm_global = copy.deepcopy(tm)
 
     # Store away best fit parameters
-    par = tm.lm_params
+    par = out.params
     t0 = par['t0'].value + time_base
     pipe.update_header('fit_P', par['per'].value, "Best fit period")
     pipe.update_header('fit_uP', par['per'].stderr, "Uncertainty")
@@ -237,13 +237,16 @@ def fit_transits(pipe):
     pipe.update_header('fit_b', par['b'].value, "Best fit impact parameter")
     pipe.update_header('fit_ub', par['b'].stderr, "Uncertainty")
     pipe.update_header('fit_rchisq', out.redchi, "Reduced Chi-squared")
-        
+
+    tm_global = copy.deepcopy(tm)
+    tm_global.lm_params = out.params
+
     # Compute best fit lightcurve
     lcfit = pipe.lc.copy()
     tfit = np.linspace(pipe.lc.t.min(), pipe.lc.t.max(), len(pipe.lc) * 4 )
     lcfit = pd.DataFrame(tfit,columns=['t'])
     lcfit['t_shift'] = lcfit.t - time_base
-    lcfit['f'] = tm.model(tm.lm_params, np.array(lcfit.t_shift))
+    lcfit['f'] = tm_global.model(tm_global.lm_params, np.array(lcfit.t_shift))
     lcfit['f_initial'] = tm.model(tm_initial.lm_params, np.array(lcfit.t_shift))
 
     # Fit inidvidual transits
