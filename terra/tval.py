@@ -561,9 +561,30 @@ def local_detrending(lc, P, t0, tdur, poly_degree=3, min_continuum=2,
 
 
 class TransitModel(object):
-    """Simple container object can compute synthetic transit models"""
+    """Transit Model
+
+    Can compute synthetic transit models and compute residuals to
+    observed transit times.
+
+    Args:
+        P (float): initial period
+        t0 (float): transit center
+        rp (float): Rp/Rstar.
+        tdur (float): transit duration T14
+        b (float): impact parameter
+        ecc (float, optional): eccentricity
+        w (float, optional): argument of peri (degrees)
+        limb_dark (str, optional): type of limb-darkening to use 
+            (default: linear)        
+        u (list, optional): limb-darkening parameters to use (default: 0.66)
+        batman_kw (dict, optional): other keyword arguments to pass to the 
+            batman transit model code.
+        subtract_one (bool, optional): when computing the model, do we subtract
+            unity from light curve.
+    """
+
     def __init__(self, P, t0, rp, tdur, b, ecc=0.0, w=0.0, limb_dark='linear',
-                 u=[0.66], batman_kw=None):
+                 u=[0.66], subtract_one=True, batman_kw=None):
         if batman_kw==None:
             batman_kw = {}
 
@@ -580,6 +601,7 @@ class TransitModel(object):
         self.u = u
         self.lm_params = lm_params
         self.batman_kw = batman_kw
+        self.subtract_one = subtract_one
 
     def model(self, lm_params, t):
         per = lm_params['per'].value
@@ -598,10 +620,13 @@ class TransitModel(object):
         bm_params.limb_dark = self.limb_dark
         bm_params.u = self.u 
         m = batman.TransitModel(bm_params, t, **self.batman_kw)
-        _model = m.light_curve(bm_params) - 1
+        _model = m.light_curve(bm_params) 
+        if self.subtract_one:
+            _model -= 1
         return _model
 
     def residual(self, lm_params, t, f, ferr):
+        """Normalized residual"""
         _model = self.model(lm_params, t)
         resid = (f - _model) / ferr
         return resid    

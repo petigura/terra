@@ -414,7 +414,7 @@ def pgram_max(t,fm,par):
             )
 
         # Compute noise (robust, based on MAD) on twd timescales
-        noise = ma.median( ma.abs(dM) )[0] * 1.5
+        noise = ma.median( ma.abs(dM) ) * 1.5
         pgram[itwd,:]['noise'] = noise
         pgram[itwd,:]['twd'] = twd
         for iPcad,Pcad in enumerate(PcadG):
