@@ -6,8 +6,8 @@ A suite of codes to find extrasolar planets
 
 ### Public Python modules ###
 ```
-- NumPy (tested with v1.11)
-- SciPy (tested with 0.7.0, 0.10.1, 0.14.0)
+- NumPy (tested with v1.11.0)
+- SciPy (tested with 0.18.0)
 - matplotlib 
 - pandas (v0.18)
 - lmfit, for transit fitting ()
