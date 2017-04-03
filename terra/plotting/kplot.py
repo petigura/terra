@@ -5,8 +5,8 @@ Plotting methods for the following classes
 - Grid 
 - Peak
 
-I define these functions in a seperate module so the classes
-themselves can be instanated with out import matplotlib which is not
+I define these functions in a separate module so the classes
+themselves can be instantiated without importing matplotlib which is not
 possible on some non-interactive platforms
 """
 from scipy import ndimage as nd
@@ -309,7 +309,7 @@ def helper(i):
 
 def addtrans(raw,y,label,plot):
     """
-    Add little triangles marking where the transis are.
+    Add little triangles marking where the transits are.
     """
     if raw.dtype.names.count('finj')==1:
         finjkw = dict(color='m',mew=2,marker=7,ms=5,lw=0,mfc='none')

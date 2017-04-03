@@ -17,13 +17,13 @@ A suite of codes to find extrasolar planets
 ## Installation Instructions ##
 
 1. clone the git repo. Will create a `</path/to/terra>` directory
-2. cd into traget directory
+2. cd into target directory
    
    ```
    /global/homes/p/petigura/code_carver/terra
    ```
    
-3. Bulid the cython and fortran extensions with make. At NERSC, there was a little difficulty getting the fortran and c libraries to compile. Here's what I had to do:
+3. Build the cython and fortran extensions with make. At NERSC, there was a little difficulty getting the fortran and c libraries to compile. Here's what I had to do:
 
    ```
    module load gcc

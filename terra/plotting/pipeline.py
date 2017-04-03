@@ -119,7 +119,7 @@ def diagnostic(pipe):
     plt.xlabel('Phase')
     plt.ylabel('Flux')
 
-    # Sinngle Event Statistic Stack
+    # Single Event Statistic Stack
     plt.sca(axSES)
     mad = pipe.lc.f.abs().median()
     ystep = 3 * 1.6 * mad
@@ -129,7 +129,7 @@ def diagnostic(pipe):
     pipe.se_phase 
     plt.axvline(0, alpha=.1,lw=10,color='m',zorder=1)
 
-    # Sinngle Event Statistic Stack
+    # Single Event Statistic Stack
     plt.sca(axTransitStack)
     transit_stack(pipe,ystep=ystep)
 
