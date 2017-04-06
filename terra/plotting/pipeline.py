@@ -273,7 +273,8 @@ def phasefold_transit(pipe, mode='transit'):
 
     if type(lcfit) is not type(None):
         lcfit = lcfit.sort_values('t_phasefold')
-        plt.plot(lcfit.t_phasefold, lcfit.f, lw=2, color='RoyalBlue')
+        plt.plot(lcfit.t_phasefold, lcfit.f, lw=2, color='RoyalBlue', 
+                 alpha=0.7)
 
     plt.xlim(*xl) # reset the x-limits 
     plt.ylim(*yl) # reset the x-limits 
