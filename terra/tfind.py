@@ -672,7 +672,7 @@ def foreman_mackey_1d(fm,twd):
     res = np.zeros(ncad,dtype=dtype)
 
     for cad1 in range(ncad):
-        cad2 = cad1 + twd
+        cad2 = int(cad1 + twd) 
         data = fmfilled[cad1:cad2]
         mask = fm.mask[cad1:cad2]
         s = np.sum(data)

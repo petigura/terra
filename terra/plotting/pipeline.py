@@ -262,18 +262,18 @@ def phasefold_transit(pipe, mode='transit'):
     label=mode
 
     # plot the unbinned data points
-    plt.plot(lc.t_phasefold,lc.f,'o',color='k',markersize=2,alpha=0.8,mew=0)
+    plt.plot(lc.t_phasefold,lc.f,'o',color='k',markersize=3,alpha=0.8,mew=0)
 
     # plot the binned data points
-    if lcbin.query('fcount > 0').fcount.mean() > 3:
+    if lcbin.query('fcount > 0').fcount.mean() > 4:
         lcbin = lcbin.query('fcount > 0')
         plot_boarder(
             lcbin.t_phasefold, lcbin.fmed, 'o', 
-            mew=0, color='Orange',markersize=4)
+            mew=0, color='Orange',markersize=3.5)
 
     if type(lcfit) is not type(None):
         lcfit = lcfit.sort_values('t_phasefold')
-        plt.plot(lcfit.t_phasefold, lcfit.f, lw=2, color='RoyalBlue')
+        plt.plot(lcfit.t_phasefold, lcfit.f, ls='--', lw=1.7, color='RoyalBlue')
 
     plt.xlim(*xl) # reset the x-limits 
     plt.ylim(*yl) # reset the x-limits 
@@ -380,7 +380,7 @@ def transit_stack(pipe, ystep=None):
         lines, = plot_boarder(x,y,'.',markersize=6,color='k')
         zorder = lines.get_zorder()-0.1
         l, = plt.plot(x, y, lw=1, color=color, alpha=0.5, zorder=zorder )
-        plt.plot(lcfit.t_phasefold, lcfit.f + yshift, '-', lw=2)
+        plt.plot(lcfit.t_phasefold, lcfit.f + yshift, '--', lw=1.7)
         yshift -= ystep
 
     xl = lcdt.t_phasefold.min(), lcdt.t_phasefold.max()
